@@ -1,0 +1,164 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+          - runner: macos-14
+            target: aarch64-apple-darwin
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.95"
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.target }}
+      - name: Build release binary
+        run: cargo build -p kcoder_cli --bin kcoder --release --locked --target ${{ matrix.target }}
+      - name: Build Windows process supervisor
+        if: runner.os == 'Windows'
+        run: cargo build -p kcoder_process_supervisor --bin kcoder-process-supervisor --release --locked --target ${{ matrix.target }}
+      - name: Package release
+        if: runner.os != 'Windows'
+        env:
+          KCODER_RELEASE_BIN: target/${{ matrix.target }}/release/kcoder
+        run: scripts/release/package_release.sh "${GITHUB_REF_NAME#v}" "${{ matrix.target }}"
+      - name: Package Windows release
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          KCODER_RELEASE_BIN: target/${{ matrix.target }}/release/kcoder.exe
+          KCODER_RELEASE_PROCESS_SUPERVISOR_BIN: target/${{ matrix.target }}/release/kcoder-process-supervisor.exe
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          ./scripts/release/package_release.ps1 -Version $version -Target "${{ matrix.target }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kcoder-${{ matrix.target }}
+          path: target/dist/*
+
+  studio-linux:
+    name: KCoder Studio Linux and Web packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.95"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-studio-linux
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install JavaScript dependencies
+        shell: bash
+        run: |
+          corepack enable
+          pnpm --dir apps/kcoder-studio install --frozen-lockfile
+          pnpm --dir apps/kcoder-studio/renderer install --frozen-lockfile
+          npm --prefix apps/kcoder-studio/mobile ci
+      - name: Verify release metadata
+        run: scripts/release/test-packaging-contract.sh
+      - name: Build Studio and Web release artifacts
+        shell: bash
+        run: |
+          pnpm --dir apps/kcoder-studio desktop:pack:linux
+          KCODER_STUDIO_PACKAGED_DIR=apps/kcoder-studio/dist/linux-unpacked \
+            pnpm --dir apps/kcoder-studio test:desktop:artifact
+          pnpm --dir apps/kcoder-studio pack:web
+          pnpm --dir apps/kcoder-studio mobile:pack:web
+      - name: Collect Studio Linux and Web artifacts
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          out="target/dist/studio-linux"
+          mkdir -p "$out"
+          find apps/kcoder-studio/dist -maxdepth 1 -type f \
+            \( -name '*.AppImage' -o -name '*.blockmap' -o -name 'latest-linux.yml' \) \
+            -exec cp -t "$out" {} +
+          find target/packages -type f \( -name '*.tgz' -o -name '*.AppImage' \) -exec cp -t "$out" {} +
+          test -n "$(find "$out" -type f -print -quit)"
+          printf 'KCoder Studio Linux/Web artifacts for %s\n' "$version" > "$out/README.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kcoder-studio-linux
+          path: target/dist/studio-linux/*
+          if-no-files-found: error
+
+  studio-windows:
+    name: KCoder Studio Windows packages
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.95"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-studio-windows
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install JavaScript dependencies
+        shell: pwsh
+        run: |
+          corepack enable
+          pnpm --dir apps/kcoder-studio install --frozen-lockfile
+          pnpm --dir apps/kcoder-studio/renderer install --frozen-lockfile
+          npm --prefix apps/kcoder-studio/mobile ci
+      - name: Build Studio Windows release artifacts
+        shell: pwsh
+        run: |
+          pnpm --dir apps/kcoder-studio desktop:pack:win
+          pnpm --dir apps/kcoder-studio desktop:remote:pack:win
+      - name: Collect Studio Windows artifacts
+        shell: pwsh
+        run: |
+          $out = Join-Path $PWD "target/dist/studio-windows"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          Get-ChildItem -LiteralPath "apps/kcoder-studio/dist" -File |
+            Where-Object { $_.Name -match '\.(exe|blockmap)$' -or $_.Name -eq 'latest.yml' } |
+            Copy-Item -Destination $out -Force
+          Get-ChildItem -LiteralPath "target/packages" -Recurse -File -Include *.zip | Copy-Item -Destination $out -Force
+          if (-not (Get-ChildItem -LiteralPath $out -File)) { throw "Studio Windows artifacts are missing" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kcoder-studio-windows
+          path: target/dist/studio-windows/*
+          if-no-files-found: error
+
+  publish:
+    needs: [build, studio-linux, studio-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: artifacts/*

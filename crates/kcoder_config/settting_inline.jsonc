@@ -1,0 +1,341 @@
+{
+  "$schema": "./settings.schema.jsonc",
+  "meta": {
+    "config_version": 1,
+  },
+  // Product behavior shared by clean installations and development launches.
+  "active_provider": "kunlunmeta",
+  "providers": {
+    "kunlunmeta": {
+      "credential_env": ["KUNLUNMETA_BASE_API_KEY"],
+      "api_format": "anthropic_messages",
+      "endpoint": "http://127.0.0.1:8000",
+      "default_model": "MiniMax-M3",
+      "reasoning_effort": "high",
+      "context_window_tokens": 1048576,
+      "output_headroom_tokens": 100000,
+      "max_output_tokens": 100000,
+      "request_timeout_secs": 300,
+      "no_proxy": true,
+      "extra_body": {},
+    },
+  },
+
+  // `/model` lazily lists additional models published by each provider; explicit provider configuration remains authoritative.
+  "model_discovery": {
+    "enabled": true,
+    "request_timeout_secs": 8,
+    "cache_ttl_secs": 300,
+    "max_models_per_provider": 200,
+  },
+
+  // When auto_compact_threshold_tokens is unset, derive the hard-input budget ratio from the context window.
+  "context_compaction": {
+    "auto_threshold": {
+      "small_window_percent": 95,
+      "medium_window_percent": 85,
+      "large_window_percent": 75,
+    },
+  },
+
+  // Permissions and top-level agent behavior.
+  "permission_mode": "ask",
+  "allowed_tools": [],
+  "denied_tools": [],
+  "permission_rules": [],
+  "auto_memory_enabled": true,
+  "auto_tool_memory_enabled": true,
+  "goal_enabled": true,
+  "goal_max_auto_continuations": 8,
+  "goal_pro": {
+    "verifier_profile": null,
+    "verifier_provider": null,
+    "verifier_model": null,
+    // Multi-model verifier panel: two or more entries enable majority voting; empty retains a single verifier.
+    "verifier_models": [],
+    // One verifier review may run up to 64 internal turns; this is not the total Goal Pro continuation count.
+    "verifier_max_turns": 64,
+    // Block automatically after eight cumulative deterministic completion-gate rejections or semantic Fail/Flaky results; exclude infrastructure errors.
+    "completion_rejection_limit": 8,
+    // Automatic primary-agent model escalation: whenever verifier rejections reach
+    // another threshold multiple, switch by the models ladder while inheriting full
+    // context. Every rung must exactly match the primary provider's api_format and context_window_tokens.
+    "model_escalation": {
+      "enabled": false,
+      "threshold": 3,
+      "models": [],
+    },
+    "verification": {
+      // An artifact goal requires an independent verifier to run tests and cannot rely only on primary-agent historical evidence.
+      "require_tests": true,
+      // Regular Goal Pro does not require candidate/baseline behavioral difference; benchmark harnesses may enable it per scenario.
+      "require_behavior_delta": false,
+      // target_suite rejects direct Pass after an overly narrow filter such as -k or ::test.
+      "minimum_test_scope": "target_suite",
+      // Test evidence must use the original exit code without head/tail/grep pipeline filtering.
+      "require_raw_exit_code": true,
+      // A verifier may read the candidate patch and run validation but cannot change the workspace.
+      "allow_workspace_changes": false,
+      // Isolate home, cache, temporary directory, and Python user site for each verifier.
+      "isolate_environment": true,
+      // A verifier performs acceptance only and may not install, remove, or update dependencies.
+      "allow_dependency_changes": false,
+      // After target tests pass, peripheral regression failures caused solely by unavailable external networking may be ignored.
+      "allow_network_only_failures": true,
+    },
+  },
+  "orchestrate": {
+    "main": {
+      // null retains all optional tools; an explicit array restricts only non-core tools while core orchestration capabilities remain.
+      "optional_tool_allowlist": null,
+    },
+    // Empty model slots inherit the active primary runtime; explicit deployments may override profile or provider/model by tier.
+    "tiers": {
+      "max": {},
+      "standard": {},
+      "fast": {},
+    },
+    "roster": {
+      "junior": { "tier": "standard" },
+      "oracle": { "tier": "max" },
+      "librarian": { "tier": "fast" },
+      "critic": { "tier": "max" },
+    },
+    "critic_max_cycles": 3,
+    "critic_max_infrastructure_retries": 2,
+    "policies": {
+      "evidence_gate": "auto",
+      "delegation_contract": "advisory",
+    },
+    "notepad": {
+      "inject": true,
+      "max_inject_bytes": 8192,
+    },
+    "continuation": {
+      "cooldown_seconds": 30,
+      "max_stalled_rounds": 5,
+      "max_consecutive_failures": 3,
+      "max_auto_turns": 8,
+    },
+    "delivery": {
+      // Leases cover local delivery recovery only and do not replace provider request timeouts.
+      "lease_timeout_seconds": 120,
+      // Block and await explicit resolution after reaching the limit; never discard messages silently.
+      "max_attempts": 8,
+    },
+    "fleet": {
+      "inject": true,
+      "max_members": 24,
+      "max_inject_bytes": 8192,
+    },
+    "control": {
+      "enabled": true,
+    },
+    "breaker": {
+      "enabled": true,
+      // The highest default automatic action is pause; agents are not terminated automatically.
+      "hard_stop": false,
+      "repeated_action_threshold": 8,
+      "consecutive_error_threshold": 5,
+      "no_progress_rounds": 4,
+    },
+    "audit": {
+      "enabled": true,
+      "max_events": 4096,
+      "max_event_bytes": 4096,
+    },
+  },
+  "auto_skill_review_interval": 10,
+
+  // Plugin compatibility, installation boundaries, and user policy.
+  "plugins": {
+    "runtime": {
+      "enabled": true,
+      "project_policy": "trusted_only",
+    },
+    "compatibility": {
+      "agent_plugins_v1": true,
+      "codex": true,
+      "claude": true,
+      "cursor": true,
+    },
+    "installation": {
+      "allow_local": true,
+      "allow_git": true,
+      "allow_npm": true,
+      "require_git_sha": false,
+      "require_npm_integrity": true,
+      "max_files": 10000,
+      "max_total_bytes": 268435456,
+      "max_file_bytes": 33554432,
+      "timeout_ms": 120000,
+    },
+    "marketplaces": {},
+    "installed": {},
+  },
+
+  // Skill lifecycle and trust policy.
+  "skills": {
+    "auto_skill_review_enabled": false,
+    "auto_skill_review_interval": 10,
+    "auto_curator_enabled": true,
+    "auto_curator_interval_hours": 168,
+    "auto_curator_min_idle_hours": 2,
+    "stale_after_days": 30,
+    "archive_after_days": 90,
+    "prune_builtins": false,
+    "trust_external": false,
+    "auto_lessons_learned": false,
+    "external_dirs": [],
+    "guard": {
+      "enabled": true,
+      "block_high_risk": true,
+      "block_medium_risk_for_community": true,
+    },
+  },
+
+  // Long-term and session memory.
+  "memory_directory": null,
+  "memory": {
+    "structured_enabled": true,
+    "skip_tools": [],
+    "legacy_prompt_enabled": true,
+    "private_by_default": false,
+    "private_file_paths": false,
+    "private_verification_targets": false,
+    "record_prompt_placeholders": true,
+    "observer_mode": "deterministic",
+    "observer_queue_size": 128,
+    "observer_model": null,
+  },
+  "session_memory": {
+    "enabled": true,
+    "update_enabled": true,
+    "compact_enabled": true,
+    "update_interval_turns": 1,
+    "init_min_tokens": 10000,
+    "update_min_token_delta": 5000,
+    "tool_call_threshold": 3,
+    "max_update_messages": 80,
+    "update_max_tokens": 12000,
+    "compact_min_chars": 80,
+    "compact_min_recent_tokens": 10000,
+    "compact_max_recent_tokens": 40000,
+    "compact_min_recent_messages": 5,
+  },
+  // Treat the provider prompt cache as expired after 60 idle minutes. Before the
+  // next primary-thread request, clear compactable stale tool results while retaining a small recent working set.
+  "time_based_micro_compact": {
+    "enabled": true,
+    "gap_threshold_minutes": 60,
+    "keep_recent": 5,
+  },
+
+  // Conversation persistence and rendering.
+  "history_enabled": true,
+  "history_max_messages": 99999,
+  "history_directory": null,
+  "render_markdown": true,
+  "rich_terminal": false,
+  "tui": {
+    "alternate_screen": "auto",
+  },
+  "code_theme": "auto",
+
+  // The active provider supplies context window, output headroom, and maximum output.
+  "context_system_tokens": null,
+  "context_tools_tokens": null,
+
+  // Conversation compaction. Reuse the current provider and model when all three selectors are null.
+  "summary_provider": null,
+  "summary_profile": null,
+  "summary_model": null,
+  "summary_max_tokens": 20000,
+
+  // Mixture-of-Agents reuses the current runtime by default instead of binding a vendor.
+  "moa": {
+    "enabled": true,
+    "default_preset": "default",
+    "max_reference_workers": 8,
+    "presets": {
+      "default": {
+        "enabled": true,
+        "reference_models": [{ "provider": "current", "model": "current" }],
+        "aggregator": { "provider": "current", "model": "current" },
+        "reference_max_tokens": 16384,
+        "aggregator_max_tokens": 32768,
+      },
+    },
+  },
+  // `/moa-plan` uses the model preset above with an independent execution budget.
+  "moa_plan": {
+    "enabled": true,
+    "preset": "default",
+    "draft_max_turns": 60,
+    "draft_max_tokens": 16384,
+    "synthesis_max_tokens": 32768,
+    "draft_timeout_secs": 300,
+    "max_planner_workers": 4,
+  },
+  "max_retries": 3,
+  "retry_base_delay_ms": 1000,
+  // Optional absolute budget per logical Provider request; null preserves existing behavior.
+  "recovery": {
+    "provider": {
+      "total_timeout_ms": null,
+    },
+  },
+  "mcp_servers": [],
+
+  // Tool-input normalization and execution limits.
+  "tools": {
+    "coerce": {
+      "semantic_boolean": true,
+      "semantic_number": true,
+      "semantic_integer": true,
+      "stringify_mismatched_scalar": true,
+    },
+  },
+  "tool_timeout_ms": 300000,
+  "tool_limits": {
+    "doom_loop": {
+      "default_repetitions": 6,
+      "tools": {
+        "TaskOutput": -1,
+      },
+    },
+    "foreground_budget_ms": {
+      "default_ms": 300000,
+      "tools": {},
+    },
+    "task_output_timeout_ms": {
+      "default_ms": 5000,
+      "min_ms": 1000,
+      "max_ms": 15000,
+    },
+    "permission_denials": {
+      "consecutive_limit": 2,
+    },
+  },
+  "max_tool_output_bytes": 102400,
+  "tool_output_head_bytes": 61440,
+  "tool_output_tail_bytes": 40960,
+  "background_completion_preview_bytes": 512,
+  "max_concurrent_subagents": 4,
+
+  // The product sandbox is enabled on demand by default and startup configuration
+  // may override it. Windows uses a non-elevated restricted token that prevents
+  // ordinary writes outside allowed roots, but without elevation, a dedicated user,
+  // or AppContainer it cannot protect objects already writable by Everyone.
+  "sandbox": {
+    "enabled": false,
+    "readonly": false,
+    "allowed_paths": [],
+    "denied_paths": [],
+    "allow_shell_escalation": false,
+    "require_shell_escalation_approval": true,
+    "shell_escalation_max_attempts": 1,
+    "allow_system_temp_writes": true,
+    "allow_shared_dev_cache_writes": true,
+  },
+}

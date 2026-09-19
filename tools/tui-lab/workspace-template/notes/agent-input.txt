@@ -1,0 +1,4 @@
+KCoder TUI Lab fixture.
+
+The automation scenario starts in a fresh copy of this workspace. Files here are
+safe for tool calls, edits, searches, and terminal commands during smoke tests.

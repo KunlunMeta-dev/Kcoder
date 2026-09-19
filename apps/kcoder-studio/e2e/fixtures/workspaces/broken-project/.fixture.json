@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "broken-project",
+  "version": 2,
+  "description": "包含一个确定性边界条件缺陷的 JavaScript 项目，用于真实模型诊断与修复测试。",
+  "tags": ["javascript", "bug-fix", "real-model"],
+  "materializer": "copy",
+  "expectedFaults": [
+    "divide 在除数为零时应抛出 RangeError，但当前返回 Infinity。"
+  ]
+}

@@ -1,0 +1,787 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kcoder.dev/schema/settings.json",
+  "title": "KCoder settings",
+  "description": "KCoder settings.json. All properties are optional because settings files are merged by scope.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string", "description": "Local JSON Schema reference for editor validation." },
+    "hooks": { "type": "object", "description": "Lifecycle hooks consumed by kcoder_hooks." },
+    "meta": { "$ref": "#/$defs/configMetadata" },
+    "recovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "total_timeout_ms": {
+              "type": ["integer", "null"],
+              "minimum": 1,
+              "maximum": 86400000,
+              "default": null,
+              "description": "Absolute logical Provider generation/recovery budget across retries, backoff and reactive compaction. Null disables it. Does not change request_timeout_secs or max_duration_secs; compaction commits and completed-response trailing accounting finish under their existing safety protocols."
+            }
+          }
+        }
+      }
+    },
+    "studio_context": { "$ref": "#/$defs/studioContext" },
+    "active_provider": { "type": ["string", "null"] },
+    "providers": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/provider" }
+    },
+    "model_discovery": { "$ref": "#/$defs/modelDiscovery" },
+    "active_model_selection": { "$ref": "#/$defs/activeModelSelection" },
+    "model": { "type": "string" },
+    "model_reasoning_effort": { "type": ["string", "null"], "minLength": 1 },
+    "provider": { "type": ["string", "null"] },
+    "api_format": { "$ref": "#/$defs/apiFormatOrNull" },
+    "request_timeout_secs": { "type": ["integer", "null"], "minimum": 0 },
+    "provider_no_proxy": { "type": "boolean" },
+    "provider_extra_body": { "type": "object" },
+    "model_capabilities": { "$ref": "#/$defs/modelCapabilities" },
+    "api_key": { "type": ["string", "null"] },
+    "base_url": { "type": ["string", "null"] },
+    "anthropic_api_key": { "type": ["string", "null"] },
+    "anthropic_base_url": { "type": ["string", "null"] },
+    "kunlunmeta_api_key": { "type": ["string", "null"] },
+    "kunlunmeta_base_url": { "type": ["string", "null"] },
+    "openai_api_key": { "type": ["string", "null"] },
+    "openai_base_url": { "type": ["string", "null"] },
+    "openai_user_agent": { "type": ["string", "null"] },
+    "local_api_key": { "type": ["string", "null"] },
+    "local_base_url": { "type": ["string", "null"] },
+    "gemini_api_key": { "type": ["string", "null"] },
+    "gemini_base_url": { "type": ["string", "null"] },
+    "grok_api_key": { "type": ["string", "null"] },
+    "grok_base_url": { "type": ["string", "null"] },
+    "permission_mode": { "enum": ["ask", "auto", "accept_edits", "dont_ask", "bypass", "yolo"] },
+    "tdd_gate": { "enum": ["auto", "off", "preferred", "required"] },
+    "credential_store": { "enum": ["auto", "keyring", "file"] },
+    "allowed_tools": { "type": "array", "items": { "type": "string" } },
+    "denied_tools": { "type": "array", "items": { "type": "string" } },
+    "permission_rules": { "type": "array", "items": { "$ref": "#/$defs/permissionRule" } },
+    "auto_memory_enabled": { "type": "boolean" },
+    "auto_tool_memory_enabled": { "type": "boolean" },
+    "goal_enabled": { "type": "boolean" },
+    "goal_max_auto_continuations": { "type": "integer", "minimum": 0, "default": 8 },
+    "goal_pro": { "$ref": "#/$defs/goalPro" },
+    "orchestrate": { "$ref": "#/$defs/orchestrate" },
+    "auto_skill_review_interval": { "type": "integer", "minimum": 0 },
+    "plugins": { "$ref": "#/$defs/plugins" },
+    "skills": { "$ref": "#/$defs/skills" },
+    "memory_directory": { "type": ["string", "null"] },
+    "memory": { "$ref": "#/$defs/memory" },
+    "session_memory": { "$ref": "#/$defs/sessionMemory" },
+    "context_compaction": { "$ref": "#/$defs/contextCompaction" },
+    "time_based_micro_compact": { "$ref": "#/$defs/timeBasedMicroCompact" },
+    "turn_file_changes": { "$ref": "#/$defs/turnFileChanges" },
+    "history_enabled": { "type": "boolean" },
+    "history_max_messages": { "type": "integer", "minimum": 0 },
+    "history_directory": { "type": ["string", "null"] },
+    "render_markdown": { "type": "boolean" },
+    "rich_terminal": { "type": "boolean" },
+    "tui": { "$ref": "#/$defs/tui" },
+    "code_theme": { "type": "string" },
+    "context_window_tokens": { "type": ["integer", "null"], "minimum": 0 },
+    "context_system_tokens": { "type": ["integer", "null"], "minimum": 0 },
+    "context_tools_tokens": { "type": ["integer", "null"], "minimum": 0 },
+    "context_output_headroom": { "type": ["integer", "null"], "minimum": 0 },
+    "context_hard_input_tokens": { "type": ["integer", "null"], "minimum": 0 },
+    "auto_compact_threshold_tokens": { "type": ["integer", "null"], "minimum": 0 },
+    "prefire_threshold_tokens": { "type": ["integer", "null"], "minimum": 0 },
+    "estimated_tool_growth_tokens": { "type": ["integer", "null"], "minimum": 0 },
+    "max_tokens": { "type": ["integer", "null"], "minimum": 0 },
+    "summary_provider": { "type": ["string", "null"] },
+    "summary_profile": { "type": ["string", "null"] },
+    "summary_model": { "type": ["string", "null"] },
+    "summary_max_tokens": { "type": "integer", "minimum": 0 },
+    "moa": { "$ref": "#/$defs/moa" },
+    "moa_plan": { "$ref": "#/$defs/moaPlan" },
+    "max_retries": { "type": "integer", "minimum": 0 },
+    "retry_base_delay_ms": { "type": "integer", "minimum": 0 },
+    "max_duration_secs": { "type": ["integer", "null"], "minimum": 0 },
+    "mcp_servers": { "type": "array", "items": { "$ref": "#/$defs/mcpServer" } },
+    "tools": { "$ref": "#/$defs/tools" },
+    "tool_timeout_ms": { "type": "integer", "minimum": 0 },
+    "tool_limits": { "$ref": "#/$defs/toolLimits" },
+    "max_tool_output_bytes": { "type": "integer", "minimum": 0 },
+    "tool_output_head_bytes": { "type": "integer", "minimum": 0 },
+    "tool_output_tail_bytes": { "type": "integer", "minimum": 0 },
+    "background_completion_preview_bytes": { "type": "integer", "minimum": 0 },
+    "max_concurrent_subagents": { "type": "integer", "minimum": 0 },
+    "default_subagent_max_turns": { "type": "integer", "minimum": 0 },
+    "subagent_max_turns": { "type": "integer", "minimum": 0, "description": "Deprecated alias for default_subagent_max_turns." },
+    "sandbox": { "$ref": "#/$defs/sandbox" }
+  },
+  "$defs": {
+    "configMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["config_version"],
+      "properties": {
+        "config_version": {
+          "type": "integer",
+          "const": 1,
+          "description": "Config family version; files that omit meta.config_version are read as v1."
+        }
+      }
+    },
+    "apiFormat": {
+      "enum": ["anthropic_messages", "openai_chat_completions", "openai_responses", "gemini_generate_content"]
+    },
+    "apiFormatOrNull": {
+      "type": ["string", "null"],
+      "enum": ["anthropic_messages", "openai_chat_completions", "openai_responses", "gemini_generate_content", null]
+    },
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "credential_env": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "authentication": {
+          "type": "object", "additionalProperties": false, "required": ["mode"],
+          "properties": { "mode": { "enum": ["api_key", "none"], "default": "api_key" } },
+          "description": "Explicit transport authentication; none omits all keys and is supported only for Chat Completions."
+        },
+        "api_format": { "$ref": "#/$defs/apiFormat" },
+        "endpoint": { "type": "string", "minLength": 1 },
+        "default_model": { "type": "string", "minLength": 1 },
+        "models": {
+          "type": "object",
+          "maxProperties": 1024,
+          "propertyNames": { "type": "string", "minLength": 1 },
+          "additionalProperties": { "$ref": "#/$defs/providerModel" },
+          "description": "Explicit model catalog; each settings layer replaces this entire table. Empty preserves the legacy default model."
+        },
+        "discover_models": { "type": ["boolean", "null"] },
+        "capabilities": { "$ref": "#/$defs/modelCapabilities" },
+        "reasoning_effort": { "type": ["string", "null"], "minLength": 1 },
+        "context_window_tokens": { "type": "integer", "minimum": 0 },
+        "auto_compact_threshold_tokens": { "type": ["integer", "null"], "minimum": 0 },
+        "output_headroom_tokens": { "type": "integer", "minimum": 0 },
+        "max_output_tokens": { "type": "integer", "minimum": 0 },
+        "request_timeout_secs": { "type": ["integer", "null"], "minimum": 0 },
+        "user_agent": { "type": ["string", "null"] },
+        "max_retries": { "type": ["integer", "null"], "minimum": 0 },
+        "retry_base_delay_ms": { "type": ["integer", "null"], "minimum": 0 },
+        "no_proxy": { "type": "boolean" },
+        "extra_body": { "type": "object" }
+      }
+    },
+    "providerModel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["context_window_tokens", "output_headroom_tokens", "max_output_tokens"],
+      "properties": {
+        "context_window_tokens": { "type": "integer", "minimum": 1 },
+        "output_headroom_tokens": { "type": "integer", "minimum": 1 },
+        "max_output_tokens": { "type": "integer", "minimum": 1 },
+        "auto_compact_threshold_tokens": { "type": ["integer", "null"], "minimum": 1 },
+        "capabilities": { "$ref": "#/$defs/modelCapabilities" },
+        "reasoning_effort": { "type": ["string", "null"], "minLength": 1 }
+      }
+    },
+    "modelCapabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text": { "type": "boolean" },
+        "tools": { "type": "boolean" },
+        "vision": { "type": "boolean" },
+        "reasoning": { "type": "boolean" },
+        "structured_output": { "type": "boolean" }
+      }
+    },
+    "modelDiscovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "request_timeout_secs": { "type": "integer", "minimum": 0 },
+        "cache_ttl_secs": { "type": "integer", "minimum": 0 },
+        "max_models_per_provider": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "activeModelSelection": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source_profile": { "type": "string" },
+        "model": { "type": "string" }
+      }
+    },
+    "goalPro": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "verifier_profile": { "type": ["string", "null"], "minLength": 1 },
+        "verifier_provider": { "type": ["string", "null"], "minLength": 1 },
+        "verifier_model": { "type": ["string", "null"], "minLength": 1 },
+        "verifier_models": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/goalProVerifierModel" },
+          "maxItems": 5,
+          "description": "Multi-model verifier panel: two or more entries enable majority voting; an odd count is recommended. Absent or empty keeps single-verifier behavior."
+        },
+        "verifier_max_turns": { "type": "integer", "minimum": 1, "default": 64, "description": "Maximum internal turns for one Goal Pro verifier review; does not limit parent Goal continuations." },
+        "completion_rejection_limit": { "type": "integer", "minimum": 1, "default": 8, "description": "After this many cumulative deterministic completion-gate rejections plus semantic FAIL/FLAKY verdicts on a new Goal Pro run, it automatically turns blocked; InfrastructureError does not count." },
+        "model_escalation": { "$ref": "#/$defs/goalProModelEscalation" },
+        "verification": { "$ref": "#/$defs/goalProVerification" }
+      }
+    },
+    "goalProVerifierModel": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "profile": { "type": ["string", "null"], "minLength": 1, "description": "Full Provider profile name; when set, takes precedence over provider/model." },
+        "provider": { "type": ["string", "null"], "minLength": 1, "description": "Provider name; defaults to the current Provider of the main session." },
+        "model": { "type": ["string", "null"], "minLength": 1, "description": "Model name; defaults to the current model of the main session." }
+      }
+    },
+    "orchestrate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "main": { "$ref": "#/$defs/orchestrateMain" },
+        "tiers": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/goalProVerifierModel" }
+        },
+        "roster": {
+          "type": "object",
+          "propertyNames": { "enum": ["junior", "oracle", "librarian", "critic"] },
+          "additionalProperties": { "$ref": "#/$defs/orchestrateRosterEntry" }
+        },
+        "critic_max_cycles": { "type": "integer", "minimum": 1, "default": 3 },
+        "critic_max_infrastructure_retries": { "type": "integer", "minimum": 0, "default": 2 },
+        "policies": { "$ref": "#/$defs/orchestratePolicies" },
+        "notepad": { "$ref": "#/$defs/orchestrateNotepad" },
+        "continuation": { "$ref": "#/$defs/orchestrateContinuation" },
+        "delivery": { "$ref": "#/$defs/orchestrateDelivery" },
+        "fleet": { "$ref": "#/$defs/orchestrateFleet" },
+        "control": { "$ref": "#/$defs/orchestrateControl" },
+        "breaker": { "$ref": "#/$defs/orchestrateBreaker" },
+        "audit": { "$ref": "#/$defs/orchestrateAudit" }
+      }
+    },
+    "orchestrateMain": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "optional_tool_allowlist": {
+          "type": ["array", "null"],
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Shrink whitelist for optional main-orchestrator tools; null keeps all optional tools, an empty array keeps only the non-disableable core orchestration tools."
+        }
+      }
+    },
+    "orchestrateRosterEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tier": { "type": "string", "minLength": 1 },
+        "tool_allowlist": { "type": ["array", "null"], "items": { "type": "string", "minLength": 1 } },
+        "context_mode": { "enum": ["none", "fork", "full"] }
+      }
+    },
+    "orchestratePolicies": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidence_gate": { "enum": ["auto", "advisory", "enforce", "off"], "default": "auto" },
+        "delegation_contract": { "enum": ["auto", "advisory", "enforce", "off"], "default": "advisory" }
+      }
+    },
+    "orchestrateNotepad": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "inject": { "type": "boolean", "default": true },
+        "max_inject_bytes": { "type": "integer", "minimum": 0, "default": 8192 }
+      }
+    },
+    "orchestrateContinuation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cooldown_seconds": { "type": "integer", "minimum": 0, "default": 30 },
+        "max_stalled_rounds": { "type": "integer", "minimum": 0, "default": 5 },
+        "max_consecutive_failures": { "type": "integer", "minimum": 0, "default": 3 },
+        "max_auto_turns": { "type": "integer", "minimum": 0, "default": 8 }
+      }
+    },
+    "orchestrateDelivery": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "lease_timeout_seconds": { "type": "integer", "minimum": 30, "maximum": 3600, "default": 120, "description": "Local lease timeout for sub-agent messages; does not replace Provider request timeouts." },
+        "max_attempts": { "type": "integer", "minimum": 1, "maximum": 64, "default": 8, "description": "Maximum delivery attempts for one message; once reached it turns blocked and is never silently dropped." }
+      }
+    },
+    "orchestrateFleet": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "inject": { "type": "boolean", "default": true },
+        "max_members": { "type": "integer", "minimum": 1, "maximum": 100, "default": 24 },
+        "max_inject_bytes": { "type": "integer", "minimum": 1024, "maximum": 32768, "default": 8192 }
+      }
+    },
+    "orchestrateControl": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": true }
+      }
+    },
+    "orchestrateBreaker": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "hard_stop": { "type": "boolean", "default": false, "description": "When off, the breaker can at most auto-pause and never auto-terminate an Agent." },
+        "repeated_action_threshold": { "type": "integer", "minimum": 1, "maximum": 64, "default": 8 },
+        "consecutive_error_threshold": { "type": "integer", "minimum": 1, "maximum": 64, "default": 5 },
+        "no_progress_rounds": { "type": "integer", "minimum": 1, "maximum": 64, "default": 4 }
+      }
+    },
+    "orchestrateAudit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "max_events": { "type": "integer", "minimum": 128, "maximum": 65536, "default": 4096 },
+        "max_event_bytes": { "type": "integer", "minimum": 512, "maximum": 65536, "default": 4096 }
+      }
+    },
+    "goalProModelEscalation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": false, "description": "When enabled, once verifier rejections reach the threshold the main Agent model switches automatically along the ladder with the full context preserved." },
+        "threshold": { "type": "integer", "minimum": 1, "default": 3, "description": "Cumulative semantic rejections required to trigger each ladder step." },
+        "models": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/goalProVerifierModel" },
+          "description": "Model ladder to switch through in order; each entry's api_format and context_window_tokens must exactly match the main Provider (validated at load time)."
+        }
+      }
+    },
+    "goalProVerification": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "require_tests": { "type": "boolean", "default": true, "description": "Require an independent verifier to actually run tests before an Artifact Goal completes." },
+        "require_behavior_delta": { "type": "boolean", "default": false, "description": "Require the same read-only behavior probe to pass on the candidate patch and fail on the pristine baseline, with trustworthy raw exit codes for both." },
+        "minimum_test_scope": { "enum": ["focused", "target_suite"], "default": "target_suite", "description": "focused accepts a single filtered test; target_suite requires at least one target test run without any test selector." },
+        "require_raw_exit_code": { "type": "boolean", "default": true, "description": "Reject test evidence obtained through output-filtering pipelines or explicit failure-ignoring." },
+        "allow_workspace_changes": { "type": "boolean", "default": false, "description": "Whether the verifier may modify the candidate workspace; disabled by default with fingerprints compared before and after verification." },
+        "isolate_environment": { "type": "boolean", "default": true, "description": "Isolate HOME, caches, temporary directories, and Python user site for the verifier." },
+        "allow_dependency_changes": { "type": "boolean", "default": false, "description": "Whether the verifier may install, uninstall, or update dependencies; disabled by default." },
+        "allow_network_only_failures": { "type": "boolean", "default": true, "description": "Whether peripheral test failures caused solely by unreachable external networks are allowed once target tests have passed." }
+      }
+    },
+    "permissionRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tool": { "type": "string", "minLength": 1 },
+        "input_pattern": { "type": ["string", "null"] },
+        "action": { "enum": ["allow", "deny"] }
+      }
+    },
+    "studioContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "instructions": { "type": "string" },
+        "personality": { "enum": ["friendly", "pragmatic"] },
+        "instructions_configured": { "type": "boolean" },
+        "personality_configured": { "type": "boolean" }
+      }
+    },
+    "memory": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "structured_enabled": { "type": "boolean" },
+        "skip_tools": { "type": "array", "items": { "type": "string" } },
+        "legacy_prompt_enabled": { "type": "boolean" },
+        "private_by_default": { "type": "boolean" },
+        "private_file_paths": { "type": "boolean" },
+        "private_verification_targets": { "type": "boolean" },
+        "record_prompt_placeholders": { "type": "boolean" },
+        "observer_mode": { "enum": ["disabled", "deterministic", "model"] },
+        "observer_queue_size": { "type": "integer", "minimum": 0 },
+        "observer_model": { "type": ["string", "null"] }
+      }
+    },
+    "sessionMemory": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "update_enabled": { "type": "boolean" },
+        "compact_enabled": { "type": "boolean" },
+        "update_interval_turns": { "type": "integer", "minimum": 0 },
+        "init_min_tokens": { "type": "integer", "minimum": 0 },
+        "update_min_token_delta": { "type": "integer", "minimum": 0 },
+        "tool_call_threshold": { "type": "integer", "minimum": 0 },
+        "max_update_messages": { "type": "integer", "minimum": 0 },
+        "update_max_tokens": { "type": "integer", "minimum": 0 },
+        "compact_min_chars": { "type": "integer", "minimum": 0 },
+        "compact_min_recent_tokens": { "type": "integer", "minimum": 0 },
+        "compact_max_recent_tokens": { "type": "integer", "minimum": 0 },
+        "compact_min_recent_messages": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "contextCompaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "auto_threshold": { "$ref": "#/$defs/autoCompactThreshold" }
+      }
+    },
+    "autoCompactThreshold": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "small_window_percent": { "type": "integer", "minimum": 1, "maximum": 99, "default": 95 },
+        "medium_window_percent": { "type": "integer", "minimum": 1, "maximum": 99, "default": 85 },
+        "large_window_percent": { "type": "integer", "minimum": 1, "maximum": 99, "default": 75 }
+      }
+    },
+    "turnFileChanges": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "retention_days": { "type": "integer", "minimum": 0 },
+        "max_total_bytes": { "type": "integer", "minimum": 0 },
+        "max_file_bytes": { "type": "integer", "minimum": 0 },
+        "ignore_globs": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "timeBasedMicroCompact": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "gap_threshold_minutes": { "type": "integer", "minimum": 0 },
+        "keep_recent": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "plugins": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "runtime": { "$ref": "#/$defs/pluginRuntime" },
+        "compatibility": { "$ref": "#/$defs/pluginCompatibility" },
+        "installation": { "$ref": "#/$defs/pluginInstallation" },
+        "marketplaces": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$",
+            "maxLength": 64
+          },
+          "additionalProperties": { "$ref": "#/$defs/pluginMarketplaceConfig" }
+        },
+        "installed": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*@[a-z0-9]+(?:[.-][a-z0-9]+)*$",
+            "maxLength": 129
+          },
+          "additionalProperties": { "$ref": "#/$defs/pluginPolicy" }
+        }
+      }
+    },
+    "pluginRuntime": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "project_policy": { "enum": ["trusted_only", "disabled"] }
+      }
+    },
+    "pluginMarketplaceConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "source": {
+          "oneOf": [
+            { "$ref": "#/$defs/pluginMarketplaceLocalSource" },
+            { "$ref": "#/$defs/pluginMarketplaceGitSource" },
+            { "$ref": "#/$defs/pluginMarketplaceNpmSource" }
+          ]
+        }
+      }
+    },
+    "pluginMarketplaceLocalSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "path"],
+      "properties": {
+        "type": { "const": "local" },
+        "path": { "type": "string", "minLength": 1 }
+      }
+    },
+    "pluginMarketplaceGitSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "url"],
+      "properties": {
+        "type": { "const": "git" },
+        "url": { "type": "string", "minLength": 1 },
+        "ref_name": { "type": ["string", "null"] },
+        "sha": { "type": ["string", "null"] }
+      }
+    },
+    "pluginMarketplaceNpmSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "package"],
+      "properties": {
+        "type": { "const": "npm" },
+        "package": { "type": "string", "minLength": 1 },
+        "version": { "type": ["string", "null"] },
+        "registry": { "type": ["string", "null"] },
+        "integrity": { "type": ["string", "null"] }
+      }
+    },
+    "pluginCompatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "agent_plugins_v1": { "type": "boolean" },
+        "codex": { "type": "boolean" },
+        "claude": { "type": "boolean" },
+        "cursor": { "type": "boolean" }
+      }
+    },
+    "pluginInstallation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "allow_local": { "type": "boolean" },
+        "allow_git": { "type": "boolean" },
+        "allow_npm": { "type": "boolean" },
+        "require_git_sha": { "type": "boolean" },
+        "require_npm_integrity": { "type": "boolean" },
+        "max_files": { "type": "integer", "minimum": 1, "maximum": 100000 },
+        "max_total_bytes": { "type": "integer", "minimum": 1, "maximum": 4294967296 },
+        "max_file_bytes": { "type": "integer", "minimum": 1, "maximum": 1073741824 },
+        "timeout_ms": { "type": "integer", "minimum": 1, "maximum": 86400000 }
+      }
+    },
+    "pluginPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": ["boolean", "null"] },
+        "skills": { "$ref": "#/$defs/pluginCapabilityPolicy" },
+        "hooks": { "$ref": "#/$defs/pluginCapabilityPolicy" },
+        "mcp_servers": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/pluginMcpServerPolicy" }
+        }
+      }
+    },
+    "pluginCapabilityPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": ["boolean", "null"] }
+      }
+    },
+    "pluginMcpServerPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": ["boolean", "null"] },
+        "enabled_tools": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "disabled_tools": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "skills": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "auto_skill_review_enabled": { "type": "boolean" },
+        "auto_skill_review_interval": { "type": "integer", "minimum": 0 },
+        "auto_curator_enabled": { "type": "boolean" },
+        "auto_curator_interval_hours": { "type": "integer", "minimum": 0 },
+        "auto_curator_min_idle_hours": { "type": "integer", "minimum": 0 },
+        "stale_after_days": { "type": "integer", "minimum": 0 },
+        "archive_after_days": { "type": "integer", "minimum": 0 },
+        "prune_builtins": { "type": "boolean" },
+        "trust_external": { "type": "boolean" },
+        "auto_lessons_learned": { "type": "boolean" },
+        "external_dirs": { "type": "array", "items": { "type": "string" } },
+        "guard": { "$ref": "#/$defs/skillGuard" }
+      }
+    },
+    "skillGuard": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "block_high_risk": { "type": "boolean" },
+        "block_medium_risk_for_community": { "type": "boolean" }
+      }
+    },
+    "tui": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "alternate_screen": { "enum": ["auto", "always", "never"] },
+        "path_preview": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "enabled": { "type": "boolean", "default": false } }
+        }
+      }
+    },
+    "moaModel": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "profile": { "type": ["string", "null"] },
+        "provider": { "type": "string" },
+        "model": { "type": "string" }
+      }
+    },
+    "moaPreset": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "reference_models": { "type": "array", "items": { "$ref": "#/$defs/moaModel" } },
+        "aggregator": { "$ref": "#/$defs/moaModel" },
+        "reference_max_tokens": { "type": ["integer", "null"], "minimum": 0 },
+        "aggregator_max_tokens": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "moa": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "default_preset": { "type": "string" },
+        "max_reference_workers": { "type": "integer", "minimum": 0 },
+        "presets": { "type": "object", "additionalProperties": { "$ref": "#/$defs/moaPreset" } }
+      }
+    },
+    "moaPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "preset": { "type": "string" },
+        "draft_max_turns": { "type": "integer", "minimum": 0 },
+        "draft_max_tokens": { "type": "integer", "minimum": 0 },
+        "synthesis_max_tokens": { "type": "integer", "minimum": 0 },
+        "draft_timeout_secs": { "type": "integer", "minimum": 0 },
+        "max_planner_workers": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "mcpServer": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "transport": { "type": "string", "enum": ["stdio", "sse", "http"] },
+        "command": { "type": "string" },
+        "args": { "type": "array", "items": { "type": "string" } },
+        "url": { "type": "string" },
+        "env": { "type": "object", "additionalProperties": { "type": "string" } },
+        "headers": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    },
+    "tools": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "coerce": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "semantic_boolean": { "type": "boolean" },
+            "semantic_number": { "type": "boolean" },
+            "semantic_integer": { "type": "boolean" },
+            "stringify_mismatched_scalar": { "type": "boolean" }
+          }
+        },
+        "luna": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "allowed": { "type": "array", "items": { "type": "string" } } }
+        },
+        "disabled": { "type": "array", "items": { "type": "string" } },
+        "file_edit_tool": { "enum": ["edit", "apply_patch"], "default": "edit", "description": "Which file-edit tool the model sees. Selected when the session starts and pinned for the session; cannot be switched mid-session. Both stay registered; the inactive surface is hidden from tool definitions and rejected at execution." }
+      }
+    },
+    "toolLimits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "doom_loop": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "default_repetitions": { "type": "integer" },
+            "tools": { "type": "object", "additionalProperties": { "type": "integer" } }
+          }
+        },
+        "foreground_budget_ms": { "$ref": "#/$defs/namedToolLimit" },
+        "task_output_timeout_ms": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "default_ms": { "type": "integer", "minimum": 0 },
+            "min_ms": { "type": "integer", "minimum": 0 },
+            "max_ms": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "permission_denials": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "consecutive_limit": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    },
+    "namedToolLimit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "default_ms": { "type": "integer", "minimum": 0 },
+        "tools": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 } }
+      }
+    },
+    "sandbox": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "readonly": { "type": "boolean" },
+        "allowed_paths": { "type": "array", "items": { "type": "string" } },
+        "denied_paths": { "type": "array", "items": { "type": "string" } },
+        "allow_shell_escalation": { "type": "boolean" },
+        "require_shell_escalation_approval": { "type": "boolean" },
+        "shell_escalation_max_attempts": { "type": "integer", "minimum": 0 },
+        "allow_system_temp_writes": { "type": "boolean" },
+        "allow_shared_dev_cache_writes": { "type": "boolean" },
+        "landlock": { "type": ["boolean", "null"] }
+      }
+    }
+  }
+}

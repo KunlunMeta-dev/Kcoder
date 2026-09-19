@@ -1,0 +1,196 @@
+{
+  "name": "@kcoder/studio",
+  "version": "0.1.35",
+  "description": "Multi-server KCoder desktop client",
+  "author": "KCoder contributors",
+  "private": true,
+  "type": "module",
+  "main": "desktop/main.mjs",
+  "scripts": {
+    "dev": "node dev-server.mjs",
+    "demo": "KCODER_STUDIO_SCENARIO=full-turn KCODER_STUDIO_SERVERS_FILE=./servers.demo.json node dev-server.mjs",
+    "demo:tailscale": "KCODER_STUDIO_HOST=0.0.0.0 KCODER_STUDIO_SCENARIO=full-turn KCODER_STUDIO_SERVERS_FILE=./servers.demo.json node dev-server.mjs",
+    "mock": "KCODER_STUDIO_MOCK=1 node dev-server.mjs",
+    "desktop": "electron ./desktop/main.mjs",
+    "desktop:remote": "electron ./desktop/remote-main.mjs",
+    "mobile:web": "npm --prefix mobile run web",
+    "mobile:pack:web": "npm --prefix mobile run pack:web",
+    "mobile:typecheck": "npm --prefix mobile run typecheck",
+    "mobile:test": "npm --prefix mobile test",
+    "mobile:build:web": "npm --prefix mobile run build:web",
+    "desktop:pack:dir": "pnpm build:renderer && cargo build --release --manifest-path ../../Cargo.toml -p kcoder_cli --bin kcoder && electron-builder --dir --linux --publish never",
+    "desktop:pack:linux": "pnpm build:renderer && cargo build --release --manifest-path ../../Cargo.toml -p kcoder_cli --bin kcoder && electron-builder --linux --publish never",
+    "desktop:pack:win": "node desktop/build-windows.mjs",
+    "pack:web": "pnpm build:renderer && node -e \"require('node:fs').mkdirSync('../../target/packages/kcoder-studio-gateway',{recursive:true})\" && npm pack --pack-destination ../../target/packages/kcoder-studio-gateway",
+    "desktop:remote:pack:win": "cargo build --release --manifest-path ../../Cargo.toml -p kcoder_process_supervisor --bin kcoder-process-supervisor && electron-builder --config electron-builder.remote.json --dir --win --x64 --publish never && node desktop/archive-windows-remote.mjs",
+    "test:desktop:artifact": "KCODER_STUDIO_PACKAGED_DIR=./dist/linux-unpacked node --test desktop/packaged-artifact.test.mjs",
+    "check": "node --check dev-server.mjs && node --check desktop/main.mjs && node --check desktop/gateway-process.mjs && node --check e2e/suites/gateway/runtime-target-local.e2e.mjs && node --check e2e/suites/gateway/runtime-target-local-runner.mjs && node --check e2e/suites/gateway/runtime-target-ssh.e2e.mjs && node --check e2e/suites/gateway/runtime-target-ssh-runner.mjs && node --check e2e/suites/browser/runtime-target-conversation-ui.e2e.mjs && node --check test/renderer-ui-e2e.mjs && pnpm --dir renderer typecheck",
+    "test": "node --test test/*.test.js desktop/*.test.mjs src/*.test.mjs src/__tests__/*.test.js",
+    "test:legacy-renderer": "node --test test/rpc-client.test.js",
+    "test:renderer": "TZ=Asia/Shanghai pnpm --dir renderer exec vitest run --maxWorkers=2",
+    "build:renderer": "pnpm --dir renderer build",
+    "test:e2e": "node e2e/suites/gateway/runtime-target-local.e2e.mjs",
+    "test:e2e:harness": "node --test e2e/harness/*.test.mjs",
+    "test:e2e:studio": "node e2e/run-all.mjs",
+    "test:e2e:studio:smoke": "node e2e/run-all.mjs --model-independent",
+    "test:e2e:studio:full": "node e2e/run-all.mjs --model-independent --full-integration",
+    "test:e2e:studio:real-model": "node e2e/run-all.mjs --real-model --suite real-model-task",
+    "test:e2e:studio:all": "node e2e/run-all.mjs --real-model",
+    "test:ssh-e2e": "node e2e/suites/gateway/runtime-target-ssh.e2e.mjs",
+    "test:ui-e2e": "node test/renderer-ui-e2e.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dev-server.mjs",
+    "src",
+    "renderer/dist",
+    "README.md"
+  ],
+  "devDependencies": {
+    "electron": "42.3.3",
+    "electron-builder": "26.15.2"
+  },
+  "build": {
+    "beforePack": "desktop/stage-desktop-resources.mjs",
+    "appId": "dev.kcoder.studio",
+    "productName": "KCoder Studio",
+    "executableName": "kcoder-studio",
+    "asar": true,
+    "files": [
+      "!node_modules/**/*",
+      "desktop/main.mjs",
+      "desktop/application-menu.mjs",
+      "desktop/application-menu-labels.mjs",
+      "desktop/additional-window.mjs",
+      "desktop/desktop-menu-controller.mjs",
+      "desktop/directory-dialog-controller.mjs",
+      "desktop/tray-controller.mjs",
+      "desktop/desktop-icons.mjs",
+      "renderer/src-tauri/icons/icon.ico",
+      "renderer/src-tauri/icons/128x128.png",
+      "renderer/src-tauri/icons/32x32.png",
+      "desktop/menu-preload.cjs",
+      "desktop/gateway-process.mjs",
+      "desktop/desktop-port.mjs",
+      "desktop/packaged-paths.mjs",
+      "desktop/security-policy.mjs",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "desktop/gateway-package.json",
+        "to": "gateway/package.json"
+      },
+      {
+        "from": "../../target/packages/kcoder-studio/gateway-dependencies/node_modules",
+        "to": "gateway/node_modules"
+      },
+      {
+        "from": "dev-server.mjs",
+        "to": "gateway/dev-server.mjs"
+      },
+      {
+        "from": "src",
+        "to": "gateway/src"
+      },
+      {
+        "from": "renderer/dist",
+        "to": "renderer-dist"
+      },
+      {
+        "from": "renderer/LICENSE.upstream",
+        "to": "licenses/Wegent-Apache-2.0.txt"
+      },
+      {
+        "from": "renderer/UPSTREAM.md",
+        "to": "licenses/Wegent-UPSTREAM.md"
+      },
+      {
+        "from": "renderer/KCODER_CHANGES.md",
+        "to": "licenses/Wegent-KCODER_CHANGES.md"
+      }
+    ],
+    "linux": {
+      "icon": "renderer/src-tauri/icons/icon.png",
+      "category": "Development",
+      "extraResources": [
+        {
+          "from": "../../target/release/kcoder",
+          "to": "bin/kcoder"
+        },
+        {
+          "from": "../../target/packages/kcoder-studio/linux-input/bin/chrome",
+          "to": "bin/chrome"
+        }
+      ],
+      "target": [
+        "AppImage"
+      ]
+    },
+    "mac": {
+      "icon": "renderer/src-tauri/icons/icon.icns"
+    },
+    "win": {
+      "icon": "renderer/src-tauri/icons/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "KCoder-Studio-Setup-${version}-win-${arch}.${ext}",
+      "signAndEditExecutable": true,
+      "signExecutable": false,
+      "extraFiles": [
+        {
+          "from": "desktop/WINDOWS-README.txt",
+          "to": "使用说明.txt"
+        }
+      ],
+      "extraResources": [
+        {
+          "from": "desktop/windows-shell",
+          "to": "shell"
+        },
+        {
+          "from": "renderer/src-tauri/icons/icon.ico",
+          "to": "shell/icon.ico"
+        },
+        {
+          "from": "../../target/packages/kcoder-studio/windows-input/bin/kcoder.exe",
+          "to": "bin/kcoder.exe"
+        },
+        {
+          "from": "../../target/packages/kcoder-studio/windows-input/bin/kcoder-process-supervisor.exe",
+          "to": "bin/kcoder-process-supervisor.exe"
+        },
+        {
+          "from": "../../target/packages/kcoder-studio/windows-input/bin/chrome",
+          "to": "bin/chrome"
+        }
+      ]
+    },
+    "nsis": {
+      "include": "desktop/windows-shell-installer.nsh",
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "KCoder Studio",
+      "deleteAppDataOnUninstall": false,
+      "installerLanguages": [
+        "zh_CN",
+        "en_US"
+      ]
+    }
+  },
+  "dependencies": {
+    "jsonc-parser": "^3.3.1",
+    "ssh2": "^1.17.0"
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "expo": {
+    "name": "KCoder Studio",
+    "slug": "kcoder-studio",
+    "scheme": "kcoder-studio",
+    "version": "0.1.0",
+    "icon": "./assets/icon.png",
+    "orientation": "default",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "dev.kcoder.studio"
+    },
+    "android": {
+      "package": "dev.kcoder.studio",
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-foreground.png",
+        "backgroundColor": "#0b0b0c"
+      }
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/icon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": false
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "允许 KCoder Studio 使用相机扫描 Gateway 配对二维码或拍摄任务附件",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "允许 KCoder Studio 从照片图库选择任务附件",
+          "cameraPermission": "允许 KCoder Studio 拍摄任务附件",
+          "microphonePermission": false
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

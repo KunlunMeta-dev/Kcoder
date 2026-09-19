@@ -1,0 +1,314 @@
+schema_version = 2
+
+[[suite]]
+id = "rust-workspace"
+tiers = ["pr", "full"]
+command = ["cargo", "test", "--workspace", "--exclude", "kcoder_cli", "--exclude", "kcoder_system_tests", "--exclude", "kcoder_test_harness", "--exclude", "kcoder_test_runner"]
+# Eight manual benchmarks, one live Bing test, and two Windows-only AltGr tests.
+summary = { parser = "cargo", expected_skips = { linux = 11, macos = "any", windows = "any" } }
+timeout_seconds = 1800
+requires_commands = ["cargo"]
+pass_env = ["CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH"]
+
+[[suite]]
+id = "test-harness"
+tiers = ["pr", "full"]
+command = ["cargo", "test", "-p", "kcoder_test_harness"]
+summary = { parser = "cargo", expected_skips = 0 }
+timeout_seconds = 300
+requires_commands = ["cargo"]
+pass_env = ["CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH"]
+
+[[suite]]
+id = "test-runner"
+tiers = ["pr", "full"]
+command = ["cargo", "test", "-p", "kcoder_test_runner"]
+summary = { parser = "cargo", expected_skips = 0 }
+timeout_seconds = 300
+requires_commands = ["cargo"]
+pass_env = ["CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH"]
+
+[[suite]]
+id = "project-contracts"
+tiers = ["pr", "full"]
+command = ["cargo", "test", "-p", "kcoder_system_tests"]
+summary = { parser = "cargo", expected_skips = 0 }
+timeout_seconds = 900
+requires_commands = ["cargo"]
+pass_env = ["CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH"]
+
+[[suite]]
+id = "tui-lab-unit"
+tiers = ["pr", "full"]
+cwd = "tools/tui-lab"
+command = ["npm", "test"]
+summary = { parser = "node", expected_skips = 0 }
+requires_commands = ["node", "npm"]
+
+[[suite]]
+id = "tui-startup"
+tiers = ["pr", "full"]
+cwd = "tools/tui-lab"
+command = ["npm", "run", "--silent", "startup", "--", "--description", "project-test-runner-startup", "--software-webgl", "--out", "{artifact_dir}"]
+summary = { parser = "assertions-json", expected_skips = 0 }
+timeout_seconds = 300
+requires_commands = ["node", "npm", "cargo"]
+required_artifacts = ["assertions.json"]
+requires_env = ["PLAYWRIGHT_BROWSERS_PATH"]
+pass_env = ["PLAYWRIGHT_BROWSERS_PATH", "CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH"]
+
+[[suite]]
+id = "studio-unit"
+tiers = ["pr", "full"]
+cwd = "apps/kcoder-studio"
+command = ["npm", "test"]
+# Linux package, Windows remote package, and Windows full package need explicit artifacts.
+summary = { parser = "node", expected_skips = 3 }
+requires_commands = ["node", "npm"]
+
+[[suite]]
+id = "studio-renderer-unit"
+tiers = ["pr", "full"]
+cwd = "apps/kcoder-studio"
+command = ["pnpm", "--dir", "wework", "exec", "vitest", "run", "--maxWorkers=2", "--reporter=json"]
+summary = { parser = "vitest-json", expected_skips = 0 }
+requires_commands = ["node", "pnpm"]
+# Tests may report dependency drift, but must never install or replace dependencies.
+env = { TZ = "Asia/Shanghai", pnpm_config_verify_deps_before_run = "warn" }
+
+[[suite]]
+id = "studio-typecheck"
+tiers = ["pr", "full"]
+cwd = "apps/kcoder-studio"
+command = ["pnpm", "--dir", "wework", "typecheck"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+requires_commands = ["node", "pnpm"]
+env = { pnpm_config_verify_deps_before_run = "warn" }
+
+[[suite]]
+id = "studio-tauri-unit"
+tiers = ["pr", "full"]
+command = ["cargo", "test", "--manifest-path", "apps/kcoder-studio/renderer/src-tauri/Cargo.toml"]
+summary = { parser = "cargo", expected_skips = 0 }
+timeout_seconds = 1800
+requires_commands = ["cargo", "pkg-config"]
+pass_env = ["CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH"]
+platforms = ["linux", "macos", "windows"]
+
+[[suite]]
+id = "studio-harness"
+tiers = ["pr", "full"]
+cwd = "apps/kcoder-studio"
+command = ["npm", "run", "test:e2e:harness"]
+summary = { parser = "node", expected_skips = 2 }
+requires_commands = ["node", "npm", "cargo"]
+pass_env = ["CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH"]
+
+[[suite]]
+id = "server-install-contracts"
+tiers = ["pr", "full"]
+command = ["bash", "scripts/install/tests/server-install-contract.sh"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+requires_commands = ["bash", "rustc"]
+pass_env = ["CARGO_HOME", "RUSTUP_HOME"]
+platforms = ["linux"]
+
+[[suite]]
+id = "cli-kcoder-unit"
+tiers = ["pr", "full"]
+command = ["cargo", "test", "-p", "kcoder_cli", "--bin", "kcoder", "--", "--test-threads=1"]
+summary = { parser = "cargo", expected_skips = 0 }
+timeout_seconds = 1200
+requires_commands = ["cargo"]
+pass_env = ["CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH"]
+
+[[suite]]
+id = "cli-app-server-stdio"
+tiers = ["pr", "full"]
+command = ["cargo", "test", "-p", "kcoder_cli", "--test", "app_server_stdio", "--", "--test-threads=1"]
+summary = { parser = "cargo", expected_skips = 0 }
+timeout_seconds = 1200
+requires_commands = ["cargo"]
+pass_env = ["CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH"]
+
+[[suite]]
+id = "cli-json-stdout"
+tiers = ["pr", "full"]
+command = ["cargo", "test", "-p", "kcoder_cli", "--test", "json_stdout", "--", "--test-threads=1"]
+summary = { parser = "cargo", expected_skips = 0 }
+timeout_seconds = 1200
+requires_commands = ["cargo"]
+pass_env = ["CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH"]
+
+[[suite]]
+id = "build-release-cli"
+tiers = ["full"]
+command = ["cargo", "build", "--release", "-p", "kcoder_cli", "--bin", "kcoder"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 1800
+requires_commands = ["cargo"]
+pass_env = ["CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH"]
+setup = true
+
+[[suite]]
+id = "build-debug-cli"
+tiers = ["full", "real-model"]
+command = ["cargo", "build", "-p", "kcoder_cli", "--bin", "kcoder"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 1800
+requires_commands = ["cargo"]
+pass_env = ["CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH"]
+setup = true
+
+[[suite]]
+id = "installed-cli"
+tiers = ["full"]
+command = ["bash", "scripts/tests/test_installed_cli.sh"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+requires_commands = ["bash"]
+requires_files = ["target/release/kcoder"]
+depends_on = ["build-release-cli"]
+
+[[suite]]
+id = "studio-smoke"
+tiers = ["full"]
+cwd = "apps/kcoder-studio"
+command = ["npm", "run", "test:e2e:studio:smoke", "--", "--keep-going"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 1200
+requires_commands = ["node", "npm", "pnpm", "cargo"]
+requires_any_env = [["KCODER_E2E_REQUIRE_CHROMIUM_SANDBOX", "KCODER_E2E_CHROMIUM_NO_SANDBOX"]]
+pass_env = ["KCODER_E2E_REQUIRE_CHROMIUM_SANDBOX", "KCODER_E2E_CHROMIUM_NO_SANDBOX", "KCODER_E2E_CHROMIUM_BIN", "CARGO_HOME", "RUSTUP_HOME"]
+depends_on = ["build-debug-cli"]
+
+[[suite]]
+id = "studio-desktop-package-build"
+tiers = ["full"]
+cwd = "apps/kcoder-studio"
+command = ["pnpm", "run", "desktop:pack:dir"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 3600
+requires_commands = ["node", "pnpm", "cargo"]
+requires_files = ["apps/kcoder-studio/node_modules/.bin/electron-builder"]
+pass_env = ["CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH", "XDG_CACHE_HOME", "HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY"]
+secret_env = ["HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY"]
+setup = true
+env = { pnpm_config_verify_deps_before_run = "warn" }
+
+[[suite]]
+id = "studio-desktop-package-contract"
+tiers = ["full"]
+cwd = "apps/kcoder-studio"
+command = ["npm", "run", "test:desktop:artifact"]
+summary = { parser = "node", expected_skips = 0 }
+timeout_seconds = 300
+requires_commands = ["node", "npm"]
+requires_files = ["apps/kcoder-studio/dist/linux-unpacked/kcoder-studio"]
+depends_on = ["studio-desktop-package-build"]
+
+[[suite]]
+id = "studio-tauri-desktop-e2e"
+tiers = ["platform"]
+cwd = "apps/kcoder-studio/renderer"
+command = ["pnpm", "run", "e2e:desktop"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 3600
+requires_commands = ["node", "pnpm", "cargo"]
+requires_files = ["apps/kcoder-studio/renderer/node_modules/.bin/tauri", "apps/kcoder-studio/renderer/src-tauri/binaries/wegent-executor-x86_64-unknown-linux-gnu"]
+requires_executables = [{ env = "CODEX_BIN", allow_external = true }]
+platforms = ["linux"]
+consent = "tauri-codex-desktop"
+consent_env = "KCODER_TEST_TAURI_CODEX_DESKTOP"
+pass_env = ["KCODER_TEST_TAURI_CODEX_DESKTOP", "CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH", "DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "CODEX_BIN"]
+[suite.env]
+KCODER_STUDIO_E2E_EXECUTOR_BIN = "src-tauri/binaries/wegent-executor-x86_64-unknown-linux-gnu"
+
+[[suite]]
+id = "studio-browser-e2e"
+tiers = ["full"]
+cwd = "apps/kcoder-studio/renderer"
+command = ["pnpm", "e2e"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 1800
+requires_commands = ["node", "pnpm"]
+requires_files = ["apps/kcoder-studio/renderer/node_modules/.bin/playwright"]
+requires_env = ["PLAYWRIGHT_BROWSERS_PATH"]
+pass_env = ["PLAYWRIGHT_BROWSERS_PATH"]
+env = { pnpm_config_verify_deps_before_run = "warn" }
+
+[[suite]]
+id = "wework-desktop-ai-verify"
+tiers = ["full"]
+cwd = "apps/kcoder-studio/renderer"
+command = ["pnpm", "exec", "vitest", "run", "scripts/ai-verify.test.mjs", "scripts/ai-verify-environment.test.mjs", "src/e2e/desktop-control-keyboard.test.ts", "src/e2e/desktop-process-lifecycle.test.ts", "src/e2e/desktop-scenario-loader.test.ts", "--reporter=json"]
+summary = { parser = "vitest-json", expected_skips = 0 }
+timeout_seconds = 600
+requires_commands = ["node", "pnpm"]
+env = { pnpm_config_verify_deps_before_run = "warn" }
+
+[[suite]]
+id = "tui-full-turn"
+tiers = ["full"]
+cwd = "tools/tui-lab"
+command = ["npm", "run", "--silent", "run", "--", "--scenario", "full-turn", "--description", "project-test-runner-full-turn", "--software-webgl", "--out", "{artifact_dir}"]
+summary = { parser = "assertions-json", expected_skips = 0 }
+timeout_seconds = 900
+requires_commands = ["node", "npm", "cargo"]
+required_artifacts = ["assertions.json"]
+requires_env = ["PLAYWRIGHT_BROWSERS_PATH"]
+pass_env = ["PLAYWRIGHT_BROWSERS_PATH", "CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH"]
+
+[[suite]]
+id = "tui-subagent-trace"
+tiers = ["full"]
+cwd = "tools/tui-lab"
+command = ["npm", "run", "--silent", "subagent-trace", "--", "--description", "project-test-runner-subagent-trace", "--software-webgl", "--out", "{artifact_dir}"]
+summary = { parser = "assertions-json", expected_skips = 0 }
+timeout_seconds = 900
+requires_commands = ["node", "npm", "cargo"]
+required_artifacts = ["assertions.json"]
+requires_env = ["PLAYWRIGHT_BROWSERS_PATH"]
+pass_env = ["PLAYWRIGHT_BROWSERS_PATH", "CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH"]
+
+[[suite]]
+id = "tui-session-resume"
+tiers = ["full"]
+cwd = "tools/tui-lab"
+command = ["npm", "run", "--silent", "session-resume", "--", "--scenario", "full-turn", "--description", "project-test-runner-session-resume", "--software-webgl", "--out", "{artifact_dir}"]
+summary = { parser = "assertions-json", expected_skips = 0 }
+timeout_seconds = 900
+requires_commands = ["node", "npm", "cargo"]
+required_artifacts = ["assertions.json"]
+requires_env = ["PLAYWRIGHT_BROWSERS_PATH"]
+pass_env = ["PLAYWRIGHT_BROWSERS_PATH", "CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH"]
+
+[[suite]]
+id = "tui-native-shell-prompt"
+tiers = ["platform"]
+cwd = "tools/tui-lab"
+command = ["npm", "run", "--silent", "shell-prompt", "--", "--scenario", "full-turn", "--description", "project-test-runner-native-shell-prompt", "--out", "{artifact_dir}"]
+summary = { parser = "assertions-json", expected_skips = 0 }
+timeout_seconds = 900
+requires_commands = ["node", "npm", "cargo"]
+required_artifacts = ["assertions.json"]
+requires_env = ["PLAYWRIGHT_BROWSERS_PATH"]
+platforms = ["linux", "macos", "windows"]
+consent = "tui-native-shell-prompt"
+consent_env = "KCODER_TEST_TUI_NATIVE_SHELL_PROMPT"
+pass_env = ["KCODER_TEST_TUI_NATIVE_SHELL_PROMPT", "PLAYWRIGHT_BROWSERS_PATH", "CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH"]
+
+[[suite]]
+id = "studio-real-model"
+tiers = ["real-model"]
+cwd = "apps/kcoder-studio"
+command = ["npm", "run", "test:e2e:studio:real-model"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+requires_commands = ["node", "npm"]
+requires_files = ["target/debug/kcoder"]
+requires_env = ["KCODER_CONFIG_DIR"]
+consent = "real-model"
+consent_env = "KCODER_E2E_REAL_MODEL"
+pass_env = ["KCODER_E2E_REAL_MODEL", "KCODER_E2E_MODEL_PROFILE", "KCODER_E2E_MODEL_ENDPOINT", "KCODER_E2E_MODEL_NAME", "KCODER_E2E_MODEL_API_FORMAT", "KCODER_E2E_MODEL_CREDENTIAL_ENV", "KCODER_E2E_MODEL_CREDENTIAL_VALUE", "KCODER_E2E_KCODER_BIN", "KCODER_CONFIG_DIR", "KCODER_E2E_MODEL_MAX_TOKENS", "KCODER_E2E_MODEL_TIMEOUT_SECS"]
+secret_env = ["KCODER_E2E_MODEL_ENDPOINT", "KCODER_E2E_MODEL_CREDENTIAL_VALUE"]
+secret_env_selectors = ["KCODER_E2E_MODEL_CREDENTIAL_ENV"]
+depends_on = ["build-debug-cli"]

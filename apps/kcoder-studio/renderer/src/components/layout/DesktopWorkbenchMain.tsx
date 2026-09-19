@@ -1,0 +1,3050 @@
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { subscribeDesktopFileAction } from '@/kcoder/desktopFileActions'
+import { ArrowLeftRight, MessageCircle, MessageSquareWarning } from 'lucide-react'
+import type { ChatSubmitOptions, ProjectChatControls } from '@/components/chat/ChatInput'
+import type { ComposerCloudMentionCandidate } from '@/components/chat/composer/composerMentionCandidates'
+import type { AssistantPlanOpenRequest } from '@/components/chat/AssistantPlanCard'
+import { WorkspaceMarkdownImageLoaderContext } from '@/components/chat/workspaceMarkdownImageLoaderContext'
+import { readWorkspaceMarkdownImage } from '@/components/chat/workspaceMarkdownImage'
+import { RequestUserInputCard } from '@/components/chat/RequestUserInputCard'
+import { ScrollableMessageArea } from '@/components/chat/ScrollableMessageArea'
+import { SubagentArtifactDrawer } from '@/components/chat/SubagentArtifactDrawer'
+import { useExperimentalFeaturesEnabled } from '@/features/experimental-features/useExperimentalFeaturesEnabled'
+import { useWorkbench, useWorkbenchPaneContext } from '@/features/workbench/useWorkbench'
+import { DeliveryDialog } from '@/features/delivery/DeliveryDialog'
+import type { CloudLoopItem, CloudProject } from '@/api/deliveries'
+import { TodoBindingPicker } from '@/features/todo/TodoBindingPicker'
+import {
+  hydrateLocalWorkItems,
+  loadLocalWorkItems,
+  saveLocalWorkItems,
+  type LocalWorkItem,
+} from '@/features/todo/todoModel'
+import type { WorkspaceSessionApi } from '@/features/workbench/workbenchServices'
+import { useTranslation } from '@/hooks/useTranslation'
+import { listSettingsTemplates } from '@/kcoder/configTemplates'
+import { settingsTemplateBadgeState } from '@/kcoder/settingsTemplateBadge'
+import {
+  findWorkbenchDevice,
+  getActiveWorkbenchDeviceId,
+  getWorkbenchDeviceUnavailableDisplayName,
+  isWorkbenchDeviceOnline,
+} from '@/lib/workbench-device'
+import {
+  createLocalAttachmentWorkspaceTarget,
+  createLocalFileWorkspaceTarget,
+  resolveProjectRuntimeWorkspaceTargets,
+} from '@/lib/workspace-target'
+import { subagentArtifactKindFromPath } from '@/lib/subagent-artifact'
+import { normalizeAbsoluteWorkspacePath } from '@/lib/workspace-file-path'
+import {
+  KCODER_STUDIO_MIN_EXECUTOR_VERSION,
+  isDeviceBelowStudioVersion,
+  isGoalCapableWorkbenchDevice,
+  isStudioCompatibleDevice,
+  isCloudDevice,
+  isRemoteDevice,
+} from '@/lib/device-capabilities'
+import type { EnvironmentDiffMode } from '@/api/environment'
+import type {
+  WorkspaceFileOpenOptions,
+  WorkspaceFileOpenRequest,
+  WorkspaceTarget,
+} from '@/types/workspace-files'
+import { cn } from '@/lib/utils'
+import {
+  defaultAppearance,
+  getWorkbenchBackground,
+  useOptionalAppearance,
+} from '@/features/appearance'
+import { BottomWorkspacePanel } from './workspace-panels/BottomWorkspacePanel'
+import {
+  RightWorkspacePanel,
+  type RightWorkspaceChatTab,
+  type RightWorkspacePanelTab,
+  type RightWorkspacePanelView,
+} from './workspace-panels/RightWorkspacePanel'
+import { WorkspacePanelActions } from './workspace-panels/WorkspacePanelActions'
+import { useResizableRightSplitChat } from './workspace-panels/useResizableWorkspacePanel'
+import { ConversationDeviceOfflineBanner } from './ConversationDeviceOfflineBanner'
+
+import { DeviceStatusPrompt } from './DeviceStatusPrompt'
+import {
+  TITLEBAR_ACTIONS_PORTAL_ID,
+  TITLEBAR_RIGHT_PANEL_PORTAL_ID,
+  WORKBENCH_MAIN_HEADER_PORTAL_ID,
+  WorkbenchMainHeaderPortal,
+} from '@/components/topnav/TitlebarActionsPortal'
+import { DESKTOP_TOP_BAR_BUTTON_CLASS, DesktopTopBar } from './DesktopTopBar'
+import { DesktopWindowControls } from './DesktopWindowControls'
+import { DesktopAppSwitcher } from './DesktopAppSwitcher'
+import { MacOSTitleBarDragRegion } from './MacOSTitleBarDragRegion'
+import { isMacOSRuntime, isTauriRuntime } from '@/lib/runtime-environment'
+import { getLocalPathKind } from '@/lib/local-terminal'
+import { navigateTo } from '@/lib/navigation'
+import {
+  DEFAULT_EMBEDDED_BROWSER_LABEL,
+  listenEmbeddedBrowserOpenRequests,
+  markEmbeddedBrowserLabelTransferred,
+  relabelEmbeddedBrowser,
+  type EmbeddedBrowserOpenRequest,
+} from '@/lib/embedded-browser'
+import { TaskForkDialog } from './TaskForkDialog'
+import { ContinueInImDialog } from '@/components/chat/ContinueInImDialog'
+import { TransientNotice } from '@/components/common/TransientNotice'
+import {
+  isImplementationPlanConfirmationResponse,
+  isImplementationPlanRequestUserInput,
+  requestUserInputPayloadKey,
+} from '@/components/chat/requestUserInputMessages'
+import { pendingRequestUserInputPayload } from './requestUserInputOverlay'
+import {
+  getRuntimeWorkbenchPaneKeys,
+  getWorkbenchPaneKey,
+  type WorkbenchPaneIdentity,
+} from './workbenchPaneIdentity'
+import { CachedWorkbenchPaneStack, useWorkbenchPaneActive } from './workbenchPaneStack'
+import { useWorkbenchPaneSession } from './useWorkbenchPaneSession'
+import {
+  formatEnvironmentReviewErrorMessage,
+  type BottomPanelRenderContext,
+  type DesktopReviewMetadata,
+  type DesktopReviewState,
+} from './desktopWorkbenchPaneTypes'
+import {
+  findRuntimeTask,
+  truncateRuntimeTaskTitle,
+} from '@/features/workbench/workbenchRuntimeHelpers'
+import { useWorkbenchPaneEnvironment } from './useWorkbenchPaneEnvironment'
+import { useWorkbenchProjectWorkControls } from './useWorkbenchProjectWorkControls'
+import { useRuntimeTaskContinueInIm } from './useRuntimeTaskContinueInIm'
+import { requestOpenCloudDeviceSettings } from './workbenchShellEvents'
+import { SubagentStatusIndicator } from './SubagentStatusIndicator'
+import { KCODER_STUDIO_OPEN_TERMINAL_EVENT } from '@/lib/keybindings'
+import type { RuntimeAdditionalContext, RuntimeGoal, RuntimeTaskAddress } from '@/types/api'
+import type { WorkbenchMessage } from '@/types/workbench'
+import { BufferedChatInput } from './BufferedChatInput'
+import { DesktopEmptyTaskLauncher } from './DesktopEmptyTaskLauncher'
+import { TaskFeedbackDialog } from '@/features/feedback/TaskFeedbackDialog'
+
+const DESKTOP_CHAT_CONTENT_BASE_CLASS =
+  'mx-auto min-w-0 px-0 transition-[width,max-width] duration-[300ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none'
+const DESKTOP_CHAT_CONTENT_WIDTH_CLASS = `${DESKTOP_CHAT_CONTENT_BASE_CLASS} w-[min(46rem,calc(100%_-_2rem))] max-w-[calc(100%_-_2rem)]`
+const DESKTOP_MESSAGE_LIST_WIDTH_CLASS = `${DESKTOP_CHAT_CONTENT_BASE_CLASS} w-[min(46rem,calc(100%_-_6rem))] max-w-[calc(100%_-_6rem)]`
+const DESKTOP_MESSAGE_LIST_CLASS = `${DESKTOP_MESSAGE_LIST_WIDTH_CLASS} px-0`
+const DESKTOP_STICKY_COMPOSER_FOOTER_CLASS = 'pt-6 pb-2 bg-gradient-to-t to-transparent'
+const DESKTOP_STICKY_COMPOSER_LAYER_CLASS = `${DESKTOP_CHAT_CONTENT_WIDTH_CLASS} relative`
+const DESKTOP_STICKY_COMPOSER_BACKDROP_CLASS =
+  'pointer-events-none absolute inset-x-0 bottom-0 h-full bg-gradient-to-t to-transparent'
+const DESKTOP_SCROLL_TO_BOTTOM_BUTTON_CLASS = 'bottom-4 z-popover bg-background/95 shadow-md'
+const RIGHT_PANEL_WIDTH_TRANSITION_CLASS =
+  'transition-[width] duration-[240ms] ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none will-change-[width]'
+const RIGHT_PANEL_SHELL_TRANSITION_CLASS =
+  'transition-[width,opacity] duration-[240ms] ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none will-change-[width,opacity]'
+const RIGHT_PANEL_HANDLE_TRANSITION_CLASS =
+  'transition-[left] duration-[240ms] ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none will-change-[left]'
+const DOCKED_ENVIRONMENT_INFO_WIDTH = 320
+const MIN_CHAT_COLUMN_WIDTH_FOR_DOCKED_ENVIRONMENT_INFO = 680
+const COLLAPSED_RIGHT_TITLEBAR_ACTIONS_CLEARANCE = '5rem'
+const TEMPORARY_CHAT_PANEL_DEFAULT_WIDTH = 420
+const MACOS_TRAFFIC_LIGHTS_CLEARANCE_CLASS = 'pl-[92px]'
+const WINDOWS_HEADER_LEFT_PADDING_CLASS = 'pl-2'
+const BLANK_BROWSER_MIGRATION_TTL_MS = 2 * 60 * 1000
+
+function cloudLoopItemStatusLabel(
+  status: CloudLoopItem['status'],
+  t: ReturnType<typeof useTranslation>['t']
+): string {
+  switch (status) {
+    case 'inbox':
+      return t('workbench.cloud_todo_status_inbox', '收集箱')
+    case 'pending':
+      return t('workbench.cloud_todo_status_pending', '待处理')
+    case 'in_progress':
+      return t('workbench.cloud_todo_status_in_progress', '进行中')
+    case 'in_review':
+      return t('workbench.cloud_todo_status_in_review', '待评审')
+    case 'completed':
+      return t('workbench.cloud_todo_status_completed', '已完成')
+  }
+}
+
+function cloudItemAsLocalWorkItem(
+  item: CloudLoopItem,
+  runtimeTask: RuntimeTaskAddress
+): Omit<LocalWorkItem, 'projectId'> {
+  return {
+    id: item.id,
+    title: item.title,
+    objective: '',
+    description: item.description,
+    state:
+      item.status === 'completed'
+        ? 'completed'
+        : item.status === 'in_review'
+          ? 'review'
+          : item.status === 'in_progress'
+            ? 'started'
+            : 'backlog',
+    assignee: item.assignee_user_id
+      ? { type: 'human', id: String(item.assignee_user_id) }
+      : { type: 'unassigned' },
+    collaborators: [],
+    blocker: '',
+    nextAction: '',
+    priority: item.priority === 'medium' ? 'normal' : item.priority,
+    attachments: [],
+    runtimeRefs: [runtimeTask],
+    events: [],
+    sortOrder: item.sort_order,
+    createdAt: item.created_at,
+    updatedAt: item.updated_at,
+  }
+}
+
+interface PendingTodoBinding {
+  project: CloudProject
+  item: CloudLoopItem | null
+  target: RuntimeTaskAddress | null
+}
+
+let pendingTodoBinding: PendingTodoBinding | null = null
+
+function pendingTodoForTask(address: RuntimeTaskAddress | null) {
+  if (!pendingTodoBinding) return null
+  if (!address) return pendingTodoBinding.target ? null : pendingTodoBinding.item
+  const target = pendingTodoBinding.target
+  return target?.deviceId === address.deviceId && target.taskId === address.taskId
+    ? pendingTodoBinding.item
+    : null
+}
+
+function pendingProjectForTask(address: RuntimeTaskAddress | null) {
+  if (!pendingTodoBinding) return null
+  if (!address) return pendingTodoBinding.target ? null : pendingTodoBinding.project
+  const target = pendingTodoBinding.target
+  return target?.deviceId === address.deviceId && target.taskId === address.taskId
+    ? pendingTodoBinding.project
+    : null
+}
+
+const MAX_CACHED_DESKTOP_WORKBENCH_PANES = 1
+interface SelectedAssistantPlan {
+  blockId: string
+  subtaskId: string
+  fallbackContent: string
+}
+
+interface WorkbenchPaneWorkspaceState {
+  rightPanelOpen: boolean
+  rightPanelView: RightWorkspacePanelView
+  rightPanelTabs: RightWorkspacePanelTab[]
+  browserUrl: string | null
+}
+
+const PANE_WORKSPACE_STORAGE_PREFIX = 'wework.desktop.pane-workspace.v1:'
+const PERSISTED_RIGHT_PANEL_TABS = new Set<RightWorkspacePanelTab>(['terminal', 'browser', 'files'])
+
+function persistedPaneWorkspaceStorageKey(paneKey: string): string {
+  // standaloneChatKey increments only within the current process; regular workspaces use stable keys for full-page refresh recovery.
+  const persistedPaneKey = paneKey.startsWith('blank:') ? 'blank' : paneKey
+  return `${PANE_WORKSPACE_STORAGE_PREFIX}${persistedPaneKey}`
+}
+
+function readPersistedPaneWorkspaceState(paneKey: string): WorkbenchPaneWorkspaceState | undefined {
+  try {
+    const value = JSON.parse(
+      window.localStorage.getItem(persistedPaneWorkspaceStorageKey(paneKey)) ??
+        window.localStorage.getItem(`${PANE_WORKSPACE_STORAGE_PREFIX}${paneKey}`) ??
+        ''
+    ) as Partial<WorkbenchPaneWorkspaceState>
+    const rightPanelTabs = Array.isArray(value.rightPanelTabs)
+      ? value.rightPanelTabs.filter(
+          (tab): tab is RightWorkspacePanelTab =>
+            typeof tab === 'string' && PERSISTED_RIGHT_PANEL_TABS.has(tab as RightWorkspacePanelTab)
+        )
+      : []
+    const rightPanelView = PERSISTED_RIGHT_PANEL_TABS.has(
+      value.rightPanelView as RightWorkspacePanelTab
+    )
+      ? (value.rightPanelView as RightWorkspacePanelTab)
+      : 'launcher'
+    const browserUrl = (() => {
+      if (typeof value.browserUrl !== 'string' || value.browserUrl.length > 4096) return null
+      const parsed = new URL(value.browserUrl)
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.toString() : null
+    })()
+    return {
+      rightPanelOpen: value.rightPanelOpen === true && rightPanelTabs.length > 0,
+      rightPanelView:
+        rightPanelView !== 'launcher' && rightPanelTabs.includes(rightPanelView)
+          ? rightPanelView
+          : 'launcher',
+      rightPanelTabs: [...new Set(rightPanelTabs)],
+      browserUrl,
+    }
+  } catch {
+    return undefined
+  }
+}
+
+function writePersistedPaneWorkspaceState(paneKey: string, state: WorkbenchPaneWorkspaceState) {
+  const rightPanelTabs = state.rightPanelTabs.filter(tab => PERSISTED_RIGHT_PANEL_TABS.has(tab))
+  const rightPanelView = rightPanelTabs.includes(state.rightPanelView as RightWorkspacePanelTab)
+    ? state.rightPanelView
+    : 'launcher'
+  if (rightPanelTabs.length === 0) {
+    window.localStorage.removeItem(persistedPaneWorkspaceStorageKey(paneKey))
+    window.localStorage.removeItem(`${PANE_WORKSPACE_STORAGE_PREFIX}${paneKey}`)
+    return
+  }
+  window.localStorage.setItem(
+    persistedPaneWorkspaceStorageKey(paneKey),
+    JSON.stringify({
+      rightPanelOpen: state.rightPanelOpen,
+      rightPanelView,
+      rightPanelTabs,
+      browserUrl: rightPanelTabs.includes('browser') ? state.browserUrl : null,
+    } satisfies WorkbenchPaneWorkspaceState)
+  )
+  if (paneKey.startsWith('blank:')) {
+    window.localStorage.removeItem(`${PANE_WORKSPACE_STORAGE_PREFIX}${paneKey}`)
+  }
+}
+
+interface PendingBlankBrowserMigration {
+  sourcePaneKey: string
+  browserLabel: string
+  rightPanelOpen: boolean
+  rightPanelView: RightWorkspacePanelView
+  rightPanelTabs: RightWorkspacePanelTab[]
+  createdAt: number
+}
+
+let latestBlankBrowserMigration: PendingBlankBrowserMigration | null = null
+
+function findSelectedAssistantPlanContent(
+  messages: WorkbenchMessage[],
+  selectedPlan: SelectedAssistantPlan | null
+): string | null {
+  if (!selectedPlan) return null
+
+  for (const message of messages) {
+    const planBlock = message.blocks?.find(
+      block =>
+        block.type === 'plan' &&
+        block.id === selectedPlan.blockId &&
+        String(block.subtaskId) === selectedPlan.subtaskId
+    )
+    if (planBlock?.type === 'plan') return planBlock.content
+  }
+
+  return null
+}
+
+function consumeLatestBlankBrowserMigration(): PendingBlankBrowserMigration | null {
+  if (!latestBlankBrowserMigration) return null
+  if (Date.now() - latestBlankBrowserMigration.createdAt > BLANK_BROWSER_MIGRATION_TTL_MS) {
+    latestBlankBrowserMigration = null
+    return null
+  }
+
+  const migration = latestBlankBrowserMigration
+  latestBlankBrowserMigration = null
+  markEmbeddedBrowserLabelTransferred(migration.browserLabel)
+  return migration
+}
+
+function createBottomPanelWorkspaceKey({
+  currentRuntimeTask,
+  workspaceProjectId,
+  workspaceTarget,
+  executionMode,
+  preferLocalTerminal,
+}: {
+  currentRuntimeTask: RuntimeTaskAddress | null
+  workspaceProjectId?: number
+  workspaceTarget: WorkspaceTarget | null
+  executionMode: string
+  preferLocalTerminal: boolean
+}): string {
+  if (currentRuntimeTask) {
+    return ['runtime', currentRuntimeTask.deviceId, currentRuntimeTask.taskId].join(':')
+  }
+
+  return [
+    'workspace',
+    workspaceProjectId ?? 'projectless',
+    workspaceTarget?.deviceId ?? '',
+    workspaceTarget?.path ?? '',
+    preferLocalTerminal ? 'local' : executionMode,
+  ].join(':')
+}
+
+interface DesktopWorkbenchMainProps {
+  activePane: WorkbenchPaneIdentity
+  visible?: boolean
+  sidebarCollapsed: boolean
+  sidebarResizing?: boolean
+  onSidebarCollapsedChange: (collapsed: boolean) => void
+}
+
+type TaskSummaryVisibility = { pinned: boolean; overlay: boolean }
+
+const MemoizedBottomWorkspacePanel = memo(function MemoizedBottomWorkspacePanel({
+  panelKey,
+  open,
+  active,
+  context,
+  workspaceSessionApi,
+  showWorkbenchBackground,
+  onRequestClose,
+  onTerminalTabsEmpty,
+}: {
+  panelKey: string
+  open: boolean
+  active: boolean
+  context: BottomPanelRenderContext
+  workspaceSessionApi?: WorkspaceSessionApi
+  showWorkbenchBackground: boolean
+  onRequestClose: (key: string) => void
+  onTerminalTabsEmpty: () => void
+}) {
+  const closePanel = useCallback(() => onRequestClose(panelKey), [onRequestClose, panelKey])
+
+  return (
+    <BottomWorkspacePanel
+      persistenceKey={panelKey}
+      open={open}
+      active={active}
+      preserveContent
+      testIdsEnabled={active}
+      currentProject={context.currentProject}
+      devices={context.devices}
+      workspaceTarget={context.workspaceTarget}
+      preferLocalTerminal={context.preferLocalTerminal}
+      terminalContextTitle={context.terminalContextTitle}
+      workspaceSessionApi={workspaceSessionApi}
+      showWorkbenchBackground={showWorkbenchBackground}
+      onRequestClose={closePanel}
+      onTerminalTabsEmpty={onTerminalTabsEmpty}
+    />
+  )
+})
+
+export function DesktopWorkbenchMain(props: DesktopWorkbenchMainProps) {
+  const { state } = useWorkbenchPaneContext()
+  const { services } = useWorkbench()
+  const appearanceContext = useOptionalAppearance()
+  const appearance = appearanceContext?.appearance ?? defaultAppearance
+  const background = getWorkbenchBackground(appearance, appearanceContext?.resolvedMode ?? 'light')
+  const isTauri = isTauriRuntime()
+  const [summaryVisibilityByPane, setSummaryVisibilityByPane] = useState<
+    Record<string, TaskSummaryVisibility>
+  >({})
+  const changeSummaryVisibility = useCallback(
+    (paneKey: string, mode: keyof TaskSummaryVisibility, open: boolean) => {
+      setSummaryVisibilityByPane(current => {
+        const previous = current[paneKey] ?? { pinned: false, overlay: false }
+        if (previous[mode] === open) return current
+        return { ...current, [paneKey]: { ...previous, [mode]: open } }
+      })
+    },
+    []
+  )
+  const [terminalPinOwnersByPane, setTerminalPinOwnersByPane] = useState<Record<string, string[]>>(
+    {}
+  )
+  const paneWorkspaceStateRef = useRef(new Map<string, WorkbenchPaneWorkspaceState>())
+  const terminalPinnedPaneKeys = useMemo(
+    () =>
+      Object.keys(terminalPinOwnersByPane).filter(key => terminalPinOwnersByPane[key].length > 0),
+    [terminalPinOwnersByPane]
+  )
+  const runtimePaneKeys = useMemo(
+    () => getRuntimeWorkbenchPaneKeys(state.runtimeWork),
+    [state.runtimeWork]
+  )
+  const runtimePaneKeySet = useMemo(() => new Set(runtimePaneKeys), [runtimePaneKeys])
+  const prunedPaneKeys = useMemo(
+    () =>
+      terminalPinnedPaneKeys.filter(
+        key => key.startsWith('runtime:') && !runtimePaneKeySet.has(key)
+      ),
+    [runtimePaneKeySet, terminalPinnedPaneKeys]
+  )
+  const setTerminalPanePinned = useCallback((paneKey: string, owner: string, pinned: boolean) => {
+    setTerminalPinOwnersByPane(current => {
+      const owners = current[paneKey] ?? []
+      const nextOwners = pinned
+        ? owners.includes(owner)
+          ? owners
+          : [...owners, owner]
+        : owners.filter(candidate => candidate !== owner)
+      if (nextOwners === owners) return current
+      if (nextOwners.length === 0) {
+        const next = { ...current }
+        delete next[paneKey]
+        return next
+      }
+      return { ...current, [paneKey]: nextOwners }
+    })
+  }, [])
+  const rememberPaneWorkspaceState = useCallback(
+    (paneKey: string, workspaceState: WorkbenchPaneWorkspaceState) => {
+      paneWorkspaceStateRef.current.set(paneKey, workspaceState)
+      writePersistedPaneWorkspaceState(paneKey, workspaceState)
+    },
+    []
+  )
+  useEffect(() => {
+    paneWorkspaceStateRef.current.forEach((_, key) => {
+      if (key.startsWith('runtime:') && !runtimePaneKeySet.has(key)) {
+        paneWorkspaceStateRef.current.delete(key)
+      }
+    })
+  }, [runtimePaneKeySet])
+  const paneStack = (
+    <CachedWorkbenchPaneStack
+      activePane={props.activePane}
+      maxPanes={MAX_CACHED_DESKTOP_WORKBENCH_PANES}
+      pinnedKeys={terminalPinnedPaneKeys}
+      prunedKeys={prunedPaneKeys}
+      validRuntimeKeys={runtimePaneKeys}
+      activeTestId="desktop-workbench-main"
+      renderPane={pane => (
+        <DesktopWorkbenchPane
+          pane={pane}
+          workbenchVisible={props.visible ?? true}
+          sidebarCollapsed={props.sidebarCollapsed}
+          sidebarResizing={props.sidebarResizing ?? false}
+          workspaceSessionApi={services?.workspaceSessionApi}
+          summaryVisibility={summaryVisibilityByPane[getWorkbenchPaneKey(pane)]}
+          onSummaryVisibilityChange={changeSummaryVisibility}
+          onSidebarCollapsedChange={props.onSidebarCollapsedChange}
+          onTerminalPanePinChange={setTerminalPanePinned}
+          initialWorkspaceState={
+            paneWorkspaceStateRef.current.get(getWorkbenchPaneKey(pane)) ??
+            readPersistedPaneWorkspaceState(getWorkbenchPaneKey(pane))
+          }
+          onWorkspaceStateChange={rememberPaneWorkspaceState}
+        />
+      )}
+    />
+  )
+
+  if (!isTauri) return paneStack
+
+  return (
+    <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
+      <header
+        id={WORKBENCH_MAIN_HEADER_PORTAL_ID}
+        data-testid="workbench-main-header"
+        className={cn(
+          'relative z-chrome flex h-[38px] shrink-0 items-center overflow-hidden border-b border-border/40',
+          background.imagePath && background.inTopBar ? 'bg-background/20' : 'bg-background/95'
+        )}
+      />
+      {paneStack}
+    </div>
+  )
+}
+
+const DesktopWorkbenchPane = memo(function DesktopWorkbenchPane({
+  pane,
+  workbenchVisible,
+  sidebarCollapsed,
+  sidebarResizing = false,
+  workspaceSessionApi,
+  summaryVisibility,
+  onSummaryVisibilityChange,
+  onSidebarCollapsedChange,
+  onTerminalPanePinChange,
+  initialWorkspaceState,
+  onWorkspaceStateChange,
+}: {
+  pane: WorkbenchPaneIdentity
+  workbenchVisible: boolean
+  sidebarCollapsed: boolean
+  sidebarResizing?: boolean
+  workspaceSessionApi?: WorkspaceSessionApi
+  summaryVisibility?: TaskSummaryVisibility
+  onSummaryVisibilityChange: (
+    paneKey: string,
+    mode: keyof TaskSummaryVisibility,
+    open: boolean
+  ) => void
+  onSidebarCollapsedChange: (collapsed: boolean) => void
+  onTerminalPanePinChange: (paneKey: string, owner: string, pinned: boolean) => void
+  initialWorkspaceState?: WorkbenchPaneWorkspaceState
+  onWorkspaceStateChange: (paneKey: string, state: WorkbenchPaneWorkspaceState) => void
+}) {
+  const paneActive = useWorkbenchPaneActive()
+  const experimentalFeaturesEnabled = useExperimentalFeaturesEnabled()
+  const appearanceContext = useOptionalAppearance()
+  const appearance = appearanceContext?.appearance ?? defaultAppearance
+  const background = getWorkbenchBackground(appearance, appearanceContext?.resolvedMode ?? 'light')
+  const {
+    state,
+    workspaceFileApi,
+    upgradingDevices,
+    projectChat,
+    upgradeDevice,
+    loadTurnFileChangesDiff,
+    revertTurnFileChanges,
+    forkCurrentRuntimeTask,
+    prepareDeviceWorkspace,
+    deleteDeviceWorkspace,
+    getDeviceHomeDirectory,
+    getProjectWorkspaceRoot,
+    listDeviceDirectories,
+    createDeviceDirectory,
+    startNewChat,
+  } = useWorkbenchPaneContext()
+  const { services } = useWorkbench()
+  const { t } = useTranslation('common')
+  const { t: tChat } = useTranslation('chat')
+  const currentRuntimeTask = pane.currentRuntimeTask
+  const currentProject = pane.currentProject
+  const paneKey = getWorkbenchPaneKey(pane)
+  const [turnNavigationPortalTarget, setTurnNavigationPortalTarget] =
+    useState<HTMLDivElement | null>(null)
+  const [initialBlankBrowserMigration] = useState<PendingBlankBrowserMigration | null>(() =>
+    currentRuntimeTask ? consumeLatestBlankBrowserMigration() : null
+  )
+  const [environmentInfoTransitionEnabled, setEnvironmentInfoTransitionEnabled] = useState(false)
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setEnvironmentInfoTransitionEnabled(true))
+    return () => cancelAnimationFrame(frame)
+  }, [])
+  const paneSession = useWorkbenchPaneSession({ currentRuntimeTask })
+  const sendPaneInput = paneSession.send
+  const [subagentArtifact, setSubagentArtifact] = useState<{
+    title: string
+    content: string
+    truncated: boolean
+  } | null>(null)
+  const [deliveryItem, setDeliveryItem] = useState<Omit<LocalWorkItem, 'projectId'> | null>(null)
+  const [boundCloudProject, setBoundCloudProject] = useState<CloudProject | null>(null)
+  const [boundCloudItem, setBoundCloudItem] = useState<CloudLoopItem | null>(null)
+  const [deliveryDialogOpen, setDeliveryDialogOpen] = useState(false)
+  const [todoBindingPickerOpen, setTodoBindingPickerOpen] = useState(false)
+  const [deliverAfterBinding, setDeliverAfterBinding] = useState(false)
+  const [pendingTodoItem, setPendingTodoItemState] = useState<CloudLoopItem | null>(() =>
+    pendingTodoForTask(currentRuntimeTask)
+  )
+  const [pendingCloudProject, setPendingCloudProject] = useState<CloudProject | null>(() =>
+    pendingProjectForTask(currentRuntimeTask)
+  )
+  const [todoBindingError, setTodoBindingError] = useState<string | null>(null)
+  const [cloudProjects, setCloudProjects] = useState<CloudProject[]>([])
+  const [cloudActionNotice, setCloudActionNotice] = useState<string | null>(null)
+  const [cloudMentionState, setCloudMentionState] = useState<{
+    todoId: string
+    candidates: ComposerCloudMentionCandidate[]
+  } | null>(null)
+  const runtimeWork = state.runtimeWork
+  const runtimeTaskTitle = truncateRuntimeTaskTitle(
+    findRuntimeTask(runtimeWork, currentRuntimeTask)?.title
+  )
+  const composerCloudProject = currentRuntimeTask ? boundCloudProject : pendingCloudProject
+  const composerTodoItem = currentRuntimeTask ? boundCloudItem : pendingTodoItem
+  const cloudAdditionalContext = useMemo<RuntimeAdditionalContext | undefined>(() => {
+    if (!composerCloudProject) return undefined
+    const projectReference = `cloud://projects/${composerCloudProject.id}`
+    const todoReference = composerTodoItem
+      ? `${projectReference}/todos/${composerTodoItem.id}`
+      : null
+    const scope = composerTodoItem
+      ? [
+          `Current cloud project: ${composerCloudProject.name} (id=${composerCloudProject.id}).`,
+          `Current task: ${composerTodoItem.id} — ${composerTodoItem.title}.`,
+          composerTodoItem.description ? `Task description: ${composerTodoItem.description}` : null,
+          `Current task reference: ${todoReference}.`,
+        ]
+      : [
+          `Current cloud project: ${composerCloudProject.name} (id=${composerCloudProject.id}).`,
+          'No specific task is selected.',
+          `Current project reference: ${projectReference}.`,
+        ]
+    return {
+      cloudCollaboration: {
+        kind: 'application',
+        value: [
+          ...scope.filter((line): line is string => Boolean(line)),
+          'When the user refers to “this project” or “this task”, use this current cloud context.',
+          'Use the wegent_delivery MCP tools to inspect task details, shared files, and deliveries when needed. Do not ask for an id that is already provided here.',
+        ].join('\n'),
+      },
+    }
+  }, [composerCloudProject, composerTodoItem])
+  const setPendingCloudContext = useCallback(
+    (project: CloudProject | null, item: CloudLoopItem | null) => {
+      pendingTodoBinding = project ? { project, item, target: null } : null
+      setPendingCloudProject(project)
+      setPendingTodoItemState(item)
+    },
+    []
+  )
+
+  const submitPaneInput = useCallback(
+    (value?: string, options?: ChatSubmitOptions) =>
+      sendPaneInput(value, {
+        ...options,
+        additionalContext: cloudAdditionalContext,
+        onRuntimeTaskCreated: address => {
+          if (!pendingTodoBinding) return
+          pendingTodoBinding = { ...pendingTodoBinding, target: address }
+        },
+      }),
+    [cloudAdditionalContext, sendPaneInput]
+  )
+
+  useEffect(() => {
+    let active = true
+    if (!currentRuntimeTask) {
+      queueMicrotask(() => {
+        if (!active) return
+        setBoundCloudItem(null)
+        setBoundCloudProject(null)
+        setDeliveryItem(null)
+      })
+      return () => {
+        active = false
+      }
+    }
+    if (services?.deliveryApi) {
+      void services.deliveryApi
+        .findCloudContextForTask(currentRuntimeTask)
+        .then(context => {
+          if (!active) return
+          setBoundCloudProject(context.project)
+          setBoundCloudItem(context.loop_item)
+          setDeliveryItem(
+            context.loop_item
+              ? cloudItemAsLocalWorkItem(context.loop_item, currentRuntimeTask)
+              : null
+          )
+        })
+        .catch(() => {
+          if (active) {
+            setBoundCloudItem(null)
+            setBoundCloudProject(null)
+            setDeliveryItem(null)
+          }
+        })
+      return () => {
+        active = false
+      }
+    }
+    void hydrateLocalWorkItems(state.user?.id).then(items => {
+      if (!active) return
+      setBoundCloudItem(null)
+      setDeliveryItem(
+        items.find(item =>
+          item.runtimeRefs.some(
+            reference =>
+              reference.taskId === currentRuntimeTask.taskId &&
+              reference.deviceId === currentRuntimeTask.deviceId
+          )
+        ) ?? null
+      )
+    })
+    return () => {
+      active = false
+    }
+  }, [currentRuntimeTask, services?.deliveryApi, state.user?.id])
+
+  useEffect(() => {
+    if (!currentRuntimeTask || !pendingCloudProject || !services?.deliveryApi) return
+    let active = true
+    const bindingRequest = pendingTodoItem
+      ? services.deliveryApi.bindTask(pendingTodoItem.id, currentRuntimeTask, runtimeTaskTitle)
+      : services.deliveryApi.bindProjectTask(
+          pendingCloudProject.id,
+          currentRuntimeTask,
+          runtimeTaskTitle
+        )
+    void bindingRequest
+      .then(() => {
+        if (!active) return
+        setBoundCloudProject(pendingCloudProject)
+        setBoundCloudItem(pendingTodoItem)
+        setDeliveryItem(
+          pendingTodoItem ? cloudItemAsLocalWorkItem(pendingTodoItem, currentRuntimeTask) : null
+        )
+        pendingTodoBinding = null
+        setPendingCloudContext(null, null)
+      })
+      .catch(cause => {
+        if (!active) return
+        setTodoBindingError(cause instanceof Error ? cause.message : '关联项目空间失败')
+      })
+    return () => {
+      active = false
+    }
+  }, [
+    currentRuntimeTask,
+    pendingCloudProject,
+    pendingTodoItem,
+    runtimeTaskTitle,
+    services?.deliveryApi,
+    setPendingCloudContext,
+  ])
+
+  useEffect(() => {
+    let active = true
+    const api = services?.deliveryApi
+    if (!api || !composerCloudProject) {
+      return () => {
+        active = false
+      }
+    }
+    const projectId = composerCloudProject.id
+    void Promise.all([
+      api.listCloudFiles(projectId),
+      api.listLoopItems(projectId),
+      composerTodoItem ? api.listDeliveries(composerTodoItem.id) : Promise.resolve({ items: [] }),
+    ])
+      .then(([files, items, deliveries]) => {
+        if (!active) return
+        const candidate = (
+          key: string,
+          title: string,
+          description: string,
+          reference: string,
+          aliases: string[],
+          statusLabel?: string
+        ): ComposerCloudMentionCandidate => ({
+          kind: 'cloud',
+          key,
+          title,
+          description,
+          metaLabel: t('workbench.mention_cloud_space', '云空间'),
+          testId: key.replace(/[^a-zA-Z0-9_-]/g, '-'),
+          enabled: true,
+          reference,
+          searchAliases: aliases,
+          statusLabel,
+        })
+        setCloudMentionState({
+          todoId: composerTodoItem?.id ?? `project:${projectId}`,
+          candidates: [
+            candidate(
+              `cloud-project:${projectId}`,
+              t('workbench.mention_cloud_whole_space', '整个空间'),
+              t('workbench.mention_cloud_whole_space_description', '共享文件 + 看板全部内容'),
+              `[$${t('workbench.mention_cloud_whole_space', '整个空间')}](cloud://projects/${projectId})`,
+              ['云项目', 'cloud', 'workspace']
+            ),
+            ...items.items.map(item =>
+              candidate(
+                `cloud-todo:${item.id}`,
+                item.id,
+                item.title,
+                `[$${t('workbench.mention_cloud_todo_chip', '任务')}:${item.id}](cloud://projects/${projectId}/todos/${item.id})`,
+                [item.title, item.status, 'TODO', '任务'],
+                cloudLoopItemStatusLabel(item.status, t)
+              )
+            ),
+            ...files.items.map(file =>
+              candidate(
+                `cloud-file:${file.id}`,
+                file.name,
+                file.path,
+                `[$${file.name}](cloud://projects/${projectId}/files/${file.id})`,
+                [file.path, file.kind, '文件', '目录']
+              )
+            ),
+            ...deliveries.items.map(delivery =>
+              candidate(
+                `cloud-delivery:${delivery.id}`,
+                `交付 ${delivery.id.slice(0, 8)}`,
+                delivery.delivered_at ?? delivery.created_at,
+                `[$交付 ${delivery.id.slice(0, 8)}](cloud://projects/${projectId}/deliveries/${delivery.id})`,
+                ['交付', 'delivery', delivery.id]
+              )
+            ),
+          ],
+        })
+      })
+      .catch(() => {
+        if (active) setCloudMentionState(null)
+      })
+    return () => {
+      active = false
+    }
+  }, [composerCloudProject, composerTodoItem, services?.deliveryApi, t])
+  const visibleCloudMentionCandidates =
+    composerCloudProject &&
+    cloudMentionState?.todoId === (composerTodoItem?.id ?? `project:${composerCloudProject.id}`)
+      ? cloudMentionState.candidates
+      : []
+
+  // Accessible cloud projects power the localized project-space entry even when the current
+  // session is not bound to a cloud project yet.
+  useEffect(() => {
+    let active = true
+    const api = services?.deliveryApi
+    if (!api) {
+      queueMicrotask(() => {
+        if (active) setCloudProjects([])
+      })
+      return () => {
+        active = false
+      }
+    }
+    void api
+      .listCloudProjects()
+      .then(result => {
+        if (active) setCloudProjects(result.items)
+      })
+      .catch(() => {
+        if (active) setCloudProjects([])
+      })
+    return () => {
+      active = false
+    }
+  }, [services?.deliveryApi])
+  const cloudProjectMentionCandidates = useMemo<ComposerCloudMentionCandidate[]>(
+    () =>
+      cloudProjects.map(project => {
+        const spaceLabel = t('workbench.mention_cloud_project_space', '项目空间')
+        return {
+          kind: 'cloud',
+          key: `cloud-project-space:${project.id}`,
+          title: project.name,
+          description: project.description || project.project_key || undefined,
+          metaLabel: t('workbench.mention_cloud_space', '云空间'),
+          testId: `cloud-project-space-${String(project.id).replace(/[^a-zA-Z0-9_-]/g, '-')}`,
+          enabled: true,
+          reference: `[$${spaceLabel}:${project.name}](cloud://projects/${project.id})`,
+          searchAliases: [
+            project.name,
+            project.project_key,
+            project.description,
+            spaceLabel,
+            'project space',
+            'project-space',
+            'cloud',
+          ].filter(alias => Boolean(alias)),
+          project,
+        }
+      }),
+    [cloudProjects, t]
+  )
+  const bindComposerCloudProject = useCallback(
+    (project: CloudProject, notice: string) => {
+      setCloudActionNotice(notice)
+      if (!currentRuntimeTask) {
+        setPendingCloudContext(project, null)
+        return
+      }
+      const api = services?.deliveryApi
+      if (!api) return
+      void api
+        .bindProjectTask(project.id, currentRuntimeTask, runtimeTaskTitle)
+        .then(() => {
+          setBoundCloudProject(project)
+          setBoundCloudItem(null)
+          setDeliveryItem(null)
+        })
+        .catch(cause => {
+          setTodoBindingError(
+            cause instanceof Error
+              ? cause.message
+              : t('workbench.cloud_project_bind_failed', '关联项目空间失败')
+          )
+        })
+    },
+    [currentRuntimeTask, runtimeTaskTitle, services?.deliveryApi, setPendingCloudContext, t]
+  )
+  const handleSelectCloudProject = useCallback(
+    (project: CloudProject) => {
+      bindComposerCloudProject(
+        project,
+        t('workbench.cloud_project_bound_notice', { name: project.name })
+      )
+    },
+    [bindComposerCloudProject, t]
+  )
+
+  const activeDeliveryItem =
+    currentRuntimeTask &&
+    deliveryItem?.runtimeRefs.some(
+      reference =>
+        reference.taskId === currentRuntimeTask.taskId &&
+        reference.deviceId === currentRuntimeTask.deviceId
+    )
+      ? deliveryItem
+      : null
+
+  const finishLocalDelivery = useCallback(async () => {
+    if (!activeDeliveryItem) return
+    const items = await loadLocalWorkItems(state.user?.id)
+    const now = new Date().toISOString()
+    await saveLocalWorkItems(
+      state.user?.id,
+      items.map(item =>
+        item.id === activeDeliveryItem.id
+          ? {
+              ...item,
+              state: 'completed',
+              updatedAt: now,
+              events: [
+                ...item.events,
+                {
+                  id: `delivery-${now}`,
+                  type: 'confirmed' as const,
+                  summary: t('delivery.completed_activity', '任务已交付并完成'),
+                  createdAt: now,
+                },
+              ],
+            }
+          : item
+      )
+    )
+    setDeliveryDialogOpen(false)
+    navigateTo('/todo')
+  }, [activeDeliveryItem, setDeliveryDialogOpen, state.user?.id, t])
+  const projectWork = useWorkbenchProjectWorkControls({
+    pane,
+    enableShellProjectActions: true,
+  })
+  const paneEnvironment = useWorkbenchPaneEnvironment({
+    pane,
+    projectWork,
+    environmentRefreshActive: Boolean(currentRuntimeTask && paneSession.status.isBusy),
+  })
+  const {
+    workspaceProject,
+    workspaceTarget,
+    workspaceTargetError,
+    environmentInfo,
+    projectWork: paneProjectWork,
+    refreshEnvironmentInfo,
+    commitEnvironmentChanges,
+    commitAndPushEnvironmentChanges,
+    pushEnvironmentChanges,
+    loadEnvironmentDiff,
+    listEnvironmentBranches,
+    checkoutEnvironmentBranch,
+    createEnvironmentBranch,
+  } = paneEnvironment
+  const isBootstrapping = state.isBootstrapping
+  const devices = state.devices
+  const runtimeTaskWorkspacePath = useMemo(() => {
+    if (!runtimeWork || !currentRuntimeTask) return null
+    const workspaces = [
+      ...runtimeWork.chats,
+      ...runtimeWork.projects.flatMap(project => project.deviceWorkspaces),
+    ]
+    const matches = workspaces.filter(workspace =>
+      workspace.tasks.some(task => task.taskId === currentRuntimeTask.taskId)
+    )
+    return (
+      matches.find(workspace => workspace.deviceId === currentRuntimeTask.deviceId)
+        ?.workspacePath ?? (matches.length === 1 ? matches[0].workspacePath : null)
+    )
+  }, [currentRuntimeTask, runtimeWork])
+  const runtimeTaskDeviceId = currentRuntimeTask?.deviceId ?? null
+  const runtimeTaskDirectWorkspacePath = currentRuntimeTask?.workspacePath ?? null
+  const readWorkspaceFileChunk = workspaceFileApi?.readWorkspaceFileChunk
+  const readWorkspaceFileChunkRef = useRef(readWorkspaceFileChunk)
+  useLayoutEffect(() => {
+    readWorkspaceFileChunkRef.current = readWorkspaceFileChunk
+  }, [readWorkspaceFileChunk])
+  const loadWorkspaceMarkdownImage = useCallback(
+    async (path: string): Promise<Blob> => {
+      const readChunk = readWorkspaceFileChunkRef.current
+      if (!runtimeTaskDeviceId || !readChunk) {
+        throw new Error('Workspace image loading is unavailable')
+      }
+      const workspacePath = runtimeTaskDirectWorkspacePath || runtimeTaskWorkspacePath
+      if (!workspacePath) throw new Error('Workspace image path is unavailable')
+      const absolutePath = /^(?:\/|[a-zA-Z]:[\\/])/.test(path)
+        ? path
+        : `${workspacePath.replace(/[\\/]+$/, '')}/${path.replace(/^\.\//, '')}`
+      return readWorkspaceMarkdownImage(readChunk, runtimeTaskDeviceId, absolutePath)
+    },
+    [runtimeTaskDeviceId, runtimeTaskDirectWorkspacePath, runtimeTaskWorkspacePath]
+  )
+  const [rightPanelOpen, setRightPanelOpen] = useState(
+    () =>
+      initialBlankBrowserMigration?.rightPanelOpen ?? initialWorkspaceState?.rightPanelOpen ?? false
+  )
+  const [rightPanelView, setRightPanelView] = useState<RightWorkspacePanelView>(
+    () =>
+      initialBlankBrowserMigration?.rightPanelView ??
+      initialWorkspaceState?.rightPanelView ??
+      'launcher'
+  )
+  const [rightPanelTabs, setRightPanelTabs] = useState<RightWorkspacePanelTab[]>(
+    () =>
+      initialBlankBrowserMigration?.rightPanelTabs ?? initialWorkspaceState?.rightPanelTabs ?? []
+  )
+  const [embeddedBrowserUrl, setEmbeddedBrowserUrl] = useState<string | null>(
+    () => initialWorkspaceState?.browserUrl ?? null
+  )
+  useEffect(() => {
+    onWorkspaceStateChange(paneKey, {
+      rightPanelOpen,
+      rightPanelTabs,
+      rightPanelView,
+      browserUrl: embeddedBrowserUrl,
+    })
+  }, [
+    embeddedBrowserUrl,
+    onWorkspaceStateChange,
+    paneKey,
+    rightPanelOpen,
+    rightPanelTabs,
+    rightPanelView,
+  ])
+  const [migratedEmbeddedBrowserLabel, setMigratedEmbeddedBrowserLabel] = useState<string | null>(
+    () => initialBlankBrowserMigration?.browserLabel ?? null
+  )
+  const temporaryChatTabSequence = useRef(0)
+  const [embeddedBrowserOpenRequest, setEmbeddedBrowserOpenRequest] = useState<
+    (EmbeddedBrowserOpenRequest & { id: number }) | null
+  >(() =>
+    initialWorkspaceState?.browserUrl
+      ? { id: 1, url: initialWorkspaceState.browserUrl, label: '' }
+      : null
+  )
+  const [conversationSelectionInsertion, setConversationSelectionInsertion] = useState<{
+    id: number
+    text: string
+  } | null>(null)
+  const temporaryChatInitialInputsRef = useRef(new Map<RightWorkspaceChatTab, string>())
+  const [selectedAssistantPlan, setSelectedAssistantPlan] = useState<SelectedAssistantPlan | null>(
+    null
+  )
+  const [bottomPanelOpenByKey, setBottomPanelOpenByKey] = useState<Record<string, boolean>>({})
+  const [bottomPanelContexts, setBottomPanelContexts] = useState<BottomPanelRenderContext[]>([])
+  const [openFileRequest, setOpenFileRequest] = useState<WorkspaceFileOpenRequest | null>(null)
+  const [selectedFileWorkspaceTargetKey, setSelectedFileWorkspaceTargetKey] = useState<
+    string | null
+  >(null)
+  const [forkDialogOpen, setForkDialogOpen] = useState(false)
+  const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false)
+  const [hasPreviousTurnReview, setHasPreviousTurnReview] = useState(false)
+  const isTauri = isTauriRuntime()
+  const workbenchMainRef = useRef<HTMLElement | null>(null)
+  const workbenchScrollRef = useRef<HTMLDivElement | null>(null)
+  const [workbenchContentWidth, setWorkbenchContentWidth] = useState(0)
+  const environmentInfoPanelRef = useRef<HTMLElement | null>(null)
+  const [environmentInfoPanelElement, setEnvironmentInfoPanelElement] =
+    useState<HTMLElement | null>(null)
+  const setEnvironmentInfoPanelRef = useCallback((element: HTMLElement | null) => {
+    environmentInfoPanelRef.current = element
+  }, [])
+  useLayoutEffect(() => {
+    setEnvironmentInfoPanelElement(environmentInfoPanelRef.current)
+  }, [])
+  useLayoutEffect(() => {
+    if (!paneActive) return
+    const workbenchScroll = workbenchScrollRef.current
+    if (workbenchScroll && workbenchScroll.scrollLeft !== 0) {
+      workbenchScroll.scrollLeft = 0
+    }
+  }, [paneActive])
+  const continueInIm = useRuntimeTaskContinueInIm(currentRuntimeTask)
+  const [reviewState, setReviewState] = useState<DesktopReviewState>({
+    loading: false,
+    diff: '',
+    error: undefined,
+    reviewTitle: undefined,
+    reviewMode: undefined,
+    defaultFileTreeVisible: undefined,
+    branchName: undefined,
+    targetBranchName: undefined,
+    sourceSubtaskId: undefined,
+    reloadDiff: undefined,
+  })
+  const closeRightPanel = useCallback(() => setRightPanelOpen(false), [setRightPanelOpen])
+  const onlyTemporaryChatOpen =
+    rightPanelTabs.length === 1 &&
+    rightPanelTabs[0].startsWith('chat:') &&
+    rightPanelView === rightPanelTabs[0]
+  useLayoutEffect(() => {
+    const workbenchMain = workbenchMainRef.current
+    if (!workbenchMain) return
+
+    const updateWorkbenchContentWidth = () => {
+      setWorkbenchContentWidth(workbenchMain.getBoundingClientRect().width)
+    }
+
+    updateWorkbenchContentWidth()
+    if (typeof ResizeObserver === 'undefined') return
+
+    const observer = new ResizeObserver(updateWorkbenchContentWidth)
+    observer.observe(workbenchMain)
+    return () => observer.disconnect()
+  }, [])
+  const {
+    width: rightSplitChatWidth,
+    resizing: rightSplitResizing,
+    handleResizeStart: handleRightSplitResizeStart,
+  } = useResizableRightSplitChat({
+    containerRef: workbenchMainRef,
+    onCollapse: closeRightPanel,
+    defaultPanelWidth: onlyTemporaryChatOpen ? TEMPORARY_CHAT_PANEL_DEFAULT_WIDTH : undefined,
+  })
+  const chatColumnWidth = rightPanelOpen ? rightSplitChatWidth : '100%'
+  const availableChatColumnWidth = rightPanelOpen ? rightSplitChatWidth : workbenchContentWidth
+  const environmentInfoDocked =
+    Boolean(currentRuntimeTask) &&
+    availableChatColumnWidth - DOCKED_ENVIRONMENT_INFO_WIDTH >=
+      MIN_CHAT_COLUMN_WIDTH_FOR_DOCKED_ENVIRONMENT_INFO
+  const environmentInfoOpen = environmentInfoDocked
+    ? (summaryVisibility?.pinned ?? false)
+    : (summaryVisibility?.overlay ?? false)
+  const setEnvironmentInfoOpen = useCallback(
+    (open: boolean) =>
+      onSummaryVisibilityChange(paneKey, environmentInfoDocked ? 'pinned' : 'overlay', open),
+    [environmentInfoDocked, onSummaryVisibilityChange, paneKey]
+  )
+
+  useEffect(() => {
+    if (currentRuntimeTask && !environmentInfoDocked) return
+    onSummaryVisibilityChange(paneKey, 'overlay', false)
+  }, [currentRuntimeTask, environmentInfoDocked, onSummaryVisibilityChange, paneKey])
+  const paneTitleWidth = rightPanelOpen ? chatColumnWidth : '100%'
+  const rightPanelShellWidth = rightPanelOpen ? `calc(100% - ${rightSplitChatWidth}px)` : '0px'
+  const rightPanelTitlebarWidth = rightPanelOpen
+    ? rightPanelShellWidth
+    : COLLAPSED_RIGHT_TITLEBAR_ACTIONS_CLEARANCE
+  const hasPersistentRightPanelResource = rightPanelTabs.some(
+    tab => tab === 'terminal' || tab === 'browser'
+  )
+  useEffect(() => {
+    onTerminalPanePinChange(paneKey, 'right-panel', hasPersistentRightPanelResource)
+    return () => onTerminalPanePinChange(paneKey, 'right-panel', false)
+  }, [hasPersistentRightPanelResource, onTerminalPanePinChange, paneKey])
+  const chatContentResizing = sidebarResizing || rightSplitResizing
+  const defaultEmbeddedBrowserLabel = currentRuntimeTask?.taskId
+    ? `workspace-browser-${sanitizeEmbeddedBrowserLabelSegment(currentRuntimeTask.taskId)}`
+    : `workspace-browser-${sanitizeEmbeddedBrowserLabelSegment(paneKey)}`
+  const embeddedBrowserLabel = migratedEmbeddedBrowserLabel ?? defaultEmbeddedBrowserLabel
+  const activeDeviceId =
+    currentRuntimeTask?.deviceId ??
+    getActiveWorkbenchDeviceId({
+      currentProject,
+      standaloneDeviceId: paneProjectWork.currentStandaloneDeviceId,
+    })
+  const [settingsTemplates, setSettingsTemplates] = useState<{
+    defaultId?: string
+    templates: Array<{ id: string; name: string; revisionSha256: string }>
+  } | null>(null)
+  const [settingsTemplateChoice, setSettingsTemplateChoice] = useState<string | undefined>(undefined)
+  useEffect(() => {
+    // Only an unsent conversation offers a template choice; running sessions stay frozen but
+    // still need the catalog to label the template they are bound to.
+    if (!activeDeviceId) {
+      setSettingsTemplates(null)
+      return
+    }
+    let cancelled = false
+    void listSettingsTemplates(activeDeviceId)
+      .then(catalog => {
+        if (cancelled) return
+        setSettingsTemplates({
+          ...(catalog.defaultId ? { defaultId: catalog.defaultId } : {}),
+          templates: catalog.templates.map(template => ({
+            id: template.id,
+            name: template.name,
+            revisionSha256: template.revisionSha256,
+          })),
+        })
+      })
+      .catch(() => {
+        if (!cancelled) setSettingsTemplates(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [activeDeviceId, currentRuntimeTask])
+
+  const settingsTemplateBadge = settingsTemplateBadgeState(
+    paneSession.sessionTemplateBinding,
+    settingsTemplates?.templates
+  )
+
+  const settingsTemplatePicker =
+    !currentRuntimeTask && settingsTemplates && settingsTemplates.templates.length > 0
+      ? {
+          ...(settingsTemplateChoice ? { value: settingsTemplateChoice } : {}),
+          placeholder: settingsTemplates.defaultId
+            ? t('configTemplates.followDefaultWith', {
+                name:
+                  settingsTemplates.templates.find(
+                    template => template.id === settingsTemplates.defaultId
+                  )?.name ?? settingsTemplates.defaultId,
+              })
+            : t('configTemplates.followDefault'),
+          options: settingsTemplates.templates.map(template => ({
+            id: template.id,
+            name: template.name,
+            isDefault: template.id === settingsTemplates.defaultId,
+          })),
+          onChange: setSettingsTemplateChoice,
+        }
+      : undefined
+
+  const activeRuntimeTargetDevice = activeDeviceId
+    ? devices.find(device => device.device_id === activeDeviceId)
+    : undefined
+  const activeRuntimeTargetCapabilities = activeRuntimeTargetDevice?.capabilities ?? []
+  const activeDeviceIsGatewayTarget = activeRuntimeTargetCapabilities.includes('kcoder-gateway')
+  const canOpenRuntimeBrowser =
+    !activeDeviceIsGatewayTarget || activeRuntimeTargetCapabilities.includes('runtime-browser')
+  const soleActiveDeviceWorkspacePath = useMemo(() => {
+    if (!runtimeWork || !activeDeviceId) return null
+    const workspaces = [
+      ...runtimeWork.chats,
+      ...runtimeWork.projects.flatMap(project => project.deviceWorkspaces),
+    ]
+    const matches = workspaces.filter(workspace => workspace.deviceId === activeDeviceId)
+    return matches.length === 1
+      ? matches[0].workspacePath
+      : workspaces.length === 1
+        ? workspaces[0].workspacePath
+        : null
+  }, [activeDeviceId, runtimeWork])
+  const standaloneRootWorkspaceTarget = useMemo(
+    () =>
+      !workspaceProject && !workspaceTarget && activeDeviceId
+        ? {
+            deviceId: activeDeviceId,
+            path: '/',
+            source: 'runtime' as const,
+            workspaceSource: 'remote',
+          }
+        : null,
+    [activeDeviceId, workspaceProject, workspaceTarget]
+  )
+  const effectiveWorkspaceTarget = workspaceTarget ?? standaloneRootWorkspaceTarget
+  const projectFileWorkspaceTargets = useMemo(
+    () =>
+      resolveProjectRuntimeWorkspaceTargets({
+        currentProject: workspaceProject,
+        runtimeWork,
+      }),
+    [runtimeWork, workspaceProject]
+  )
+  const fileWorkspaceTargets = useMemo(() => {
+    const candidates = effectiveWorkspaceTarget
+      ? [effectiveWorkspaceTarget, ...projectFileWorkspaceTargets]
+      : projectFileWorkspaceTargets
+    return candidates.filter(
+      (candidate, index) =>
+        candidates.findIndex(
+          item => item.deviceId === candidate.deviceId && item.path === candidate.path
+        ) === index
+    )
+  }, [effectiveWorkspaceTarget, projectFileWorkspaceTargets])
+  const composerWorkspaceTarget =
+    workspaceTarget ??
+    (activeDeviceId && state.standaloneWorkspacePath
+      ? {
+          deviceId: activeDeviceId,
+          path: state.standaloneWorkspacePath,
+          source: 'runtime' as const,
+        }
+      : null) ??
+    (activeDeviceId && soleActiveDeviceWorkspacePath
+      ? {
+          deviceId: activeDeviceId,
+          path: soleActiveDeviceWorkspacePath,
+          source: 'runtime' as const,
+        }
+      : null) ??
+    (currentRuntimeTask && (currentRuntimeTask.workspacePath || runtimeTaskWorkspacePath)
+      ? {
+          deviceId: currentRuntimeTask.deviceId,
+          path: currentRuntimeTask.workspacePath || runtimeTaskWorkspacePath!,
+          source: 'runtime' as const,
+        }
+      : null)
+  const selectedFileWorkspaceTarget =
+    fileWorkspaceTargets.find(
+      target => `${target.deviceId}:${target.path}` === selectedFileWorkspaceTargetKey
+    ) ?? null
+  const fileWorkspaceTarget =
+    openFileRequest?.target ?? selectedFileWorkspaceTarget ?? effectiveWorkspaceTarget
+  const canBrowseFiles =
+    Boolean(workspaceProject || openFileRequest?.target) &&
+    (!activeDeviceIsGatewayTarget ||
+      activeRuntimeTargetCapabilities.includes('runtime-workspace-files'))
+  const effectiveRightPanelTabs = useMemo<RightWorkspacePanelTab[]>(() => {
+    const permittedTabs = rightPanelTabs.filter(
+      tab => (canBrowseFiles || tab !== 'files') && (canOpenRuntimeBrowser || tab !== 'browser')
+    )
+    if (
+      rightPanelView === 'launcher' ||
+      (!canBrowseFiles && rightPanelView === 'files') ||
+      (!canOpenRuntimeBrowser && rightPanelView === 'browser')
+    ) {
+      return permittedTabs
+    }
+    return permittedTabs.includes(rightPanelView)
+      ? permittedTabs
+      : [...permittedTabs, rightPanelView]
+  }, [canBrowseFiles, canOpenRuntimeBrowser, rightPanelTabs, rightPanelView])
+  const shouldRenderRightPanel = rightPanelOpen || effectiveRightPanelTabs.length > 0
+  const workspaceTargetDevice = effectiveWorkspaceTarget?.deviceId
+    ? devices.find(device => device.device_id === effectiveWorkspaceTarget.deviceId)
+    : undefined
+  const workspaceTargetUsesRemoteDevice = Boolean(
+    workspaceTargetDevice &&
+    (isCloudDevice(workspaceTargetDevice) || isRemoteDevice(workspaceTargetDevice))
+  )
+  const workspaceTargetUsesRemoteSource = effectiveWorkspaceTarget?.workspaceSource === 'remote'
+  const preferLocalWorkspaceTerminal =
+    paneProjectWork.executionMode === 'current_workspace' &&
+    effectiveWorkspaceTarget?.source !== 'runtime' &&
+    !workspaceTargetUsesRemoteDevice &&
+    !workspaceTargetUsesRemoteSource
+
+  useEffect(() => {
+    if (currentRuntimeTask || !rightPanelTabs.includes('browser')) {
+      if (latestBlankBrowserMigration?.sourcePaneKey === paneKey) {
+        latestBlankBrowserMigration = null
+      }
+      return
+    }
+
+    latestBlankBrowserMigration = {
+      sourcePaneKey: paneKey,
+      browserLabel: embeddedBrowserLabel,
+      rightPanelOpen,
+      rightPanelView,
+      rightPanelTabs,
+      createdAt: Date.now(),
+    }
+  }, [
+    currentRuntimeTask,
+    embeddedBrowserLabel,
+    paneKey,
+    rightPanelOpen,
+    rightPanelTabs,
+    rightPanelView,
+  ])
+
+  useEffect(() => {
+    if (!initialBlankBrowserMigration || !currentRuntimeTask) return
+    if (migratedEmbeddedBrowserLabel !== initialBlankBrowserMigration.browserLabel) return
+
+    let disposed = false
+    void relabelEmbeddedBrowser(
+      initialBlankBrowserMigration.browserLabel,
+      defaultEmbeddedBrowserLabel
+    )
+      .then(() => {
+        if (!disposed) {
+          setMigratedEmbeddedBrowserLabel(null)
+        }
+      })
+      .catch(error => {
+        console.error('Failed to migrate embedded browser label:', error)
+      })
+
+    return () => {
+      disposed = true
+    }
+  }, [
+    currentRuntimeTask,
+    defaultEmbeddedBrowserLabel,
+    initialBlankBrowserMigration,
+    migratedEmbeddedBrowserLabel,
+  ])
+
+  const bottomPanelWorkspaceKey = createBottomPanelWorkspaceKey({
+    currentRuntimeTask,
+    workspaceProjectId: workspaceProject?.id,
+    workspaceTarget: effectiveWorkspaceTarget,
+    executionMode: paneProjectWork.executionMode,
+    preferLocalTerminal: preferLocalWorkspaceTerminal,
+  })
+  const bottomPanelOpen = bottomPanelOpenByKey[bottomPanelWorkspaceKey] ?? false
+  const activeBottomPanelContext = useMemo<BottomPanelRenderContext>(
+    () => ({
+      key: bottomPanelWorkspaceKey,
+      currentProject: workspaceProject,
+      devices,
+      workspaceTarget: effectiveWorkspaceTarget,
+      preferLocalTerminal: preferLocalWorkspaceTerminal,
+      terminalContextTitle: runtimeTaskTitle,
+    }),
+    [
+      bottomPanelWorkspaceKey,
+      devices,
+      effectiveWorkspaceTarget,
+      preferLocalWorkspaceTerminal,
+      runtimeTaskTitle,
+      workspaceProject,
+    ]
+  )
+  const rememberActiveBottomPanelContext = useCallback(() => {
+    setBottomPanelContexts(current => {
+      const existingIndex = current.findIndex(context => context.key === bottomPanelWorkspaceKey)
+      if (existingIndex < 0) {
+        return [...current, activeBottomPanelContext]
+      }
+      if (current[existingIndex] === activeBottomPanelContext) {
+        return current
+      }
+      const next = [...current]
+      next[existingIndex] = activeBottomPanelContext
+      return next
+    })
+  }, [activeBottomPanelContext, bottomPanelWorkspaceKey, setBottomPanelContexts])
+  const setCurrentBottomPanelOpen = useCallback(
+    (next: boolean | ((open: boolean) => boolean)) => {
+      rememberActiveBottomPanelContext()
+      onTerminalPanePinChange(paneKey, 'bottom-panel', true)
+      setBottomPanelOpenByKey(current => {
+        const currentOpen = current[bottomPanelWorkspaceKey] ?? false
+        const nextOpen = typeof next === 'function' ? next(currentOpen) : next
+        if (currentOpen === nextOpen) return current
+        return { ...current, [bottomPanelWorkspaceKey]: nextOpen }
+      })
+    },
+    [
+      bottomPanelWorkspaceKey,
+      onTerminalPanePinChange,
+      paneKey,
+      rememberActiveBottomPanelContext,
+      setBottomPanelOpenByKey,
+    ]
+  )
+  const bottomPanelContextsToRender = useMemo(() => {
+    const inactiveContexts = bottomPanelContexts.filter(
+      context => context.key !== bottomPanelWorkspaceKey
+    )
+    return [...inactiveContexts, activeBottomPanelContext]
+  }, [activeBottomPanelContext, bottomPanelContexts, bottomPanelWorkspaceKey])
+  const reviewRequestSequence = useRef(0)
+  const previousTurnReviewRef = useRef<{
+    loadDiff: () => Promise<{ diff: string; truncated: boolean }>
+    defaultFileTreeVisible?: boolean
+    sourceSubtaskId?: string
+  } | null>(null)
+  const paneMessages = paneSession.messages
+  const paneMessagesRef = useRef(paneMessages)
+  useEffect(() => {
+    paneMessagesRef.current = paneMessages
+  }, [paneMessages])
+  const pendingRequestUserInput = pendingRequestUserInputPayload(
+    paneMessages,
+    paneSession.answeredRequestUserInputIds
+  )
+  const selectedAssistantPlanContent = useMemo(
+    () => findSelectedAssistantPlanContent(paneMessages, selectedAssistantPlan),
+    [paneMessages, selectedAssistantPlan]
+  )
+  const rightPanelPlanContent =
+    selectedAssistantPlanContent ?? selectedAssistantPlan?.fallbackContent ?? null
+  const paneQueuedMessages = paneSession.queuedMessages
+  const paneGuidanceMessages = paneSession.guidanceMessages
+  const paneIsBusy = paneSession.status.isBusy
+  const latestPreviousTurnSubtaskId = useMemo(() => {
+    for (let index = paneMessages.length - 1; index >= 0; index -= 1) {
+      const message = paneMessages[index]
+      if (message.fileChanges && typeof message.subtaskId === 'string') {
+        return message.subtaskId
+      }
+    }
+
+    return null
+  }, [paneMessages])
+  const rightPanelSessionKey = paneKey
+  const previousRightPanelSessionKey = useRef(rightPanelSessionKey)
+  const [modelSelectorOpenSignal, setModelSelectorOpenSignal] = useState(0)
+  const pendingModelRetryRef = useRef<WorkbenchMessage | null>(null)
+  const retryFailedMessage = paneSession.retryFailedMessage
+  const [projectMenuOpenSignal, setProjectMenuOpenSignal] = useState(0)
+  const [projectMenuAnchorElement, setProjectMenuAnchorElement] =
+    useState<HTMLButtonElement | null>(null)
+  const hasConversation = paneMessages.length > 0 || currentRuntimeTask
+  const hasMainBackground = Boolean(background.imagePath && background.inMain)
+  const activeDevice = findWorkbenchDevice(devices, activeDeviceId)
+  const activeDeviceSupportsGoal = isGoalCapableWorkbenchDevice(activeDevice, activeDeviceId)
+  const currentRuntimeTaskSummary = findRuntimeTask(runtimeWork, currentRuntimeTask)
+  const currentRuntimeTaskSupportsGoal = Boolean(
+    currentRuntimeTask &&
+    (activeDeviceSupportsGoal || currentRuntimeTaskSummary?.runtime === 'kcoder')
+  )
+  const canEditLastUserMessage = Boolean(
+    currentRuntimeTaskSupportsGoal && !paneSession.status.isBusy
+  )
+  const composerSupportsGoal = currentRuntimeTask
+    ? currentRuntimeTaskSupportsGoal
+    : activeDeviceSupportsGoal
+  const activeDeviceUnavailable = Boolean(activeDeviceId) && !isWorkbenchDeviceOnline(activeDevice)
+  const showConversationDeviceBanner =
+    Boolean(activeDeviceId) && (!activeDevice || activeDevice.status === 'offline')
+  const activeDeviceVersionUnsupported = Boolean(
+    activeDevice && isDeviceBelowStudioVersion(activeDevice)
+  )
+  const noStandaloneCompatibleDevice =
+    !currentProject &&
+    !currentRuntimeTask &&
+    !activeDeviceId &&
+    !devices.some(device => device.status === 'online' && isStudioCompatibleDevice(device))
+  const composerDisabled =
+    activeDeviceUnavailable || activeDeviceVersionUnsupported || noStandaloneCompatibleDevice
+  const composerDisabledReason = activeDeviceUnavailable
+    ? t('workbench.device_status_active_unavailable', {
+        device:
+          getWorkbenchDeviceUnavailableDisplayName(activeDevice) ||
+          t('workbench.current_device', '当前设备'),
+      })
+    : activeDeviceVersionUnsupported
+      ? t('workbench.device_status_active_upgrade_required', {
+          device: activeDevice?.name || activeDeviceId || t('workbench.project_device'),
+          version: KCODER_STUDIO_MIN_EXECUTOR_VERSION,
+        })
+      : noStandaloneCompatibleDevice
+        ? t('workbench.device_status_no_online_device')
+        : undefined
+  const inlineComposerDisabledReason = showConversationDeviceBanner
+    ? undefined
+    : composerDisabledReason
+  const retryFailedMessageAfterModelSelect = useCallback(() => {
+    const message = pendingModelRetryRef.current
+    if (!message) return
+    pendingModelRetryRef.current = null
+    queueMicrotask(() => {
+      void retryFailedMessage(message)
+    })
+  }, [retryFailedMessage])
+  const projectChatWithModelSelectorSignal = useMemo<ProjectChatControls>(
+    () => ({
+      ...projectChat,
+      modelSelectorOpenSignal,
+      requestModelSelectorOpen: () => setModelSelectorOpenSignal(signal => signal + 1),
+      setSelectedModel: model => {
+        projectChat.setSelectedModel(model)
+        if (model) retryFailedMessageAfterModelSelect()
+      },
+      setSelectedModelAndOptions: projectChat.setSelectedModelAndOptions
+        ? (model, options) => {
+            projectChat.setSelectedModelAndOptions?.(model, options)
+            retryFailedMessageAfterModelSelect()
+          }
+        : undefined,
+      onModelSelectorOpenChange: open => {
+        if (!open) pendingModelRetryRef.current = null
+      },
+    }),
+    [modelSelectorOpenSignal, projectChat, retryFailedMessageAfterModelSelect]
+  )
+  const emptyProjectWork = useMemo(
+    () => ({ ...paneProjectWork, projectMenuOpenSignal, projectMenuAnchorElement }),
+    [paneProjectWork, projectMenuAnchorElement, projectMenuOpenSignal]
+  )
+  const selectTaskSuggestion = useCallback(
+    (prompt: string) => {
+      paneSession.setInput(prompt)
+    },
+    [paneSession]
+  )
+  const openRightPanelTab = useCallback(
+    (tab: RightWorkspacePanelTab) => {
+      setRightPanelOpen(true)
+      setRightPanelTabs(current => (current.includes(tab) ? current : [...current, tab]))
+      setRightPanelView(tab)
+    },
+    [setRightPanelOpen, setRightPanelTabs, setRightPanelView]
+  )
+  const selectRightPanelTab = useCallback(
+    (tab: RightWorkspacePanelTab) => {
+      setRightPanelOpen(true)
+      setRightPanelView(tab)
+    },
+    [setRightPanelOpen, setRightPanelView]
+  )
+  const openTemporaryChatTab = useCallback(
+    (initialInput?: string) => {
+      temporaryChatTabSequence.current += 1
+      const tab: RightWorkspaceChatTab = `chat:${Date.now()}-${temporaryChatTabSequence.current}`
+      if (initialInput) temporaryChatInitialInputsRef.current.set(tab, initialInput)
+      openRightPanelTab(tab)
+    },
+    [openRightPanelTab]
+  )
+
+  useLayoutEffect(
+    () =>
+      paneActive
+        ? subscribeDesktopFileAction('new-temporary-chat', () => openTemporaryChatTab())
+        : undefined,
+    [openTemporaryChatTab, paneActive]
+  )
+
+  const addSelectionToConversation = useCallback(
+    (selectedText: string) => {
+      setConversationSelectionInsertion(current => ({
+        id: (current?.id ?? 0) + 1,
+        text: selectedText,
+      }))
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          document
+            .querySelector<HTMLElement>(
+              '[data-testid="desktop-floating-composer-card"] [data-testid="chat-message-input"]'
+            )
+            ?.focus()
+        })
+      })
+    },
+    [setConversationSelectionInsertion]
+  )
+
+  const askSelectionInSidebar = useCallback(
+    (selectedText: string) => openTemporaryChatTab(selectedText),
+    [openTemporaryChatTab]
+  )
+  const embeddedBrowserListenerStateRef = useRef({
+    embeddedBrowserLabel,
+    openRightPanelTab,
+  })
+  useEffect(() => {
+    embeddedBrowserListenerStateRef.current = {
+      embeddedBrowserLabel,
+      openRightPanelTab,
+    }
+  }, [embeddedBrowserLabel, openRightPanelTab])
+  useEffect(() => {
+    if (!paneActive) return
+    const listener = listenEmbeddedBrowserOpenRequests(request => {
+      const current = embeddedBrowserListenerStateRef.current
+      if (request.label && request.label !== current.embeddedBrowserLabel) {
+        if (request.label !== DEFAULT_EMBEDDED_BROWSER_LABEL) return
+        setMigratedEmbeddedBrowserLabel(request.label)
+      }
+      setEmbeddedBrowserOpenRequest(previous => ({
+        ...request,
+        id: (previous?.id ?? 0) + 1,
+      }))
+      current.openRightPanelTab('browser')
+    })
+
+    return () => {
+      void listener?.then(unlisten => unlisten())
+    }
+  }, [paneActive])
+  const openAssistantPlan = useCallback(
+    (request: AssistantPlanOpenRequest) => {
+      setSelectedAssistantPlan({
+        blockId: request.blockId,
+        subtaskId: request.subtaskId,
+        fallbackContent: request.content,
+      })
+      openRightPanelTab('plan')
+    },
+    [openRightPanelTab, setSelectedAssistantPlan]
+  )
+  const closeRightPanelTab = useCallback(
+    (tab: RightWorkspacePanelTab) => {
+      if (tab.startsWith('chat:')) {
+        temporaryChatInitialInputsRef.current.delete(tab as RightWorkspaceChatTab)
+      }
+      if (tab === 'files') {
+        setOpenFileRequest(null)
+      }
+      if (tab === 'browser') {
+        setEmbeddedBrowserUrl(null)
+      }
+      setRightPanelTabs(current => {
+        const currentTabs = current.includes(tab) ? current : [...current, tab]
+        const next = currentTabs.filter(openTab => openTab !== tab)
+        if (next.length === 0) {
+          setRightPanelOpen(false)
+          setRightPanelView('launcher')
+          return next
+        }
+        if (rightPanelView === tab) {
+          setRightPanelView(next[next.length - 1])
+        }
+        return next
+      })
+    },
+    [rightPanelView, setOpenFileRequest, setRightPanelOpen, setRightPanelTabs, setRightPanelView]
+  )
+
+  const openReviewFromDiffLoader = useCallback(
+    async (
+      loadDiff: () => Promise<{ diff: string; truncated: boolean }>,
+      metadata: DesktopReviewMetadata = {}
+    ) => {
+      const requestId = reviewRequestSequence.current + 1
+      reviewRequestSequence.current = requestId
+      openRightPanelTab('review')
+      setReviewState({
+        loading: true,
+        diff: '',
+        diffTruncated: undefined,
+        error: undefined,
+        reviewTitle: metadata.reviewTitle,
+        reviewMode: metadata.reviewMode,
+        defaultFileTreeVisible: metadata.defaultFileTreeVisible,
+        branchName: metadata.branchName,
+        targetBranchName: metadata.targetBranchName,
+        focusFilePath: metadata.focusFilePath,
+        sourceSubtaskId: metadata.sourceSubtaskId,
+        reloadDiff: loadDiff,
+      })
+      try {
+        const { diff, truncated } = await loadDiff()
+        if (reviewRequestSequence.current === requestId) {
+          setReviewState({
+            loading: false,
+            diff,
+            diffTruncated: truncated,
+            error: undefined,
+            reviewTitle: metadata.reviewTitle,
+            reviewMode: metadata.reviewMode,
+            defaultFileTreeVisible: metadata.defaultFileTreeVisible,
+            branchName: metadata.branchName,
+            targetBranchName: metadata.targetBranchName,
+            focusFilePath: metadata.focusFilePath,
+            sourceSubtaskId: metadata.sourceSubtaskId,
+            reloadDiff: loadDiff,
+          })
+        }
+      } catch (error) {
+        if (reviewRequestSequence.current === requestId) {
+          setReviewState({
+            loading: false,
+            diff: '',
+            diffTruncated: undefined,
+            error: formatEnvironmentReviewErrorMessage({
+              error,
+              fallbackMessage: t('workbench.environment_review_failed'),
+              deviceUnavailableMessage: t('workbench.environment_review_device_unavailable'),
+            }),
+            reviewTitle: metadata.reviewTitle,
+            reviewMode: metadata.reviewMode,
+            defaultFileTreeVisible: metadata.defaultFileTreeVisible,
+            branchName: metadata.branchName,
+            targetBranchName: metadata.targetBranchName,
+            focusFilePath: metadata.focusFilePath,
+            sourceSubtaskId: metadata.sourceSubtaskId,
+            reloadDiff: loadDiff,
+          })
+        }
+      }
+    },
+    [openRightPanelTab, setReviewState, t]
+  )
+
+  const openEnvironmentChangesReview = useCallback(
+    async (mode: EnvironmentDiffMode = 'branch') => {
+      await openReviewFromDiffLoader(
+        async () => {
+          if (!loadEnvironmentDiff || !workspaceTarget) {
+            throw new Error(t('workbench.environment_review_unavailable'))
+          }
+          return { diff: await loadEnvironmentDiff(workspaceTarget, mode), truncated: false }
+        },
+        {
+          reviewTitle: tChat(`file_changes.${mode}_label`),
+          reviewMode: mode,
+          branchName: environmentInfo.branchName,
+        }
+      )
+    },
+    [
+      environmentInfo.branchName,
+      loadEnvironmentDiff,
+      openReviewFromDiffLoader,
+      t,
+      tChat,
+      workspaceTarget,
+    ]
+  )
+  const openDefaultEnvironmentChangesReview = useCallback(() => {
+    void openEnvironmentChangesReview()
+  }, [openEnvironmentChangesReview])
+
+  const selectReviewView = useCallback(() => {
+    if (reviewState.diff || reviewState.loading) {
+      openRightPanelTab('review')
+      return
+    }
+
+    void openEnvironmentChangesReview()
+  }, [openEnvironmentChangesReview, openRightPanelTab, reviewState.diff, reviewState.loading])
+
+  const selectFilesView = useCallback(() => {
+    if (!canBrowseFiles) return
+    openRightPanelTab('files')
+  }, [canBrowseFiles, openRightPanelTab])
+  const selectFileWorkspaceTarget = useCallback((target: WorkspaceTarget) => {
+    setSelectedFileWorkspaceTargetKey(`${target.deviceId}:${target.path}`)
+    setOpenFileRequest(null)
+  }, [])
+  const selectBrowserView = useCallback(() => {
+    if (!canOpenRuntimeBrowser) return
+    openRightPanelTab('browser')
+  }, [canOpenRuntimeBrowser, openRightPanelTab])
+  const selectTerminalView = useCallback(() => {
+    openRightPanelTab('terminal')
+  }, [openRightPanelTab])
+  const selectChatView = useCallback(() => {
+    openTemporaryChatTab()
+  }, [openTemporaryChatTab])
+  const selectPlanView = useCallback(() => {
+    openRightPanelTab('plan')
+  }, [openRightPanelTab])
+
+  const openWorkspaceFileFromMessage = useCallback(
+    async (path: string, options?: WorkspaceFileOpenOptions) => {
+      const trimmedPath = path.trim()
+      if (!trimmedPath) return
+      // Sub-agent reports live inside the client storage tree, which is not a workspace root the
+      // gateway can open a connection on; read them through the whitelisted artifact RPC instead.
+      // Any miss (not a report, missing capability, unknown agent) falls through to the file panel.
+      if (subagentArtifactKindFromPath(trimmedPath)) {
+        const artifact = await paneSession.readSubagentArtifact(trimmedPath)
+        if (artifact) {
+          setSubagentArtifact({
+            title: artifact.name || trimmedPath,
+            content: artifact.content,
+            truncated: artifact.truncated,
+          })
+          return
+        }
+      }
+      const attachmentTarget = createLocalAttachmentWorkspaceTarget(trimmedPath, devices)
+      const absoluteLocalTarget = createLocalFileWorkspaceTarget(trimmedPath, devices)
+      let localTarget =
+        attachmentTarget ??
+        (absoluteLocalTarget &&
+        (!effectiveWorkspaceTarget ||
+          effectiveWorkspaceTarget.workspaceSource === 'local' ||
+          effectiveWorkspaceTarget.deviceId === absoluteLocalTarget.deviceId)
+          ? absoluteLocalTarget
+          : null)
+      let isDirectory = options?.isDirectory
+      if (localTarget && isDirectory === undefined) {
+        isDirectory = (await getLocalPathKind(trimmedPath)) === 'directory'
+      }
+      if (localTarget && isDirectory) {
+        let directoryPath = trimmedPath.replace(/\\/g, '/').replace(/\/+$/, '') || '/'
+        try {
+          directoryPath = normalizeAbsoluteWorkspacePath(trimmedPath, 'invalid directory path')
+        } catch {
+          // Keep the slash-normalized spelling for inputs that are not absolute.
+        }
+        localTarget = {
+          ...localTarget,
+          path: directoryPath,
+        }
+      }
+      setOpenFileRequest(current => ({
+        id: (current?.id ?? 0) + 1,
+        path: trimmedPath,
+        lineStart: options?.lineStart,
+        lineEnd: options?.lineEnd,
+        isDirectory,
+        target: localTarget ?? undefined,
+      }))
+      openRightPanelTab('files')
+    },
+    [
+      devices,
+      effectiveWorkspaceTarget,
+      openRightPanelTab,
+      paneSession.readSubagentArtifact,
+      setOpenFileRequest,
+    ]
+  )
+
+  const openLocalSkillFile = useCallback(
+    (path: string) => {
+      const trimmedPath = path.trim()
+      if (!trimmedPath) return
+      const target = createLocalFileWorkspaceTarget(trimmedPath, devices)
+      if (!target) return
+
+      setOpenFileRequest(current => ({
+        id: (current?.id ?? 0) + 1,
+        path: trimmedPath,
+        target,
+      }))
+      openRightPanelTab('files')
+    },
+    [devices, openRightPanelTab, setOpenFileRequest]
+  )
+
+  const refreshReview = useCallback(() => {
+    if (!reviewState.reloadDiff) return
+
+    void openReviewFromDiffLoader(reviewState.reloadDiff, {
+      reviewTitle: reviewState.reviewTitle,
+      reviewMode: reviewState.reviewMode,
+      defaultFileTreeVisible: reviewState.defaultFileTreeVisible,
+      branchName: reviewState.branchName,
+      targetBranchName: reviewState.targetBranchName,
+      focusFilePath: reviewState.focusFilePath,
+      sourceSubtaskId: reviewState.sourceSubtaskId,
+    })
+  }, [
+    openReviewFromDiffLoader,
+    reviewState.branchName,
+    reviewState.defaultFileTreeVisible,
+    reviewState.focusFilePath,
+    reviewState.reloadDiff,
+    reviewState.reviewMode,
+    reviewState.reviewTitle,
+    reviewState.sourceSubtaskId,
+    reviewState.targetBranchName,
+  ])
+
+  const reviewViewOptions = useMemo(
+    () => [
+      {
+        id: 'unstaged',
+        label: tChat('file_changes.unstaged_label'),
+        active: reviewState.reviewMode === 'unstaged',
+        disabled: !loadEnvironmentDiff || !workspaceTarget,
+        onSelect: () => void openEnvironmentChangesReview('unstaged'),
+      },
+      {
+        id: 'staged',
+        label: tChat('file_changes.staged_label'),
+        active: reviewState.reviewMode === 'staged',
+        disabled: !loadEnvironmentDiff || !workspaceTarget,
+        onSelect: () => void openEnvironmentChangesReview('staged'),
+      },
+      {
+        id: 'commit',
+        label: tChat('file_changes.commit_label'),
+        active: reviewState.reviewMode === 'commit',
+        disabled: !loadEnvironmentDiff || !workspaceTarget,
+        onSelect: () => void openEnvironmentChangesReview('commit'),
+      },
+      {
+        id: 'branch',
+        label: tChat('file_changes.branch_label'),
+        active: reviewState.reviewMode === 'branch',
+        disabled: !loadEnvironmentDiff || !workspaceTarget,
+        onSelect: () => void openEnvironmentChangesReview('branch'),
+      },
+      {
+        id: 'previous-turn',
+        label: tChat('file_changes.previous_turn_label'),
+        active: reviewState.reviewMode === 'previous-turn',
+        disabled: latestPreviousTurnSubtaskId === null && !hasPreviousTurnReview,
+        onSelect: () => {
+          const previousTurn =
+            latestPreviousTurnSubtaskId !== null
+              ? {
+                  loadDiff: () =>
+                    loadTurnFileChangesDiff(
+                      latestPreviousTurnSubtaskId,
+                      paneMessagesRef.current,
+                      undefined,
+                      currentRuntimeTask
+                    ),
+                  defaultFileTreeVisible: false,
+                  sourceSubtaskId: latestPreviousTurnSubtaskId,
+                }
+              : previousTurnReviewRef.current
+          if (!previousTurn) return
+          void openReviewFromDiffLoader(previousTurn.loadDiff, {
+            reviewTitle: tChat('file_changes.previous_turn_label'),
+            reviewMode: 'previous-turn',
+            defaultFileTreeVisible: previousTurn.defaultFileTreeVisible,
+            sourceSubtaskId: previousTurn.sourceSubtaskId,
+          })
+        },
+      },
+    ],
+    [
+      currentRuntimeTask,
+      hasPreviousTurnReview,
+      latestPreviousTurnSubtaskId,
+      loadEnvironmentDiff,
+      loadTurnFileChangesDiff,
+      openEnvironmentChangesReview,
+      openReviewFromDiffLoader,
+      reviewState.reviewMode,
+      tChat,
+      workspaceTarget,
+    ]
+  )
+  const fileChangesDiffPreviewDisabledSubtaskId =
+    rightPanelOpen &&
+    rightPanelView === 'review' &&
+    reviewState.reviewMode === 'previous-turn' &&
+    reviewState.sourceSubtaskId &&
+    (reviewState.loading || Boolean(reviewState.diff))
+      ? reviewState.sourceSubtaskId
+      : null
+
+  const toggleRightPanel = useCallback(() => {
+    setRightPanelOpen(open => {
+      const nextOpen = !open
+      if (nextOpen) {
+        setRightPanelView(current =>
+          effectiveRightPanelTabs.includes(current as RightWorkspacePanelTab) ? current : 'launcher'
+        )
+      }
+      return nextOpen
+    })
+  }, [effectiveRightPanelTabs, setRightPanelOpen, setRightPanelView])
+  const toggleBottomPanel = useCallback(
+    () => setCurrentBottomPanelOpen(open => !open),
+    [setCurrentBottomPanelOpen]
+  )
+  const {
+    pauseCurrentResponse: pauseCurrentResponseAction,
+    compactContext: compactContextAction,
+    setCurrentGoal: setCurrentGoalAction,
+    pauseCurrentGoal: pauseCurrentGoalAction,
+    resumeCurrentGoal: resumeCurrentGoalAction,
+    clearCurrentGoal: clearCurrentGoalAction,
+  } = paneSession
+  const pauseCurrentResponse = useCallback(
+    () => void pauseCurrentResponseAction(),
+    [pauseCurrentResponseAction]
+  )
+  const shortenCurrentWait = useCallback(() => void paneSession.shortenCurrentWait(), [paneSession])
+  const shortenWaitAvailable = paneIsBusy && paneSession.status.hasRunningShortenableTool
+  const compactCurrentContext = useCallback(
+    () => void compactContextAction(),
+    [compactContextAction]
+  )
+  const setCurrentGoal = useCallback(
+    (mode?: RuntimeGoal['mode']) => void setCurrentGoalAction(mode),
+    [setCurrentGoalAction]
+  )
+  const pauseCurrentGoal = useCallback(
+    () => void pauseCurrentGoalAction(),
+    [pauseCurrentGoalAction]
+  )
+  const resumeCurrentGoal = useCallback(
+    () => void resumeCurrentGoalAction(),
+    [resumeCurrentGoalAction]
+  )
+  const clearCurrentGoal = useCallback(
+    () => void clearCurrentGoalAction(),
+    [clearCurrentGoalAction]
+  )
+  const closeBottomPanelContext = useCallback(
+    (key: string) => {
+      setBottomPanelOpenByKey(current => ({ ...current, [key]: false }))
+    },
+    [setBottomPanelOpenByKey]
+  )
+  const handleTerminalTabsEmpty = useCallback(() => {
+    onTerminalPanePinChange(paneKey, 'bottom-panel', false)
+  }, [onTerminalPanePinChange, paneKey])
+
+  useEffect(() => {
+    if (!paneActive) return
+    const handleOpenTerminal = () => {
+      toggleBottomPanel()
+    }
+
+    window.addEventListener(KCODER_STUDIO_OPEN_TERMINAL_EVENT, handleOpenTerminal)
+    return () => window.removeEventListener(KCODER_STUDIO_OPEN_TERMINAL_EVENT, handleOpenTerminal)
+  }, [paneActive, toggleBottomPanel])
+
+  const renderWorkspacePanelActions = (
+    mode:
+      | 'all'
+      | 'environment'
+      | 'primary-target'
+      | 'panel-toggles'
+      | 'bottom-panel-toggle'
+      | 'right-panel-toggle'
+  ) => (
+    <WorkspacePanelActions
+      mode={mode}
+      currentProject={currentProject}
+      devices={devices}
+      workspaceTarget={workspaceTarget}
+      workspaceSessionApi={workspaceSessionApi}
+      environmentInfo={environmentInfo}
+      environmentInfoPopoverContainer={environmentInfoPanelElement}
+      environmentInfoVisible={Boolean(currentRuntimeTask)}
+      environmentInfoDocked={environmentInfoDocked}
+      environmentInfoOpen={environmentInfoOpen && paneActive && workbenchVisible}
+      onEnvironmentInfoOpenChange={setEnvironmentInfoOpen}
+      onRefreshEnvironmentInfo={refreshEnvironmentInfo}
+      onCommitEnvironmentChanges={commitEnvironmentChanges}
+      onCommitAndPushEnvironmentChanges={commitAndPushEnvironmentChanges}
+      onPushEnvironmentChanges={pushEnvironmentChanges}
+      onListEnvironmentBranches={listEnvironmentBranches}
+      onCheckoutEnvironmentBranch={checkoutEnvironmentBranch}
+      onCreateEnvironmentBranch={createEnvironmentBranch}
+      onOpenEnvironmentChangesReview={openDefaultEnvironmentChangesReview}
+      onDeliver={
+        experimentalFeaturesEnabled && currentRuntimeTask && services?.deliveryApi
+          ? () => {
+              if (activeDeliveryItem) {
+                setDeliveryDialogOpen(true)
+              } else {
+                setDeliverAfterBinding(true)
+                setTodoBindingPickerOpen(true)
+              }
+            }
+          : undefined
+      }
+      todoLabel={
+        boundCloudItem ? `${boundCloudItem.id} · ${boundCloudItem.title}` : boundCloudProject?.name
+      }
+      onManageTodo={
+        experimentalFeaturesEnabled && currentRuntimeTask && services?.deliveryApi
+          ? () => {
+              setDeliverAfterBinding(false)
+              setTodoBindingPickerOpen(true)
+            }
+          : undefined
+      }
+      rightPanelOpen={rightPanelOpen}
+      bottomPanelOpen={bottomPanelOpen}
+      onToggleRightPanel={toggleRightPanel}
+      onToggleBottomPanel={toggleBottomPanel}
+    />
+  )
+  const workspacePanelActions = renderWorkspacePanelActions('all')
+  const mainHeaderProjectAction = renderWorkspacePanelActions('primary-target')
+  const mainHeaderEnvironmentAction = renderWorkspacePanelActions('environment')
+  const panelChromeActions = renderWorkspacePanelActions('panel-toggles')
+  const paneTaskTitle =
+    runtimeTaskTitle && !isTauri ? (
+      <div
+        data-testid="workbench-pane-task-title"
+        className={cn(
+          'pointer-events-none absolute left-0 top-0 z-chrome flex h-11 min-w-0 truncate items-center pr-7 text-sm font-medium leading-none text-text-primary',
+          sidebarCollapsed ? 'pl-[14rem]' : 'pl-4',
+          rightSplitResizing ? 'transition-none' : RIGHT_PANEL_WIDTH_TRANSITION_CLASS
+        )}
+        style={{ width: paneTitleWidth }}
+      >
+        <span className="block w-full min-w-0 truncate">{runtimeTaskTitle}</span>
+      </div>
+    ) : undefined
+  const topBarLeftActions = !isTauri ? (
+    sidebarCollapsed ? (
+      <DesktopWindowControls
+        sidebarCollapsed
+        onToggleSidebar={() => onSidebarCollapsedChange(false)}
+        onNewChat={startNewChat}
+      />
+    ) : (
+      <DesktopWindowControls
+        sidebarCollapsed={false}
+        onToggleSidebar={() => onSidebarCollapsedChange(true)}
+      />
+    )
+  ) : undefined
+  const topBarLeftContent = topBarLeftActions ? <>{topBarLeftActions}</> : undefined
+  const showPageTopBar = !isTauri && (Boolean(topBarLeftContent) || Boolean(paneTaskTitle))
+  const hasSubagentStatuses = (paneSession.subagentStatuses?.length ?? 0) > 0
+  const canForkCurrentRuntimeTask = Boolean(
+    experimentalFeaturesEnabled && currentRuntimeTask && forkCurrentRuntimeTask
+  )
+  const forkTaskButton = canForkCurrentRuntimeTask ? (
+    <button
+      type="button"
+      data-testid="fork-runtime-task-button"
+      className={DESKTOP_TOP_BAR_BUTTON_CLASS}
+      aria-label={t('workbench.task_fork_button')}
+      title={t('workbench.task_fork_button')}
+      onClick={() => setForkDialogOpen(true)}
+    >
+      <ArrowLeftRight />
+    </button>
+  ) : undefined
+  const canContinueInIm = experimentalFeaturesEnabled && Boolean(currentRuntimeTask)
+  const continueInImButton = canContinueInIm ? (
+    <button
+      type="button"
+      data-testid="continue-in-im-button"
+      className={DESKTOP_TOP_BAR_BUTTON_CLASS}
+      aria-label={t('workbench.continue_im_title')}
+      title={t('workbench.continue_im_title')}
+      onClick={continueInIm.openDialog}
+    >
+      <MessageCircle />
+    </button>
+  ) : undefined
+  const feedbackButton =
+    currentRuntimeTask && isTauri ? (
+      <button
+        type="button"
+        data-testid="task-feedback-button"
+        className={DESKTOP_TOP_BAR_BUTTON_CLASS}
+        aria-label={t('workbench.feedback_button')}
+        title={t('workbench.feedback_button')}
+        onClick={() => setFeedbackDialogOpen(true)}
+      >
+        <MessageSquareWarning />
+      </button>
+    ) : undefined
+  const mainHeaderActions = (
+    <>
+      {forkTaskButton}
+      {continueInImButton}
+      {feedbackButton}
+      {mainHeaderProjectAction}
+      {mainHeaderEnvironmentAction}
+    </>
+  )
+  const topRightActions = isTauri ? (
+    <>{panelChromeActions}</>
+  ) : (
+    <>
+      {forkTaskButton}
+      {continueInImButton}
+      {workspacePanelActions}
+    </>
+  )
+  const tauriMainHeaderContent = isTauri ? (
+    <div className="relative flex h-full min-w-0 flex-1 items-center overflow-hidden">
+      <MacOSTitleBarDragRegion className="absolute inset-0 z-0 h-full w-full" />
+      {sidebarCollapsed && (
+        <div
+          data-testid="workbench-main-header-left-controls"
+          className={cn(
+            'relative z-0 flex h-full shrink-0 items-center gap-1 pr-1',
+            isMacOSRuntime()
+              ? MACOS_TRAFFIC_LIGHTS_CLEARANCE_CLASS
+              : WINDOWS_HEADER_LEFT_PADDING_CLASS
+          )}
+        >
+          <DesktopWindowControls
+            sidebarCollapsed
+            onToggleSidebar={() => onSidebarCollapsedChange(false)}
+            className="gap-1"
+          />
+          <DesktopAppSwitcher
+            activeApp="studio"
+            onNavigate={app =>
+              navigateTo(
+                app === 'studio'
+                  ? '/'
+                  : app === 'todo'
+                    ? '/todo'
+                    : app === 'wegent'
+                      ? '/app/wegent'
+                      : '/apps'
+              )
+            }
+          />
+        </div>
+      )}
+      {runtimeTaskTitle ? (
+        <div
+          data-testid="workbench-pane-task-title"
+          className={cn(
+            'pointer-events-none relative z-0 flex h-full min-w-0 flex-1 items-center truncate pl-4 text-sm font-medium leading-none text-text-primary',
+            rightSplitResizing ? 'transition-none' : RIGHT_PANEL_WIDTH_TRANSITION_CLASS
+          )}
+        >
+          <span className="block min-w-0 truncate">{runtimeTaskTitle}</span>
+        </div>
+      ) : (
+        <div className="min-w-0 flex-1" />
+      )}
+      <div
+        data-testid="titlebar-main-actions"
+        className="relative z-0 flex h-full shrink-0 items-center justify-end gap-1 pr-1"
+      >
+        {mainHeaderActions}
+      </div>
+      <div
+        aria-hidden="true"
+        className={cn(
+          'shrink-0',
+          rightSplitResizing ? 'transition-none' : RIGHT_PANEL_WIDTH_TRANSITION_CLASS
+        )}
+        style={{ width: rightPanelTitlebarWidth }}
+      />
+      <div
+        data-testid="titlebar-right-workspace-zone"
+        className={cn(
+          'pointer-events-none absolute right-0 top-0 z-chrome flex h-full min-w-0 items-center overflow-hidden',
+          background.imagePath && background.inTopBar ? 'bg-transparent' : 'bg-background/95',
+          rightPanelOpen ? 'border-l border-border/60' : undefined,
+          rightSplitResizing ? 'transition-none' : RIGHT_PANEL_WIDTH_TRANSITION_CLASS
+        )}
+        style={{ width: rightPanelTitlebarWidth }}
+      >
+        <div
+          id={TITLEBAR_RIGHT_PANEL_PORTAL_ID}
+          data-testid="titlebar-right-panel"
+          className="pointer-events-none flex h-full min-w-0 flex-1 items-center"
+        />
+        <div
+          id={TITLEBAR_ACTIONS_PORTAL_ID}
+          data-testid="titlebar-actions"
+          className="pointer-events-auto flex h-full min-w-[5rem] shrink-0 items-center justify-end gap-1 pr-2"
+        >
+          {topRightActions}
+        </div>
+      </div>
+    </div>
+  ) : undefined
+  useLayoutEffect(() => {
+    if (previousRightPanelSessionKey.current === rightPanelSessionKey) {
+      return
+    }
+
+    previousRightPanelSessionKey.current = rightPanelSessionKey
+    reviewRequestSequence.current += 1
+    previousTurnReviewRef.current = null
+    setHasPreviousTurnReview(false)
+    setRightPanelView('launcher')
+    setRightPanelTabs([])
+    setSelectedAssistantPlan(null)
+    setReviewState({
+      loading: false,
+      diff: '',
+      error: undefined,
+      reviewTitle: undefined,
+      reviewMode: undefined,
+      defaultFileTreeVisible: undefined,
+      branchName: undefined,
+      targetBranchName: undefined,
+      reloadDiff: undefined,
+    })
+  }, [rightPanelSessionKey])
+
+  return (
+    <main
+      ref={workbenchMainRef}
+      className={cn(
+        'absolute inset-x-0 bottom-0 flex min-w-0 flex-1 flex-col overflow-hidden',
+        hasMainBackground ? 'bg-background/20' : 'bg-background',
+        'transition-[margin] duration-[300ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none',
+        sidebarResizing && 'transition-none',
+        'top-0',
+        !isTauri && 'mt-1.5 rounded-xl border border-border/60 shadow-[0_3px_16px_rgba(0,0,0,0.04)]'
+      )}
+    >
+      {/* Portals escape the hidden cached pane, so only the visible active pane may own the header. */}
+      {tauriMainHeaderContent && paneActive && workbenchVisible ? (
+        <WorkbenchMainHeaderPortal>{tauriMainHeaderContent}</WorkbenchMainHeaderPortal>
+      ) : null}
+      <>
+        {!isTauri && (
+          <div
+            data-testid="workspace-panel-floating-actions"
+            className="pointer-events-auto absolute right-8 top-1.5 z-popover flex shrink-0 items-center gap-1"
+          >
+            {topRightActions}
+          </div>
+        )}
+        {showPageTopBar && (
+          <DesktopTopBar
+            testId="workbench-topbar"
+            className={cn(
+              'absolute left-0 top-0 z-chrome h-11 overflow-visible border-b border-border/50 pr-7',
+              background.imagePath && background.inTopBar ? 'bg-background/20' : 'bg-background/95',
+              isTauri && sidebarCollapsed ? 'pl-[14rem]' : 'pl-4',
+              rightSplitResizing ? 'transition-none' : RIGHT_PANEL_WIDTH_TRANSITION_CLASS
+            )}
+            style={{ width: chatColumnWidth }}
+            left={topBarLeftContent}
+            leftClassName={cn('min-w-0 gap-2', isTauri ? 'contents' : 'max-w-[calc(100%-12rem)]')}
+          />
+        )}
+        {paneTaskTitle}
+      </>
+      <div className="relative flex min-h-0 flex-1 overflow-visible">
+        <div
+          ref={setTurnNavigationPortalTarget}
+          data-testid="message-turn-navigation-overlay"
+          className={cn(
+            'pointer-events-none absolute bottom-0 left-0 z-popover',
+            showPageTopBar ? 'top-11' : 'top-0'
+          )}
+          style={{ width: chatColumnWidth }}
+        />
+        <div
+          ref={workbenchScrollRef}
+          data-testid="desktop-workbench-content"
+          className={cn(
+            'relative grid h-full min-w-0 flex-none grid-cols-[minmax(0,1fr)_auto]',
+            hasConversation ? 'overflow-x-hidden overflow-y-auto' : 'overflow-hidden',
+            rightSplitResizing ? 'transition-none' : RIGHT_PANEL_WIDTH_TRANSITION_CLASS,
+            showPageTopBar && 'pt-11'
+          )}
+          style={{ width: chatColumnWidth }}
+        >
+          {isBootstrapping ? (
+            <div className="flex min-w-0 flex-1" data-testid="desktop-workbench-loading" />
+          ) : hasConversation ? (
+            <div className="relative min-h-0 min-w-0 flex-1">
+              <WorkspaceMarkdownImageLoaderContext.Provider value={loadWorkspaceMarkdownImage}>
+                <ScrollableMessageArea
+                  messages={paneMessages}
+                  loading={paneSession.transcriptLoading}
+                  isWaitingForAssistant={paneSession.status.isWaitingForAssistantIndicator}
+                  hasMoreBefore={paneSession.transcriptHasMoreBefore}
+                  loadingMoreBefore={paneSession.transcriptLoadingMoreBefore}
+                  turnNavigation={paneSession.turnNavigation}
+                  loadedTranscriptRanges={paneSession.loadedTranscriptRanges}
+                  onLoadMoreBefore={paneSession.loadMoreTranscriptBefore}
+                  onLoadFullTranscript={paneSession.loadFullTranscript}
+                  loadingFullTranscript={paneSession.transcriptLoadingFullContent}
+                  onLoadTurnNavigationItem={paneSession.loadTranscriptTurnNavigationItem}
+                  onLoadTranscriptGap={paneSession.loadTranscriptGap}
+                  toolsCatalogTaskId={currentRuntimeTask?.taskId}
+                  toolsCatalogServerId={currentRuntimeTask?.deviceId}
+                  conversationKey={
+                    currentRuntimeTask
+                      ? `${currentRuntimeTask.deviceId}:${currentRuntimeTask.taskId}`
+                      : null
+                  }
+                  className="h-full"
+                  scrollTestId="desktop-chat-scroll"
+                  externalScrollRef={workbenchScrollRef}
+                  turnNavigationPortalTarget={turnNavigationPortalTarget}
+                  scrollerClassName="overflow-visible scrollbar-none"
+                  messageListClassName={cn(
+                    DESKTOP_MESSAGE_LIST_CLASS,
+                    chatContentResizing && 'transition-none'
+                  )}
+                  stickyFooterClassName={cn(
+                    DESKTOP_STICKY_COMPOSER_FOOTER_CLASS,
+                    hasMainBackground
+                      ? 'from-transparent via-transparent'
+                      : 'from-background via-background',
+                    chatContentResizing && 'transition-none'
+                  )}
+                  stickyFooter={
+                    <>
+                      <div
+                        className={cn(
+                          DESKTOP_STICKY_COMPOSER_BACKDROP_CLASS,
+                          hasMainBackground
+                            ? 'from-transparent via-transparent'
+                            : 'from-background via-background'
+                        )}
+                        data-testid="desktop-floating-composer-backdrop"
+                      />
+                      <div
+                        className={cn(
+                          DESKTOP_STICKY_COMPOSER_LAYER_CLASS,
+                          chatContentResizing && 'transition-none'
+                        )}
+                        data-testid="desktop-floating-composer-layer"
+                      >
+                        <div
+                          className="pointer-events-auto"
+                          data-testid="desktop-floating-composer-card"
+                        >
+                          {showConversationDeviceBanner ? (
+                            <ConversationDeviceOfflineBanner
+                              device={activeDevice}
+                              deviceId={activeDeviceId}
+                              className="mb-2"
+                            />
+                          ) : (
+                            <DeviceStatusPrompt
+                              devices={devices}
+                              upgradingDevices={upgradingDevices}
+                              onUpgradeDevice={upgradeDevice}
+                              onOpenCloudDeviceSettings={requestOpenCloudDeviceSettings}
+                              activeDeviceId={activeDeviceId}
+                              requiresOnlineCompatibleDevice={noStandaloneCompatibleDevice}
+                              hideAvailableUpdates
+                              className="mb-2"
+                            />
+                          )}
+                          {pendingRequestUserInput ? (
+                            <RequestUserInputCard
+                              key={
+                                requestUserInputPayloadKey(pendingRequestUserInput) ??
+                                'implementation-plan'
+                              }
+                              payload={pendingRequestUserInput}
+                              onSubmit={response => {
+                                const isImplementationPlanRequest =
+                                  isImplementationPlanRequestUserInput(pendingRequestUserInput)
+                                const shouldImplementPlan =
+                                  isImplementationPlanRequest &&
+                                  isImplementationPlanConfirmationResponse(response)
+                                return paneSession.sendRequestUserInputResponse(response, {
+                                  appendUserMessage: isImplementationPlanRequest,
+                                  forceDefaultCollaborationMode: shouldImplementPlan,
+                                })
+                              }}
+                              onIgnore={() =>
+                                paneSession.ignoreRequestUserInput(pendingRequestUserInput)
+                              }
+                            />
+                          ) : (
+                            <BufferedChatInput
+                              insertion={conversationSelectionInsertion}
+                              value={paneSession.input}
+                              onChange={paneSession.setInput}
+                              onSubmit={submitPaneInput}
+                              disabled={composerDisabled}
+                              submitDisabled={paneSession.status.isSubmitting}
+                              error={paneSession.error}
+                              disabledReason={inlineComposerDisabledReason}
+                              placeholder={t('workbench.follow_up_placeholder', '要求后续变更')}
+                              variant="desktop"
+                              projectChat={projectChatWithModelSelectorSignal}
+                              projectWork={paneProjectWork}
+                              showProjectWorkBar={false}
+                              queuedMessages={paneQueuedMessages}
+                              guidanceMessages={paneGuidanceMessages}
+                              codeComments={paneSession.codeCommentContexts}
+                              cloudMentionCandidates={visibleCloudMentionCandidates}
+                              cloudProjectCandidates={cloudProjectMentionCandidates}
+                              cloudSpaceEnabled={Boolean(services?.deliveryApi)}
+                              onSelectCloudProject={handleSelectCloudProject}
+                              isStreaming={paneIsBusy}
+                              onPause={pauseCurrentResponse}
+                              onShortenWait={shortenCurrentWait}
+                              shortenWaitAvailable={shortenWaitAvailable}
+                              onCompactContext={compactCurrentContext}
+                              goal={paneSession.goal}
+                              sessionMode={paneSession.sessionMode}
+                              settingsTemplatePicker={settingsTemplatePicker}
+                              settingsTemplateBadge={settingsTemplateBadge}
+                              onInspectExecutionModes={() =>
+                                paneSession.getRuntimeSessionModes({
+                                  ...(currentRuntimeTask ? { address: currentRuntimeTask } : {}),
+                                  deviceId: effectiveWorkspaceTarget?.deviceId,
+                                  workspacePath: effectiveWorkspaceTarget?.path,
+                                })
+                              }
+                              goalContinuing={paneSession.goalContinuing}
+                              taskPlan={paneSession.taskPlan}
+                              goalDraftActive={paneSession.goalDraftActive}
+                              goalDraftMode={paneSession.goalDraftMode}
+                              onSetGoal={composerSupportsGoal ? setCurrentGoal : undefined}
+                              onCancelGoalDraft={paneSession.cancelGoalDraft}
+                              onEditGoal={paneSession.editCurrentGoal}
+                              onPauseGoal={pauseCurrentGoal}
+                              onResumeGoal={resumeCurrentGoal}
+                              onClearGoal={clearCurrentGoal}
+                              onCancelQueuedMessage={paneSession.cancelQueuedMessage}
+                              onReorderQueuedMessages={paneSession.reorderQueuedMessages}
+                              queuePaused={paneSession.queuedMessagesPaused}
+                              onResumeQueue={paneSession.resumeQueuedMessages}
+                              onResumeQueueWithInput={paneSession.resumeQueuedMessagesWithInput}
+                              onClearQueue={paneSession.clearQueuedMessages}
+                              onSendQueuedAsGuidance={paneSession.sendQueuedAsGuidance}
+                              onInterruptAndSendQueuedMessage={paneSession.interruptAndSendQueued}
+                              onEditQueuedMessage={paneSession.editQueuedMessage}
+                              onCancelGuidanceMessage={paneSession.cancelGuidanceMessage}
+                              onClearCodeComments={paneSession.clearCodeComments}
+                              onOpenSkillFile={openLocalSkillFile}
+                              workspaceTarget={composerWorkspaceTarget}
+                              workspaceFileApi={workspaceFileApi}
+                            />
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  }
+                  scrollButtonClassName={DESKTOP_SCROLL_TO_BOTTOM_BUTTON_CLASS}
+                  devices={devices}
+                  onRetryFailedMessage={message => {
+                    void paneSession.retryFailedMessage(message)
+                  }}
+                  onSwitchModelForFailedMessage={message => {
+                    pendingModelRetryRef.current = message
+                    setModelSelectorOpenSignal(signal => signal + 1)
+                  }}
+                  onLoadFileChangesDiff={(subtaskId, fileChanges) =>
+                    loadTurnFileChangesDiff(
+                      subtaskId,
+                      paneMessages,
+                      fileChanges,
+                      currentRuntimeTask
+                    )
+                  }
+                  onRevertFileChanges={(subtaskId, fileChanges) =>
+                    revertTurnFileChanges(subtaskId, paneMessages, fileChanges, currentRuntimeTask)
+                  }
+                  onOpenFileChangesReview={({
+                    subtaskId,
+                    loadDiff,
+                    reviewTitle,
+                    defaultFileTreeVisible,
+                    focusFilePath,
+                  }) => {
+                    previousTurnReviewRef.current = {
+                      loadDiff,
+                      defaultFileTreeVisible,
+                      sourceSubtaskId: subtaskId,
+                    }
+                    setHasPreviousTurnReview(true)
+                    void openReviewFromDiffLoader(loadDiff, {
+                      reviewTitle,
+                      reviewMode: 'previous-turn',
+                      defaultFileTreeVisible,
+                      focusFilePath,
+                      sourceSubtaskId: subtaskId,
+                    })
+                  }}
+                  fileChangesDiffPreviewDisabledSubtaskId={fileChangesDiffPreviewDisabledSubtaskId}
+                  onOpenWorkspaceFile={openWorkspaceFileFromMessage}
+                  onOpenLocalSkillFile={openLocalSkillFile}
+                  onRequestUserInputSubmit={paneSession.sendRequestUserInputResponse}
+                  onRequestUserInputIgnore={paneSession.ignoreRequestUserInput}
+                  onOpenAssistantPlan={openAssistantPlan}
+                  onEditLastUserMessage={paneSession.editLastUserMessage}
+                  canEditLastUserMessage={canEditLastUserMessage}
+                  onForkMessage={message => {
+                    const workspacePath =
+                      currentRuntimeTask?.workspacePath || runtimeTaskWorkspacePath
+                    if (!currentRuntimeTask || !message.turnId || !workspacePath) return
+                    return forkCurrentRuntimeTask(
+                      {
+                        deviceId: currentRuntimeTask.deviceId,
+                        workspacePath,
+                      },
+                      { lastTurnId: message.turnId }
+                    )
+                  }}
+                  hideRequestUserInputBlocks={Boolean(pendingRequestUserInput)}
+                  hiddenRequestUserInputIds={paneSession.answeredRequestUserInputIds}
+                  onAddSelectionToConversation={addSelectionToConversation}
+                  onAskSelectionInSidebar={askSelectionInSidebar}
+                />
+              </WorkspaceMarkdownImageLoaderContext.Provider>
+            </div>
+          ) : (
+            <DesktopEmptyTaskLauncher
+              projectName={currentProject?.name}
+              onOpenProjectSelector={anchorElement => {
+                setProjectMenuAnchorElement(anchorElement)
+                setProjectMenuOpenSignal(signal => signal + 1)
+              }}
+              onSelectSuggestion={selectTaskSuggestion}
+              composer={
+                <>
+                  <DeviceStatusPrompt
+                    devices={devices}
+                    upgradingDevices={upgradingDevices}
+                    onUpgradeDevice={upgradeDevice}
+                    onOpenCloudDeviceSettings={requestOpenCloudDeviceSettings}
+                    activeDeviceId={activeDeviceId}
+                    requiresOnlineCompatibleDevice={noStandaloneCompatibleDevice}
+                    hideAvailableUpdates
+                    className="mb-3"
+                  />
+                  <BufferedChatInput
+                    value={paneSession.input}
+                    onChange={paneSession.setInput}
+                    onSubmit={submitPaneInput}
+                    disabled={composerDisabled}
+                    submitDisabled={paneSession.status.isSubmitting}
+                    error={paneSession.error}
+                    disabledReason={inlineComposerDisabledReason}
+                    placeholder={t('workbench.input_placeholder', '随心输入')}
+                    variant="desktop"
+                    projectChat={projectChatWithModelSelectorSignal}
+                    projectWork={emptyProjectWork}
+                    queuedMessages={paneQueuedMessages}
+                    guidanceMessages={paneGuidanceMessages}
+                    codeComments={paneSession.codeCommentContexts}
+                    cloudMentionCandidates={visibleCloudMentionCandidates}
+                    cloudProjectCandidates={cloudProjectMentionCandidates}
+                    cloudSpaceEnabled={Boolean(services?.deliveryApi)}
+                    onSelectCloudProject={handleSelectCloudProject}
+                    isStreaming={paneIsBusy}
+                    onPause={pauseCurrentResponse}
+                    onShortenWait={shortenCurrentWait}
+                    shortenWaitAvailable={shortenWaitAvailable}
+                    onCompactContext={compactCurrentContext}
+                    goal={paneSession.goal}
+                    sessionMode={paneSession.sessionMode}
+                    settingsTemplatePicker={settingsTemplatePicker}
+                    settingsTemplateBadge={settingsTemplateBadge}
+                    onInspectExecutionModes={() =>
+                      paneSession.getRuntimeSessionModes({
+                        ...(currentRuntimeTask ? { address: currentRuntimeTask } : {}),
+                        deviceId: effectiveWorkspaceTarget?.deviceId,
+                        workspacePath: effectiveWorkspaceTarget?.path,
+                      })
+                    }
+                    goalContinuing={paneSession.goalContinuing}
+                    taskPlan={paneSession.taskPlan}
+                    goalDraftActive={paneSession.goalDraftActive}
+                    goalDraftMode={paneSession.goalDraftMode}
+                    onSetGoal={composerSupportsGoal ? setCurrentGoal : undefined}
+                    onCancelGoalDraft={paneSession.cancelGoalDraft}
+                    onEditGoal={paneSession.editCurrentGoal}
+                    onPauseGoal={pauseCurrentGoal}
+                    onResumeGoal={resumeCurrentGoal}
+                    onClearGoal={clearCurrentGoal}
+                    onCancelQueuedMessage={paneSession.cancelQueuedMessage}
+                    onReorderQueuedMessages={paneSession.reorderQueuedMessages}
+                    queuePaused={paneSession.queuedMessagesPaused}
+                    onResumeQueue={paneSession.resumeQueuedMessages}
+                    onResumeQueueWithInput={paneSession.resumeQueuedMessagesWithInput}
+                    onClearQueue={paneSession.clearQueuedMessages}
+                    onSendQueuedAsGuidance={paneSession.sendQueuedAsGuidance}
+                    onInterruptAndSendQueuedMessage={paneSession.interruptAndSendQueued}
+                    onEditQueuedMessage={paneSession.editQueuedMessage}
+                    onCancelGuidanceMessage={paneSession.cancelGuidanceMessage}
+                    onClearCodeComments={paneSession.clearCodeComments}
+                    onOpenSkillFile={openLocalSkillFile}
+                    workspaceTarget={composerWorkspaceTarget}
+                    workspaceFileApi={workspaceFileApi}
+                  />
+                </>
+              }
+            />
+          )}
+          <aside
+            data-testid="environment-info-panel-container"
+            className={cn(
+              'sticky top-0 z-popover flex h-full w-0 shrink-0 self-start flex-col overflow-hidden has-[[data-environment-info-popover]]:w-[320px] has-[[data-environment-info-popover]]:overflow-visible',
+              hasSubagentStatuses && 'overflow-visible',
+              environmentInfoTransitionEnabled
+                ? 'transition-[width] duration-[300ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none'
+                : 'transition-none'
+            )}
+          >
+            <div ref={setEnvironmentInfoPanelRef} className="shrink-0" />
+            {hasSubagentStatuses && (
+              <div
+                data-testid="workbench-subagent-status-row"
+                className={
+                  environmentInfoDocked && environmentInfoOpen
+                    ? 'ml-2 mt-3 w-[300px]'
+                    : 'absolute right-3 top-3 w-max'
+                }
+              >
+                <SubagentStatusIndicator
+                  statuses={paneSession.subagentStatuses}
+                  onSteer={paneSession.steerSubagent}
+                />
+              </div>
+            )}
+          </aside>
+        </div>
+        {rightPanelOpen && (
+          <div
+            data-testid="right-workspace-resize-handle"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label={t('workbench.resize_right_workspace_panel')}
+            aria-controls="right-workspace-panel-shell"
+            className={cn(
+              'absolute bottom-[-6px] top-0 z-critical w-1.5 -translate-x-1/2 cursor-col-resize bg-transparent after:absolute after:bottom-0 after:left-1/2 after:top-0 after:w-px after:-translate-x-1/2 after:bg-transparent after:transition-colors after:duration-150 after:ease-out hover:after:bg-primary/40',
+              rightSplitResizing ? 'transition-none' : RIGHT_PANEL_HANDLE_TRANSITION_CLASS
+            )}
+            style={{ left: rightSplitChatWidth }}
+            onPointerDown={handleRightSplitResizeStart}
+          />
+        )}
+        <div
+          id="right-workspace-panel-shell"
+          data-testid="right-workspace-panel-shell"
+          className={cn(
+            'relative z-popover min-w-0 shrink-0 overflow-hidden',
+            hasMainBackground ? 'bg-background/20' : 'bg-background',
+            rightSplitResizing ? 'transition-none' : RIGHT_PANEL_SHELL_TRANSITION_CLASS,
+            rightPanelOpen
+              ? 'pointer-events-auto border-l border-border/60 opacity-100'
+              : 'pointer-events-none opacity-0'
+          )}
+          style={{ width: rightPanelShellWidth }}
+          aria-hidden={!rightPanelOpen}
+        >
+          {shouldRenderRightPanel && (
+            <RightWorkspacePanel
+              showWorkbenchBackground={hasMainBackground}
+              visible={paneActive && workbenchVisible && rightPanelOpen}
+              activeView={rightPanelView}
+              openTabs={effectiveRightPanelTabs}
+              currentProject={workspaceProject}
+              canOpenBrowser={canOpenRuntimeBrowser}
+              canBrowseFiles={canBrowseFiles}
+              currentRuntimeTask={currentRuntimeTask}
+              devices={devices}
+              workspaceTarget={effectiveWorkspaceTarget}
+              fileWorkspaceTarget={fileWorkspaceTarget}
+              fileWorkspaceTargets={fileWorkspaceTargets}
+              preferLocalTerminal={preferLocalWorkspaceTerminal}
+              terminalContextTitle={runtimeTaskTitle}
+              workspaceSessionApi={workspaceSessionApi}
+              workspaceFileApi={workspaceFileApi}
+              openFileRequest={openFileRequest}
+              workspaceTargetError={openFileRequest?.target ? null : workspaceTargetError}
+              review={reviewState}
+              planContent={rightPanelPlanContent}
+              embeddedBrowserLabel={embeddedBrowserLabel}
+              embeddedBrowserOpenRequest={embeddedBrowserOpenRequest}
+              onEmbeddedBrowserUrlChange={setEmbeddedBrowserUrl}
+              codeCommentCount={paneSession.codeCommentContexts.length}
+              reviewViewOptions={reviewViewOptions}
+              canOpenReview={Boolean(loadEnvironmentDiff && workspaceTarget)}
+              onAddCodeComment={paneSession.addCodeComment}
+              onSelectFileWorkspaceTarget={selectFileWorkspaceTarget}
+              onSelectReview={selectReviewView}
+              onSelectTerminal={selectTerminalView}
+              onSelectBrowser={selectBrowserView}
+              onSelectFiles={selectFilesView}
+              onSelectChat={selectChatView}
+              onSelectPlan={selectPlanView}
+              onSelectTab={selectRightPanelTab}
+              onCloseTab={closeRightPanelTab}
+              onRefreshReview={reviewState.reloadDiff ? refreshReview : undefined}
+              getChatInitialInput={tab => temporaryChatInitialInputsRef.current.get(tab)}
+            />
+          )}
+        </div>
+      </div>
+      {bottomPanelContextsToRender.map(context => {
+        const active = context.key === bottomPanelWorkspaceKey
+        return (
+          <MemoizedBottomWorkspacePanel
+            key={context.key}
+            panelKey={context.key}
+            open={active && (bottomPanelOpenByKey[context.key] ?? false)}
+            active={active}
+            context={context}
+            workspaceSessionApi={workspaceSessionApi}
+            showWorkbenchBackground={hasMainBackground}
+            onRequestClose={closeBottomPanelContext}
+            onTerminalTabsEmpty={handleTerminalTabsEmpty}
+          />
+        )
+      })}
+      <>
+        <TaskForkDialog
+          key={forkDialogOpen ? `open-${currentRuntimeTask?.taskId ?? 'none'}` : 'closed'}
+          open={forkDialogOpen}
+          source={currentRuntimeTask}
+          runtimeWork={runtimeWork}
+          currentProject={currentProject}
+          devices={devices}
+          requiresStop={paneIsBusy}
+          onOpenChange={setForkDialogOpen}
+          onStopCurrentResponse={() => paneSession.pauseCurrentResponse()}
+          onPrepareDeviceWorkspace={prepareDeviceWorkspace}
+          onDeleteDeviceWorkspace={deleteDeviceWorkspace}
+          onGetDeviceHomeDirectory={getDeviceHomeDirectory}
+          onGetProjectWorkspaceRoot={getProjectWorkspaceRoot}
+          onListDeviceDirectories={listDeviceDirectories}
+          onCreateDeviceDirectory={createDeviceDirectory}
+          onFork={async target => {
+            await forkCurrentRuntimeTask(target)
+          }}
+        />
+        <ContinueInImDialog
+          key={continueInIm.dialog.open ? 'continue-im-open' : 'continue-im-closed'}
+          {...continueInIm.dialog}
+        />
+        <TaskFeedbackDialog
+          open={feedbackDialogOpen}
+          onClose={() => setFeedbackDialogOpen(false)}
+          getTaskContext={async () => {
+            const messages = await paneSession.loadFullTranscriptForExport()
+            return {
+              task: {
+                taskId: currentRuntimeTask?.taskId ?? null,
+                deviceId: currentRuntimeTask?.deviceId ?? null,
+                threadId: currentRuntimeTask?.threadId ?? null,
+                workspacePath: currentRuntimeTask?.workspacePath ?? null,
+                title:
+                  runtimeTaskTitle ?? messages.find(message => message.role === 'user')?.content,
+                status: findRuntimeTask(runtimeWork, currentRuntimeTask)?.status ?? null,
+              },
+              conversation: {
+                messages,
+                queuedMessages: paneSession.queuedMessages,
+                guidanceMessages: paneSession.guidanceMessages,
+                turnNavigation: paneSession.turnNavigation,
+              },
+              runtime: {
+                status: paneSession.status,
+                goal: paneSession.goal,
+                taskPlan: paneSession.taskPlan,
+                subagentStatuses: paneSession.subagentStatuses,
+              },
+            }
+          }}
+        />
+        <TransientNotice
+          message={continueInIm.notice?.message ?? null}
+          tone={continueInIm.notice?.tone}
+          onClear={continueInIm.clearNotice}
+        />
+        <TransientNotice
+          message={todoBindingError}
+          tone="error"
+          onClear={() => setTodoBindingError(null)}
+        />
+        <TransientNotice message={cloudActionNotice} onClear={() => setCloudActionNotice(null)} />
+        {deliveryDialogOpen &&
+          activeDeliveryItem &&
+          currentRuntimeTask &&
+          services?.deliveryApi && (
+            <DeliveryDialog
+              item={activeDeliveryItem}
+              runtimeTask={currentRuntimeTask}
+              runtimeTaskTitle={runtimeTaskTitle}
+              messages={paneSession.messages}
+              deliveryApi={services.deliveryApi}
+              onCancel={() => setDeliveryDialogOpen(false)}
+              onDelivered={() => void finishLocalDelivery()}
+            />
+          )}
+        <SubagentArtifactDrawer
+          open={subagentArtifact !== null}
+          title={subagentArtifact?.title ?? ''}
+          content={subagentArtifact?.content ?? ''}
+          truncated={subagentArtifact?.truncated ?? false}
+          loading={false}
+          error={null}
+          onClose={() => setSubagentArtifact(null)}
+        />
+        {todoBindingPickerOpen && services?.deliveryApi && (
+          <TodoBindingPicker
+            api={services.deliveryApi}
+            runtimeTask={currentRuntimeTask ?? undefined}
+            runtimeTaskTitle={runtimeTaskTitle}
+            currentProject={currentRuntimeTask ? boundCloudProject : pendingCloudProject}
+            currentItem={currentRuntimeTask ? boundCloudItem : pendingTodoItem}
+            onClose={() => {
+              setTodoBindingPickerOpen(false)
+              setDeliverAfterBinding(false)
+            }}
+            onBound={(project, item) => {
+              if (!currentRuntimeTask) {
+                setPendingCloudContext(project, item)
+                setTodoBindingPickerOpen(false)
+                return
+              }
+              setBoundCloudProject(project)
+              setBoundCloudItem(item)
+              setDeliveryItem(item ? cloudItemAsLocalWorkItem(item, currentRuntimeTask) : null)
+              setTodoBindingPickerOpen(false)
+              if (item && deliverAfterBinding) setDeliveryDialogOpen(true)
+              setDeliverAfterBinding(false)
+            }}
+          />
+        )}
+      </>
+    </main>
+  )
+})
+
+function sanitizeEmbeddedBrowserLabelSegment(value: string) {
+  return value
+    .trim()
+    .split('')
+    .map(character => (/^[a-zA-Z0-9_-]$/.test(character) ? character : '-'))
+    .join('')
+}

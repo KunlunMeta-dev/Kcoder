@@ -1,0 +1,1290 @@
+import { afterEach, describe, expect, test, vi } from 'vitest'
+import {
+  createRuntimeTaskStreamHandlers,
+  runtimeMessagesToWorkbenchMessages,
+} from './runtimePaneMessages'
+import type { RuntimePaneMessageAction } from './runtimePaneMessages'
+import type { RuntimeTaskAddress } from '@/types/api'
+
+describe('runtime transcript status', () => {
+  test('does not infer streaming from an active conversation status', () => {
+    const [message] = runtimeMessagesToWorkbenchMessages([
+      {
+        id: 'assistant-history',
+        role: 'assistant',
+        content: 'Finished answer',
+        status: 'active',
+        subtaskId: 'turn-1',
+      },
+    ])
+
+    expect(message.status).toBe('done')
+  })
+
+  test('restores Codex failure details from the runtime transcript', () => {
+    const [message] = runtimeMessagesToWorkbenchMessages([
+      {
+        id: 'assistant-failed',
+        role: 'assistant',
+        content: '',
+        status: 'failed',
+        subtaskId: 'turn-1',
+        error: 'The upstream response ended before a terminal event.',
+        errorType: 'response.failed',
+      },
+    ])
+
+    expect(message).toMatchObject({
+      status: 'failed',
+      error: 'The upstream response ended before a terminal event.',
+      errorType: 'response.failed',
+    })
+  })
+})
+
+describe('createRuntimeTaskStreamHandlers', () => {
+  test.each(['done', 'error'] as const)(
+    'settles only reconnect messages on %s updates and snapshots',
+    status => {
+      const address = { taskId: 'task', deviceId: 'local' }
+      const actions: RuntimePaneMessageAction[] = []
+      const onAssistantSettled = vi.fn()
+      const handlers = createRuntimeTaskStreamHandlers(address, {
+        onMessageAction: action => actions.push(action),
+        onAssistantSettled,
+      })
+      const reconnect = 'runtime-reconnecting-thread-first'
+      handlers.onBlockCreated?.({
+        ...address,
+        subtaskId: reconnect,
+        block: {
+          id: reconnect,
+          type: 'tool',
+          tool_name: 'runtime_reconnecting',
+          status: 'pending',
+        },
+      })
+      expect(actions.map(action => action.type)).toEqual(['block_created'])
+      handlers.onBlockUpdated?.({ ...address, subtaskId: reconnect, blockId: reconnect, status })
+      expect(actions.at(-1)).toEqual({ type: 'assistant_done', subtaskId: reconnect, content: '' })
+      const next = 'runtime-reconnecting-thread-second'
+      handlers.onBlockCreated?.({
+        ...address,
+        subtaskId: next,
+        block: { id: next, type: 'tool', tool_name: 'runtime_reconnecting', status: 'pending' },
+      })
+      expect(actions.at(-1)?.type).toBe('block_created')
+      handlers.onBlockUpdated?.({ ...address, subtaskId: reconnect, blockId: reconnect, status })
+      expect(actions.at(-1)?.type).toBe('block_updated')
+      handlers.onBlockCreated?.({
+        ...address,
+        subtaskId: next,
+        block: { id: next, type: 'tool', tool_name: 'runtime_reconnecting', status },
+      })
+      expect(actions.at(-1)).toEqual({ type: 'assistant_done', subtaskId: next, content: '' })
+      handlers.onBlockUpdated?.({ ...address, subtaskId: 'real-turn', blockId: next, status })
+      expect(actions.at(-1)?.type).toBe('block_updated')
+      const ordinary = 'runtime-reconnecting-not-a-system-message'
+      handlers.onBlockCreated?.({
+        ...address,
+        subtaskId: ordinary,
+        block: { id: ordinary, type: 'tool', tool_name: 'bash', status: 'pending' },
+      })
+      handlers.onBlockUpdated?.({ ...address, subtaskId: ordinary, blockId: ordinary, status })
+      expect(actions.at(-1)?.type).toBe('block_updated')
+      expect(onAssistantSettled).not.toHaveBeenCalled()
+    }
+  )
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  test('uses task and subtask identity for runtime assistant messages', () => {
+    const address: RuntimeTaskAddress = {
+      deviceId: 'device-1',
+      taskId: 'runtime-task-1',
+    }
+    const actions: RuntimePaneMessageAction[] = []
+    const handlers = createRuntimeTaskStreamHandlers(address, {
+      onMessageAction: action => actions.push(action),
+    })
+
+    handlers.onChatChunk?.({
+      taskId: 'runtime-task-1',
+      subtaskId: 'subtask-9',
+      deviceId: 'device-1',
+      content: 'partial',
+      offset: 0,
+      result: {},
+    })
+
+    expect(actions).toHaveLength(1)
+    expect(actions[0]).toMatchObject({
+      type: 'assistant_chunk',
+      subtaskId: 'subtask-9',
+      content: 'partial',
+      offset: 0,
+    })
+    expect('messageId' in actions[0]).toBe(false)
+  })
+
+  test('forwards structured task-plan updates for the active runtime task', () => {
+    const address: RuntimeTaskAddress = {
+      deviceId: 'device-1',
+      taskId: 'runtime-task-1',
+    }
+    const onRuntimePlanUpdated = vi.fn()
+    const handlers = createRuntimeTaskStreamHandlers(address, {
+      onMessageAction: vi.fn(),
+      onRuntimePlanUpdated,
+    })
+
+    handlers.onRuntimePlanUpdated?.({
+      taskId: 'runtime-task-1',
+      subtaskId: 'subtask-9',
+      deviceId: 'device-1',
+      threadId: 'thread-1',
+      turnId: 'turn-1',
+      explanation: 'Implement the requested change.',
+      plan: [{ step: 'Implement', status: 'inProgress' }],
+    })
+
+    expect(onRuntimePlanUpdated).toHaveBeenCalledWith({
+      taskId: 'runtime-task-1',
+      subtaskId: 'subtask-9',
+      deviceId: 'device-1',
+      threadId: 'thread-1',
+      turnId: 'turn-1',
+      explanation: 'Implement the requested change.',
+      plan: [{ step: 'Implement', status: 'inProgress' }],
+    })
+  })
+
+  test('streams camelCase reasoning chunks into assistant messages', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const address: RuntimeTaskAddress = {
+      deviceId: 'device-1',
+      taskId: 'runtime-task-1',
+    }
+    const actions: RuntimePaneMessageAction[] = []
+    const handlers = createRuntimeTaskStreamHandlers(address, {
+      onMessageAction: action => actions.push(action),
+    })
+
+    handlers.onChatChunk?.({
+      taskId: 'runtime-task-1',
+      subtaskId: 'subtask-9',
+      deviceId: 'device-1',
+      content: '',
+      offset: 0,
+      result: { reasoningChunk: '正在分析' },
+    })
+
+    expect(actions).toHaveLength(1)
+    expect(actions[0]).toMatchObject({
+      type: 'assistant_chunk',
+      subtaskId: 'subtask-9',
+      content: '',
+      reasoningChunk: '正在分析',
+    })
+    expect(warn).not.toHaveBeenCalled()
+  })
+
+  test('warns instead of silently dropping empty runtime chunks', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const address: RuntimeTaskAddress = {
+      deviceId: 'device-1',
+      taskId: 'runtime-task-1',
+    }
+    const actions: RuntimePaneMessageAction[] = []
+    const handlers = createRuntimeTaskStreamHandlers(address, {
+      onMessageAction: action => actions.push(action),
+    })
+
+    handlers.onChatChunk?.({
+      taskId: 'runtime-task-1',
+      subtaskId: 'subtask-9',
+      deviceId: 'device-1',
+      content: '',
+      offset: 0,
+      result: {},
+    })
+
+    expect(actions).toHaveLength(0)
+    expect(warn).toHaveBeenCalledWith(
+      '[KCoder Studio] Dropped empty runtime stream chunk',
+      expect.objectContaining({
+        event: 'chat:chunk',
+        taskId: 'runtime-task-1',
+        deviceId: 'device-1',
+        subtaskId: 'subtask-9',
+        reason: 'empty_chunk',
+      })
+    )
+  })
+
+  test('updates context usage from task-scoped chunks without subtask identity', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const address: RuntimeTaskAddress = {
+      deviceId: 'device-1',
+      taskId: 'runtime-task-1',
+    }
+    const actions: RuntimePaneMessageAction[] = []
+    const onContextUsageUpdated = vi.fn()
+    const contextUsage = {
+      total: {
+        totalTokens: 15_000,
+        inputTokens: 12_000,
+        cachedInputTokens: 2_000,
+        outputTokens: 3_000,
+        reasoningOutputTokens: 0,
+      },
+      last: {
+        totalTokens: 8_000,
+        inputTokens: 7_000,
+        cachedInputTokens: 1_000,
+        outputTokens: 1_000,
+        reasoningOutputTokens: 0,
+      },
+      modelContextWindow: 258_000,
+    }
+    const handlers = createRuntimeTaskStreamHandlers(address, {
+      onMessageAction: action => actions.push(action),
+      onContextUsageUpdated,
+    })
+
+    handlers.onChatChunk?.({
+      taskId: 'runtime-task-1',
+      deviceId: 'device-1',
+      content: '',
+      result: { contextUsage },
+    })
+
+    expect(actions).toHaveLength(0)
+    expect(onContextUsageUpdated).toHaveBeenCalledWith(contextUsage)
+    expect(warn).not.toHaveBeenCalled()
+  })
+
+  test('warns when snake case reasoning chunks reach the pane layer', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const address: RuntimeTaskAddress = {
+      deviceId: 'device-1',
+      taskId: 'runtime-task-1',
+    }
+    const actions: RuntimePaneMessageAction[] = []
+    const handlers = createRuntimeTaskStreamHandlers(address, {
+      onMessageAction: action => actions.push(action),
+    })
+
+    handlers.onChatChunk?.({
+      taskId: 'runtime-task-1',
+      subtaskId: 'subtask-9',
+      deviceId: 'device-1',
+      content: '',
+      offset: 0,
+      result: { reasoning_chunk: '正在分析' },
+    })
+
+    expect(actions).toHaveLength(0)
+    expect(warn).toHaveBeenCalledWith(
+      '[KCoder Studio] Dropped empty runtime stream chunk',
+      expect.objectContaining({
+        event: 'chat:chunk',
+        taskId: 'runtime-task-1',
+        deviceId: 'device-1',
+        subtaskId: 'subtask-9',
+        resultKeys: ['reasoning_chunk'],
+      })
+    )
+  })
+
+  test('passes context compaction through regular block created actions', () => {
+    const address: RuntimeTaskAddress = {
+      deviceId: 'device-1',
+      taskId: 'runtime-task-1',
+    }
+    const actions: RuntimePaneMessageAction[] = []
+    const onAssistantSettled = vi.fn()
+    const onRefreshWorkLists = vi.fn()
+    const handlers = createRuntimeTaskStreamHandlers(address, {
+      onMessageAction: action => actions.push(action),
+      onAssistantSettled,
+      onRefreshWorkLists,
+    })
+
+    handlers.onBlockCreated?.({
+      taskId: 'runtime-task-1',
+      subtaskId: 'runtime-task-1-context-compact',
+      deviceId: 'device-1',
+      block: {
+        id: 'ctx-1',
+        type: 'tool',
+        tool_name: 'context_compaction',
+        status: 'done',
+        timestamp: 1770000000000,
+      },
+    })
+
+    expect(actions).toHaveLength(2)
+    expect(actions[0]).toMatchObject({
+      type: 'block_created',
+      block: {
+        id: 'ctx-1',
+        type: 'tool',
+        toolName: 'context_compaction',
+        status: 'done',
+      },
+    })
+    expect(actions[1]).toMatchObject({
+      type: 'assistant_done',
+      subtaskId: 'runtime-task-1-context-compact',
+      content: '',
+    })
+    expect(onAssistantSettled).toHaveBeenCalledTimes(1)
+    expect(onRefreshWorkLists).toHaveBeenCalledTimes(1)
+  })
+
+  test('does not finish an active assistant turn for automatic context compaction', () => {
+    const address: RuntimeTaskAddress = {
+      deviceId: 'device-1',
+      taskId: 'runtime-task-1',
+    }
+    const actions: RuntimePaneMessageAction[] = []
+    const onAssistantSettled = vi.fn()
+    const onRefreshWorkLists = vi.fn()
+    const handlers = createRuntimeTaskStreamHandlers(address, {
+      onMessageAction: action => actions.push(action),
+      onAssistantSettled,
+      onRefreshWorkLists,
+    })
+
+    handlers.onBlockCreated?.({
+      taskId: 'runtime-task-1',
+      subtaskId: 'subtask-9',
+      deviceId: 'device-1',
+      block: {
+        id: 'ctx-1',
+        type: 'tool',
+        tool_name: 'context_compaction',
+        status: 'done',
+        timestamp: 1770000000000,
+      },
+    })
+
+    expect(actions).toHaveLength(1)
+    expect(actions[0]).toMatchObject({
+      type: 'block_created',
+      subtaskId: 'subtask-9',
+      block: {
+        id: 'ctx-1',
+        type: 'tool',
+        toolName: 'context_compaction',
+        status: 'done',
+      },
+    })
+    expect(onAssistantSettled).not.toHaveBeenCalled()
+    expect(onRefreshWorkLists).not.toHaveBeenCalled()
+  })
+
+  test('preserves request user input render payload on block created events', () => {
+    const address: RuntimeTaskAddress = {
+      deviceId: 'device-1',
+      taskId: 'runtime-task-1',
+    }
+    const actions: RuntimePaneMessageAction[] = []
+    const handlers = createRuntimeTaskStreamHandlers(address, {
+      onMessageAction: action => actions.push(action),
+    })
+    const renderPayload = {
+      kind: 'request_user_input',
+      request_id: 42,
+      questions: [
+        {
+          id: 'goal',
+          question: 'What should I prioritize?',
+          options: [{ label: 'Work goal', description: 'Focus the next turn' }],
+        },
+      ],
+    }
+
+    handlers.onBlockCreated?.({
+      taskId: 'runtime-task-1',
+      subtaskId: 'subtask-9',
+      deviceId: 'device-1',
+      block: {
+        id: 'request-42',
+        type: 'tool',
+        tool_name: 'request_user_input',
+        status: 'pending',
+        render_payload: renderPayload,
+      },
+    })
+
+    expect(actions).toHaveLength(1)
+    expect(actions[0]).toMatchObject({
+      type: 'block_created',
+      block: {
+        id: 'request-42',
+        type: 'tool',
+        toolName: 'request_user_input',
+        renderPayload,
+      },
+    })
+  })
+
+  test('strips Codex UI directives from completed assistant content', () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    const address: RuntimeTaskAddress = {
+      deviceId: 'device-1',
+      taskId: 'runtime-task-1',
+    }
+    const actions: RuntimePaneMessageAction[] = []
+    const handlers = createRuntimeTaskStreamHandlers(address, {
+      onMessageAction: action => actions.push(action),
+    })
+
+    handlers.onChatDone?.({
+      taskId: 'runtime-task-1',
+      subtaskId: 'subtask-9',
+      deviceId: 'device-1',
+      offset: 0,
+      result: {
+        turnId: 'turn-9',
+        value: [
+          '当前分支比 origin/main ahead 1，可以直接 push。',
+          '',
+          '::git-stage{cwd="/workspace/project"} ::git-commit{cwd="/workspace/project"}',
+        ].join('\n'),
+      },
+    })
+
+    expect(actions).toHaveLength(1)
+    expect(actions[0]).toMatchObject({
+      type: 'assistant_done',
+      subtaskId: 'subtask-9',
+      turnId: 'turn-9',
+      content: '当前分支比 origin/main ahead 1，可以直接 push。',
+    })
+    expect(info).toHaveBeenCalledWith(
+      '[KCoder Studio] Runtime terminal event accepted',
+      expect.objectContaining({
+        event: 'chat:done',
+        payloadTaskId: 'runtime-task-1',
+        payloadSubtaskId: 'subtask-9',
+      })
+    )
+  })
+
+  test('warns when a terminal event does not match the subscribed runtime task', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const actions: RuntimePaneMessageAction[] = []
+    const handlers = createRuntimeTaskStreamHandlers(
+      { deviceId: 'device-1', taskId: 'runtime-task-1' },
+      { onMessageAction: action => actions.push(action) }
+    )
+
+    handlers.onChatDone?.({
+      taskId: 'runtime-task-2',
+      subtaskId: 'subtask-9',
+      deviceId: 'device-1',
+      result: { value: 'complete' },
+    })
+
+    expect(actions).toHaveLength(0)
+    expect(warn).toHaveBeenCalledWith(
+      '[KCoder Studio] Dropped mismatched runtime terminal event',
+      expect.objectContaining({
+        event: 'chat:done',
+        payloadTaskId: 'runtime-task-2',
+        payloadSubtaskId: 'subtask-9',
+      })
+    )
+  })
+
+  test('settles runtime streams without forwarding empty final content', () => {
+    const address: RuntimeTaskAddress = {
+      deviceId: 'device-1',
+      taskId: 'runtime-task-1',
+    }
+    const actions: RuntimePaneMessageAction[] = []
+    const handlers = createRuntimeTaskStreamHandlers(address, {
+      onMessageAction: action => actions.push(action),
+    })
+
+    handlers.onChatDone?.({
+      taskId: 'runtime-task-1',
+      subtaskId: 'subtask-9',
+      offset: 0,
+      deviceId: 'device-1',
+      result: {
+        value: '',
+      },
+    })
+
+    expect(actions).toHaveLength(1)
+    expect(actions[0]).toMatchObject({
+      type: 'assistant_done',
+      subtaskId: 'subtask-9',
+    })
+    expect(
+      (actions[0] as Extract<RuntimePaneMessageAction, { type: 'assistant_done' }>).content
+    ).toBeUndefined()
+  })
+
+  test('builds the completed turn file changes summary from streamed blocks', () => {
+    const actions: RuntimePaneMessageAction[] = []
+    const handlers = createRuntimeTaskStreamHandlers(
+      { deviceId: 'device-1', taskId: 'runtime-task-1' },
+      { onMessageAction: action => actions.push(action) }
+    )
+    const summary = {
+      version: 1 as const,
+      status: 'active' as const,
+      artifact_id: 'artifact-1',
+      device_id: 'device-1',
+      workspace_path: '/workspace/project',
+      file_count: 1,
+      additions: 2,
+      deletions: 1,
+      files: [
+        {
+          path: 'src/main.ts',
+          change_type: 'modified' as const,
+          additions: 2,
+          deletions: 1,
+          binary: false,
+        },
+      ],
+    }
+
+    handlers.onChatDone?.({
+      taskId: 'runtime-task-1',
+      subtaskId: 'subtask-9',
+      deviceId: 'device-1',
+      result: {
+        value: 'Done',
+        blocks: [
+          {
+            id: 'file-changes-1',
+            type: 'file_changes',
+            status: 'done',
+            fileChanges: summary,
+          },
+        ],
+      },
+    })
+
+    expect(actions).toHaveLength(1)
+    expect(actions[0]).toMatchObject({
+      type: 'assistant_done',
+      fileChanges: summary,
+    })
+  })
+
+  test('keeps file change blocks until a later completion event', () => {
+    const actions: RuntimePaneMessageAction[] = []
+    const handlers = createRuntimeTaskStreamHandlers(
+      { deviceId: 'device-1', taskId: 'runtime-task-1' },
+      { onMessageAction: action => actions.push(action) }
+    )
+    const fileChanges = {
+      version: 1 as const,
+      status: 'active' as const,
+      artifact_id: 'artifact-1',
+      device_id: 'device-1',
+      workspace_path: '/workspace/project',
+      file_count: 1,
+      additions: 1,
+      deletions: 0,
+      files: [
+        {
+          path: 'qa.txt',
+          change_type: 'created' as const,
+          additions: 1,
+          deletions: 0,
+          binary: false,
+        },
+      ],
+    }
+
+    handlers.onBlockCreated?.({
+      taskId: 'runtime-task-1',
+      subtaskId: 'subtask-9',
+      deviceId: 'device-1',
+      block: {
+        id: 'file-changes-1',
+        type: 'file_changes',
+        status: 'streaming',
+        file_changes: fileChanges,
+      },
+    })
+    handlers.onChatDone?.({
+      taskId: 'runtime-task-1',
+      subtaskId: 'subtask-9',
+      deviceId: 'device-1',
+      result: { value: 'Done' },
+    })
+
+    expect(actions[1]).toMatchObject({
+      type: 'assistant_done',
+      fileChanges,
+    })
+  })
+
+  test('restores historical blocks that use a numeric subtask identity', () => {
+    const messages = runtimeMessagesToWorkbenchMessages([
+      {
+        id: 'assistant-history',
+        role: 'assistant',
+        content: '已完成',
+        subtaskId: 901,
+        blocks: [
+          {
+            id: 'tool-history',
+            type: 'tool',
+            tool_name: 'exec_command',
+            tool_input: { cmd: 'pwd' },
+            status: 'done',
+            timestamp: 1_770_000_000_000,
+            completed_at: 1_770_000_020_000,
+          },
+          {
+            id: 'file-history',
+            type: 'file_changes',
+            status: 'done',
+            file_changes: {
+              version: 1,
+              status: 'active',
+              artifact_id: 'artifact-history',
+              device_id: 'device-1',
+              workspace_path: '/workspace/project',
+              file_count: 1,
+              additions: 1,
+              deletions: 0,
+              files: [
+                {
+                  path: 'history.txt',
+                  change_type: 'created',
+                  additions: 1,
+                  deletions: 0,
+                  binary: false,
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ])
+
+    expect(messages[0]).toMatchObject({
+      subtaskId: '901',
+      fileChanges: {
+        status: 'active',
+        artifact_id: 'artifact-history',
+        files: [{ path: 'history.txt' }],
+      },
+      blocks: [
+        {
+          type: 'tool',
+          toolName: 'exec_command',
+          createdAt: 1_770_000_000_000,
+          completedAt: 1_770_000_020_000,
+        },
+        { type: 'file_changes', fileChanges: { files: [{ path: 'history.txt' }] } },
+      ],
+    })
+  })
+
+  test('restores answered user-question summaries from app-server history', () => {
+    const [message] = runtimeMessagesToWorkbenchMessages([
+      {
+        id: 'assistant-history',
+        role: 'assistant',
+        content: 'Selected BETA.',
+        subtaskId: 'turn-1',
+        blocks: [
+          {
+            id: 'question-call-1',
+            type: 'tool',
+            tool_name: 'AskUserQuestion',
+            status: 'done',
+            render_payload: {
+              kind: 'request_user_input',
+              itemId: 'question-call-1',
+              questions: [
+                {
+                  id: 'question-1',
+                  question: 'Which option should be used?',
+                  options: [
+                    { label: 'ALPHA', description: 'Use alpha.' },
+                    { label: 'BETA', description: 'Use beta.' },
+                  ],
+                },
+              ],
+              response: {
+                itemId: 'question-call-1',
+                answers: {
+                  'question-1': { answers: ['BETA'] },
+                },
+              },
+            },
+          },
+        ],
+      },
+    ])
+
+    expect(message.blocks?.[0]).toMatchObject({
+      type: 'tool',
+      toolName: 'AskUserQuestion',
+      status: 'done',
+      renderPayload: {
+        kind: 'request_user_input',
+        response: {
+          itemId: 'question-call-1',
+          answers: {
+            'question-1': { answers: ['BETA'] },
+          },
+        },
+      },
+    })
+  })
+
+  test('treats interrupted runtime errors as cancellation events', () => {
+    const address: RuntimeTaskAddress = {
+      deviceId: 'device-1',
+      taskId: 'runtime-task-1',
+    }
+    const actions: RuntimePaneMessageAction[] = []
+    const handlers = createRuntimeTaskStreamHandlers(address, {
+      onMessageAction: action => actions.push(action),
+    })
+
+    handlers.onChatError?.({
+      taskId: 'runtime-task-1',
+      subtaskId: 'subtask-9',
+      deviceId: 'device-1',
+      error: 'interrupted',
+    })
+
+    expect(actions).toHaveLength(1)
+    expect(actions[0]).toMatchObject({
+      type: 'assistant_cancelled',
+      subtaskId: 'subtask-9',
+    })
+  })
+
+  test('treats the engine user-cancellation reason as a cancellation event', () => {
+    const address: RuntimeTaskAddress = {
+      deviceId: 'device-1',
+      taskId: 'runtime-task-1',
+    }
+    const actions: RuntimePaneMessageAction[] = []
+    const handlers = createRuntimeTaskStreamHandlers(address, {
+      onMessageAction: action => actions.push(action),
+    })
+
+    handlers.onChatError?.({
+      taskId: 'runtime-task-1',
+      subtaskId: 'subtask-user-stop',
+      deviceId: 'device-1',
+      error: 'cancelled by user',
+    })
+
+    expect(actions).toEqual([
+      expect.objectContaining({
+        type: 'assistant_cancelled',
+        subtaskId: 'subtask-user-stop',
+      }),
+    ])
+  })
+
+  test('warns before dropping runtime stream message events without task identity', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const address: RuntimeTaskAddress = {
+      deviceId: 'device-1',
+      taskId: 'runtime-task-1',
+    }
+    const actions: RuntimePaneMessageAction[] = []
+    const handlers = createRuntimeTaskStreamHandlers(address, {
+      onMessageAction: action => actions.push(action),
+    })
+
+    handlers.onChatChunk?.({
+      taskId: 'runtime-task-1',
+      deviceId: 'device-1',
+      content: 'partial',
+      offset: 0,
+      result: {},
+    } as Parameters<NonNullable<typeof handlers.onChatChunk>>[0])
+
+    expect(actions).toHaveLength(0)
+    expect(warn).toHaveBeenCalledWith(
+      '[KCoder Studio] Dropped runtime stream event without task identity',
+      expect.objectContaining({
+        event: 'chat:chunk',
+        taskId: 'runtime-task-1',
+        deviceId: 'device-1',
+        subtaskId: undefined,
+        hasContent: true,
+      })
+    )
+  })
+
+  test('maps zero subtask ids to subtask ids for runtime block events', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const address: RuntimeTaskAddress = {
+      deviceId: 'device-1',
+      taskId: 'runtime-task-1',
+    }
+    const actions: RuntimePaneMessageAction[] = []
+    const handlers = createRuntimeTaskStreamHandlers(address, {
+      onMessageAction: action => actions.push(action),
+    })
+
+    handlers.onBlockUpdated?.({
+      taskId: 'runtime-task-1',
+      subtaskId: '0',
+      deviceId: 'device-1',
+      blockId: 'text-local-task-1-0-1',
+      content: 'partial',
+      status: 'streaming',
+    })
+
+    expect(actions).toHaveLength(1)
+    expect(actions[0]).toMatchObject({
+      type: 'block_updated',
+      subtaskId: '0',
+      blockId: 'text-local-task-1-0-1',
+      updates: {
+        content: 'partial',
+        status: 'streaming',
+      },
+    })
+    expect(warn).not.toHaveBeenCalled()
+  })
+})
+
+describe('runtimeMessagesToWorkbenchMessages', () => {
+  test('uses the client message id to reconcile a persisted user message', () => {
+    const [message] = runtimeMessagesToWorkbenchMessages([
+      {
+        id: 'codex-user-item-1',
+        clientMessageId: 'runtime-local-pane-1',
+        role: 'user',
+        content: 'hello',
+        status: 'done',
+        createdAt: '2026-07-17T00:00:00.000Z',
+      },
+    ])
+
+    expect(message).toMatchObject({
+      id: 'runtime-local-pane-1',
+      role: 'user',
+      content: 'hello',
+    })
+  })
+
+  test('replaces a failed attempt when the same user message is retried successfully', () => {
+    const messages = runtimeMessagesToWorkbenchMessages([
+      {
+        id: 'provider-user-1',
+        clientMessageId: 'runtime-local-pane-1',
+        role: 'user',
+        content: 'fix the failure',
+        status: 'done',
+        createdAt: '2026-07-17T00:00:00.000Z',
+      },
+      {
+        id: 'assistant-failed',
+        role: 'assistant',
+        content: '',
+        status: 'failed',
+        subtaskId: 'turn-1',
+        error: 'request failed',
+        createdAt: '2026-07-17T00:00:01.000Z',
+      },
+      {
+        id: 'provider-user-2',
+        clientMessageId: 'runtime-local-pane-1',
+        role: 'user',
+        content: 'fix the failure',
+        status: 'done',
+        createdAt: '2026-07-17T00:00:02.000Z',
+      },
+      {
+        id: 'assistant-success',
+        role: 'assistant',
+        content: 'fixed',
+        status: 'done',
+        subtaskId: 'turn-2',
+        createdAt: '2026-07-17T00:00:03.000Z',
+      },
+    ])
+
+    expect(messages.map(message => message.id)).toEqual([
+      'runtime-local-pane-1',
+      'assistant-success',
+    ])
+    expect(messages.some(message => message.status === 'failed')).toBe(false)
+  })
+
+  test('keeps the latest failure when repeated retries continue to fail', () => {
+    const messages = runtimeMessagesToWorkbenchMessages([
+      {
+        id: 'provider-user-1',
+        clientMessageId: 'runtime-local-pane-1',
+        role: 'user',
+        content: 'fix the failure',
+        status: 'done',
+      },
+      {
+        id: 'assistant-failed-1',
+        role: 'assistant',
+        content: '',
+        status: 'failed',
+        subtaskId: 'turn-1',
+        error: 'first failure',
+      },
+      {
+        id: 'provider-user-2',
+        clientMessageId: 'runtime-local-pane-1',
+        role: 'user',
+        content: 'fix the failure',
+        status: 'done',
+      },
+      {
+        id: 'assistant-failed-2',
+        role: 'assistant',
+        content: '',
+        status: 'failed',
+        subtaskId: 'turn-2',
+        error: 'second failure',
+      },
+    ])
+
+    expect(messages.map(message => message.id)).toEqual([
+      'runtime-local-pane-1',
+      'assistant-failed-2',
+    ])
+    expect(messages[1]).toMatchObject({ error: 'second failure' })
+  })
+
+  test('keeps a manually repeated prompt when it has a different client identity', () => {
+    const messages = runtimeMessagesToWorkbenchMessages([
+      {
+        id: 'history-user-turn-1',
+        role: 'user',
+        content: 'retry persisted prompt',
+        status: 'done',
+      },
+      {
+        id: 'history-assistant-turn-1',
+        role: 'assistant',
+        content: '',
+        status: 'failed',
+        error: 'provider unavailable',
+      },
+      {
+        id: 'history-user-turn-2',
+        role: 'user',
+        content: 'retry persisted prompt',
+        status: 'done',
+      },
+      {
+        id: 'history-assistant-turn-2',
+        role: 'assistant',
+        content: 'recovered',
+        status: 'done',
+      },
+    ])
+
+    expect(messages.map(message => message.id)).toEqual([
+      'history-user-turn-1',
+      'history-assistant-turn-1',
+      'history-user-turn-2',
+      'history-assistant-turn-2',
+    ])
+  })
+
+  test('keeps identical text with different attachments as a distinct attempt', () => {
+    const messages = runtimeMessagesToWorkbenchMessages([
+      {
+        id: 'history-user-turn-1',
+        clientMessageId: 'client-1',
+        role: 'user',
+        content: 'inspect this',
+        status: 'done',
+        attachments: [{ id: 1, filename: 'a.txt' }],
+      },
+      {
+        id: 'history-assistant-turn-1',
+        role: 'assistant',
+        content: '',
+        status: 'failed',
+        error: 'provider unavailable',
+      },
+      {
+        id: 'history-user-turn-2',
+        clientMessageId: 'client-2',
+        role: 'user',
+        content: 'inspect this',
+        status: 'done',
+        attachments: [{ id: 2, filename: 'b.txt' }],
+      },
+    ])
+
+    expect(messages.map(message => message.id)).toEqual([
+      'client-1',
+      'history-assistant-turn-1',
+      'client-2',
+    ])
+  })
+
+  test('does not collapse an older failed turn across a newer user message', () => {
+    const messages = runtimeMessagesToWorkbenchMessages([
+      {
+        id: 'provider-user-1',
+        clientMessageId: 'runtime-local-pane-1',
+        role: 'user',
+        content: 'first request',
+        status: 'done',
+      },
+      {
+        id: 'assistant-failed-1',
+        role: 'assistant',
+        content: '',
+        status: 'failed',
+        subtaskId: 'turn-1',
+        error: 'first failure',
+      },
+      {
+        id: 'provider-user-2',
+        clientMessageId: 'runtime-local-pane-2',
+        role: 'user',
+        content: 'second request',
+        status: 'done',
+      },
+      {
+        id: 'assistant-success-2',
+        role: 'assistant',
+        content: 'second response',
+        status: 'done',
+        subtaskId: 'turn-2',
+      },
+      {
+        id: 'provider-user-1-retry',
+        clientMessageId: 'runtime-local-pane-1',
+        role: 'user',
+        content: 'first request',
+        status: 'done',
+      },
+    ])
+
+    expect(messages.map(message => message.id)).toEqual([
+      'runtime-local-pane-1',
+      'assistant-failed-1',
+      'runtime-local-pane-2',
+      'assistant-success-2',
+      'runtime-local-pane-1',
+    ])
+  })
+})
+
+describe('runtimeMessagesToWorkbenchMessages', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  test('uses explicit camelCase subtask identity for restored runtime blocks', () => {
+    const messages = runtimeMessagesToWorkbenchMessages([
+      {
+        id: 'assistant-runtime',
+        role: 'assistant',
+        content: '',
+        subtaskId: '10000110751749',
+        status: 'streaming',
+        blocks: [
+          {
+            id: 'text-1',
+            type: 'text',
+            content: 'streamed process text',
+            status: 'done',
+          },
+        ],
+      },
+    ])
+
+    expect(messages[0]).toMatchObject({
+      subtaskId: '10000110751749',
+      blocks: [
+        {
+          id: 'text-1',
+          subtaskId: '10000110751749',
+          type: 'text',
+        },
+      ],
+    })
+  })
+
+  test('warns instead of creating fallback ids for restored runtime messages without subtask identity', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const messages = runtimeMessagesToWorkbenchMessages([
+      {
+        id: 'assistant-runtime',
+        role: 'assistant',
+        content: '',
+        status: 'streaming',
+        blocks: [
+          {
+            id: 'text-1',
+            type: 'text',
+            content: 'streamed process text',
+            status: 'done',
+          },
+        ],
+      },
+    ])
+
+    expect(messages[0].subtaskId).toBeUndefined()
+    expect(messages[0].blocks).toBeUndefined()
+    expect(warn).toHaveBeenCalledWith(
+      '[KCoder Studio] Runtime transcript message missing valid subtask identity',
+      expect.objectContaining({
+        messageId: 'assistant-runtime',
+        status: 'streaming',
+        blockCount: 1,
+      })
+    )
+  })
+
+  test('warns instead of creating fallback block ids for restored runtime blocks', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const messages = runtimeMessagesToWorkbenchMessages([
+      {
+        id: 'assistant-runtime',
+        role: 'assistant',
+        content: '',
+        subtaskId: '10000110751749',
+        status: 'streaming',
+        blocks: [
+          {
+            type: 'text',
+            content: 'streamed process text',
+            status: 'done',
+          },
+        ],
+      },
+    ])
+
+    expect(messages[0].blocks).toBeUndefined()
+    expect(warn).toHaveBeenCalledWith(
+      '[KCoder Studio] Dropped runtime transcript block without block identity',
+      expect.objectContaining({
+        subtaskId: '10000110751749',
+        blockType: 'text',
+      })
+    )
+  })
+
+  test('strips Codex UI directives from restored assistant transcript content', () => {
+    const messages = runtimeMessagesToWorkbenchMessages([
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: [
+          '完成了。',
+          '',
+          '```text',
+          '::git-stage{cwd="/workspace/project"}',
+          '```',
+          '',
+          '::git-commit{cwd="/workspace/project"}',
+        ].join('\n'),
+      },
+    ])
+
+    expect(messages[0].content).toBe(
+      ['完成了。', '', '```text', '::git-stage{cwd="/workspace/project"}', '```'].join('\n')
+    )
+  })
+
+  test('ignores invalid short-content truncation markers from a runtime transcript', () => {
+    const messages = runtimeMessagesToWorkbenchMessages([
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '这是一段完整的短回复。',
+        content_truncated: true,
+        content_original_chars: 11,
+      },
+    ])
+
+    expect(messages[0]).toMatchObject({
+      content: '这是一段完整的短回复。',
+      contentTruncated: undefined,
+      contentOriginalChars: undefined,
+    })
+  })
+
+  test('ignores a short streamed suffix mislabeled as truncated content', () => {
+    const messages = runtimeMessagesToWorkbenchMessages([
+      {
+        id: 'assistant-k3',
+        role: 'assistant',
+        content: '保持两边同步。',
+        content_truncated: true,
+        content_original_chars: 26,
+      },
+    ])
+
+    expect(messages[0]).toMatchObject({
+      content: '保持两边同步。',
+      contentTruncated: undefined,
+      contentOriginalChars: undefined,
+    })
+  })
+
+  test('keeps valid runtime content truncation markers so full content can be loaded', () => {
+    const messages = runtimeMessagesToWorkbenchMessages([
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '回复末尾预览',
+        contentTruncated: true,
+        contentOriginalChars: 200_001,
+      },
+    ])
+
+    expect(messages[0]).toMatchObject({
+      contentTruncated: true,
+      contentOriginalChars: 200_001,
+    })
+  })
+
+  test('keeps user-authored Codex directive text unchanged', () => {
+    const messages = runtimeMessagesToWorkbenchMessages([
+      {
+        id: 'user-1',
+        role: 'user',
+        content: '解释一下 ::git-stage{cwd="/workspace/project"} 是什么',
+      },
+    ])
+
+    expect(messages[0].content).toBe('解释一下 ::git-stage{cwd="/workspace/project"} 是什么')
+  })
+
+  test('keeps assistant prose that mentions a Codex directive inline', () => {
+    const messages = runtimeMessagesToWorkbenchMessages([
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '这类 ::git-stage{cwd="/workspace/project"} 指令会刷新 Git UI。',
+      },
+    ])
+
+    expect(messages[0].content).toBe(
+      '这类 ::git-stage{cwd="/workspace/project"} 指令会刷新 Git UI。'
+    )
+  })
+})

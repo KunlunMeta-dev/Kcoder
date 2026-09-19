@@ -1,0 +1,44 @@
+[package]
+name = "kcoder_plugins"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+kcoder_config = { path = "../kcoder_config" }
+kcoder_hooks = { path = "../kcoder_hooks" }
+anyhow = { workspace = true }
+base64 = "0.22"
+dirs = { workspace = true }
+dunce = { workspace = true }
+flate2 = "1.1"
+fs2 = "0.4"
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+tar = "0.4"
+thiserror = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+uuid = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+nix = { version = "0.30", features = ["dir", "fs"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+] }
+
+[dev-dependencies]
+kcoder_mcp = { path = "../kcoder_mcp" }
+kcoder_skills = { path = "../kcoder_skills" }
+tempfile = { workspace = true }
+tokio = { workspace = true }

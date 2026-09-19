@@ -1,0 +1,40 @@
+[package]
+name = "kcoder_engine"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+kcoder_types = { path = "../kcoder_types" }
+kcoder_state = { path = "../kcoder_state" }
+kcoder_api = { path = "../kcoder_api" }
+kcoder_config = { path = "../kcoder_config" }
+kcoder_tools = { path = "../kcoder_tools" }
+kcoder_permissions = { path = "../kcoder_permissions" }
+kcoder_memory = { path = "../kcoder_memory" }
+kcoder_skills = { path = "../kcoder_skills" }
+kcoder_hooks = { path = "../kcoder_hooks" }
+kcoder_plugins = { path = "../kcoder_plugins" }
+kcoder_mcp = { path = "../kcoder_mcp" }
+serde_json = { workspace = true }
+serde = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+futures = { workspace = true }
+async-stream = { workspace = true }
+async-trait = { workspace = true }
+chrono = { workspace = true }
+sha2 = { workspace = true }
+url = { workspace = true }
+dunce = { workspace = true }
+tempfile = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+libc = { workspace = true }
+syn = { version = "2", features = ["full", "parsing", "visit"] }

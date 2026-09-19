@@ -1,0 +1,10 @@
+{
+  "name": "cursor-demo",
+  "version": "1.0.0",
+  "description": "Cursor plugin manifest fixture",
+  "mcpServers": {
+    "fixture": {
+      "command": "fixture-mcp"
+    }
+  }
+}

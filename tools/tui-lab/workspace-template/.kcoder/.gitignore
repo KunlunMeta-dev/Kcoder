@@ -1,0 +1,12 @@
+# KCoder local configuration and runtime data
+/settings.local.json
+/sessions/
+/projects/
+/worktrees/
+/tool-results/
+/attachments/
+/tool-repair-examples/
+/skills/.usage.json
+/skills/.usage.json.lock
+/skills/.backups/
+/skills/.curator.log

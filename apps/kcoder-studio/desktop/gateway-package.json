@@ -1,0 +1,5 @@
+{
+  "name": "@kcoder/studio-gateway-runtime",
+  "private": true,
+  "type": "module"
+}

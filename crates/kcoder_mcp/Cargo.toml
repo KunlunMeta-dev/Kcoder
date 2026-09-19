@@ -1,0 +1,39 @@
+[package]
+name = "kcoder_mcp"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+kcoder_config = { path = "../kcoder_config" }
+fs2 = "0.4"
+kcoder_types = { path = "../kcoder_types" }
+kcoder_tools = { path = "../kcoder_tools" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+reqwest = { workspace = true }
+bytes = "1"
+libc = { workspace = true }
+base64 = "0.22"
+getrandom = "0.3"
+sha2 = { workspace = true }
+subtle = "2"
+zeroize = { version = "1", features = ["serde"] }
+serde_urlencoded = "0.7"
+
+[target.'cfg(windows)'.dependencies]
+which = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+kcoder_state = { path = "../kcoder_state" }
+tokio = { workspace = true, features = ["test-util"] }
+tracing-subscriber = { workspace = true }

@@ -1,0 +1,74 @@
+{
+  "appId": "dev.kcoder.studio.remote",
+  "productName": "KCoder Studio Remote",
+  "executableName": "kcoder-studio-remote",
+  "asar": true,
+  "compression": "maximum",
+  "directories": {
+    "output": "../../target/packages/kcoder-studio/windows-remote"
+  },
+  "files": [
+    "desktop/remote-main.mjs",
+    "desktop/remote-config.mjs",
+    "desktop/tray-controller.mjs",
+    "desktop/desktop-icons.mjs",
+    "desktop/menu-preload.cjs",
+    "desktop/application-menu.mjs",
+    "desktop/application-menu-labels.mjs",
+    "desktop/additional-window.mjs",
+    "desktop/directory-dialog-controller.mjs",
+    "desktop/desktop-menu-controller.mjs",
+    "renderer/src-tauri/icons/icon.ico",
+    "renderer/src-tauri/icons/128x128.png",
+    "renderer/src-tauri/icons/32x32.png",
+    "desktop/security-policy.mjs",
+    "package.json"
+  ],
+  "extraMetadata": {
+    "main": "desktop/remote-main.mjs"
+  },
+  "extraFiles": [
+    {
+      "from": "desktop/WINDOWS-REMOTE-README.txt",
+      "to": "使用说明.txt"
+    }
+  ],
+  "extraResources": [
+    {
+      "from": "../../target/release/kcoder-process-supervisor.exe",
+      "to": "bin/kcoder-process-supervisor.exe"
+    },
+    {
+      "from": "renderer/LICENSE.upstream",
+      "to": "licenses/Wegent-Apache-2.0.txt"
+    },
+    {
+      "from": "renderer/UPSTREAM.md",
+      "to": "licenses/Wegent-UPSTREAM.md"
+    },
+    {
+      "from": "renderer/KCODER_CHANGES.md",
+      "to": "licenses/Wegent-KCODER_CHANGES.md"
+    }
+  ],
+  "linux": {
+    "icon": "renderer/src-tauri/icons/icon.png"
+  },
+  "mac": {
+    "icon": "renderer/src-tauri/icons/icon.icns"
+  },
+  "win": {
+    "icon": "renderer/src-tauri/icons/icon.ico",
+    "signAndEditExecutable": true,
+    "signExecutable": false,
+    "target": [
+      {
+        "target": "zip",
+        "arch": [
+          "x64"
+        ]
+      }
+    ],
+    "artifactName": "KCoder-Studio-Remote-${version}-win-${arch}.${ext}"
+  }
+}
