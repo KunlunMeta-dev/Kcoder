@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://kunlunmeta-dev.github.io/Kcoder/sitemap.xml
