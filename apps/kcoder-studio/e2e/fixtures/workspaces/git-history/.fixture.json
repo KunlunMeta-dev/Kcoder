@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "git-history",
+  "version": 2,
+  "description": "带两次确定性提交的 JavaScript 工作区，用于 diff、历史理解和回归测试。",
+  "tags": ["git", "javascript", "history", "real-model"],
+  "materializer": "git-stages",
+  "git": {
+    "defaultBranch": "main",
+    "stages": [
+      {
+        "directory": "stages/01-initial",
+        "message": "chore: initialize calculator",
+        "timestamp": 1767225600
+      },
+      {
+        "directory": "stages/02-subtraction",
+        "message": "feat: add subtraction",
+        "timestamp": 1767225660
+      }
+    ]
+  }
+}

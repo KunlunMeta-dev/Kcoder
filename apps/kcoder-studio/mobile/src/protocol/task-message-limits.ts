@@ -1,0 +1,2 @@
+export const MAX_TASK_MESSAGE_CHARACTERS = 50_000;
+export const MAX_QUEUED_TASK_MESSAGES = 20;

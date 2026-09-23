@@ -1,0 +1,28 @@
+[package]
+name = "kcoder_hooks"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+kcoder_api = { path = "../kcoder_api" }
+kcoder_types = { path = "../kcoder_types" }
+kcoder_tools = { path = "../kcoder_tools" }
+kcoder_config = { path = "../kcoder_config" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+regex = { workspace = true }
+dirs = { workspace = true }
+reqwest = { workspace = true }
+futures = { workspace = true }
+libc = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

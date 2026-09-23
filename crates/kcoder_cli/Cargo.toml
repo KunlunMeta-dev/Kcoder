@@ -1,0 +1,70 @@
+[package]
+name = "kcoder_cli"
+default-run = "kcoder"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "kcoder"
+path = "src/main.rs"
+
+[dependencies]
+kcoder_types = { path = "../kcoder_types" }
+kcoder_app_protocol = { path = "../kcoder_app_protocol" }
+kcoder_api = { path = "../kcoder_api" }
+kcoder_repl = { path = "../kcoder_repl" }
+kcoder_state = { path = "../kcoder_state" }
+kcoder_config = { path = "../kcoder_config" }
+kcoder_tools = { path = "../kcoder_tools" }
+kcoder_permissions = { path = "../kcoder_permissions" }
+kcoder_engine = { path = "../kcoder_engine" }
+kcoder_hooks = { path = "../kcoder_hooks" }
+kcoder_memory = { path = "../kcoder_memory" }
+kcoder_skills = { path = "../kcoder_skills" }
+kcoder_plugins = { path = "../kcoder_plugins" }
+kcoder_mcp = { path = "../kcoder_mcp" }
+globset = { workspace = true }
+async-trait = { workspace = true }
+async-stream = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+clap = { version = "4.5", features = ["derive", "env"] }
+anyhow = { workspace = true }
+futures = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+jsonc-parser = { workspace = true }
+sha2 = { workspace = true }
+chrono = { workspace = true }
+rpassword = "7.3"
+dotenvy = "0.15"
+dunce = { workspace = true }
+dirs = { workspace = true }
+base64 = "0.22"
+portable-pty = "0.9"
+fs2 = "0.4"
+libc = { workspace = true }
+reqwest = { workspace = true }
+tempfile = { workspace = true }
+tokio-tungstenite = "0.28"
+walkdir.workspace = true
+which = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+kcoder_process_supervisor = { path = "../kcoder_process_supervisor" }
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_System_ProcessStatus",
+    "Win32_System_Threading",
+] }
+
+[dev-dependencies]
+tempfile = { workspace = true }

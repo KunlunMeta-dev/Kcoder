@@ -1,0 +1,473 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+  schedule:
+    - cron: "23 18 * * *"
+  workflow_dispatch:
+    inputs:
+      tier:
+        description: "Test tier to run"
+        required: true
+        default: full
+        type: choice
+        options:
+          - full
+          - real-model
+          - external-provider
+          - platform
+      platform_target:
+        description: "Protected target to run for the platform tier"
+        required: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+  RUSTDOCFLAGS: -D warnings
+
+jobs:
+  skills:
+    name: Skills system gate
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.95"
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Linux credential-store build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libdbus-1-dev pkg-config
+
+      - name: Core skill behavior tests
+        run: cargo test -p kcoder_specs --test core_skills
+
+      - name: Skill store transaction and process tests
+        run: cargo test -p kcoder_skills
+
+      - name: Skill lifecycle and safety tests
+        run: cargo test -p kcoder_tools skill_
+
+      - name: Core skill pressure integration tests
+        run: cargo test -p kcoder_engine core_skill_pressure
+
+      - name: Skill activation integration test
+        run: cargo test -p kcoder_engine skill_tool_activation_updates_next_provider_request_and_usage
+
+  rust:
+    name: Rust quality gate
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.95"
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install JavaScript test dependencies
+        run: |
+          corepack enable
+          pnpm --dir apps/kcoder-studio install --frozen-lockfile
+          pnpm --dir apps/kcoder-studio/renderer install --frozen-lockfile
+
+      - name: Install audit tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libappindicator3-dev \
+            libdbus-1-dev \
+            pkg-config \
+            librsvg2-dev \
+            libwebkit2gtk-4.1-dev \
+            patchelf \
+            ripgrep
+
+      - name: Audit scripts selftest
+        run: scripts/audit/audit_scripts_selftest.sh
+
+      - name: Release packaging contract
+        run: scripts/release/test-packaging-contract.sh
+
+      - name: Secret and history scan
+        run: scripts/audit/audit_release_check.sh
+
+      - name: Format
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Project PR test matrix
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/ms-playwright
+        run: cargo run -p kcoder_test_runner -- --tier pr --keep-going
+
+      - name: Docs
+        run: cargo doc --workspace --no-deps
+
+      - name: Release build
+        run: cargo build --release --all-features
+
+  full:
+    name: Nightly/full matrix
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.tier == 'full')
+    runs-on: ubuntu-latest
+    env:
+      KCODER_E2E_CHROMIUM_NO_SANDBOX: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.95"
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install full-tier system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libappindicator3-dev \
+            libdbus-1-dev \
+            pkg-config \
+            librsvg2-dev \
+            libwebkit2gtk-4.1-dev \
+            patchelf
+
+      - name: Install JavaScript and browser dependencies
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/ms-playwright
+        run: |
+          corepack enable
+          pnpm --dir apps/kcoder-studio install --frozen-lockfile
+          pnpm --dir apps/kcoder-studio/renderer install --frozen-lockfile
+          pnpm --dir apps/kcoder-studio/renderer exec playwright install --with-deps chromium
+
+      - name: Run full matrix
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/ms-playwright
+        run: cargo run -p kcoder_test_runner -- --tier full --keep-going
+
+  real-model:
+    name: Protected real-model matrix
+    if: github.event_name == 'workflow_dispatch' && inputs.tier == 'real-model'
+    runs-on: ubuntu-latest
+    environment: protected-tests
+    env:
+      KCODER_E2E_REAL_MODEL: "1"
+      KCODER_E2E_MODEL_PROFILE: ${{ vars.KCODER_E2E_MODEL_PROFILE }}
+      KCODER_E2E_MODEL_ENDPOINT: ${{ vars.KCODER_E2E_MODEL_ENDPOINT }}
+      KCODER_E2E_MODEL_NAME: ${{ vars.KCODER_E2E_MODEL_NAME }}
+      KCODER_E2E_MODEL_API_FORMAT: ${{ vars.KCODER_E2E_MODEL_API_FORMAT }}
+      KCODER_E2E_MODEL_CREDENTIAL_ENV: ${{ vars.KCODER_E2E_MODEL_CREDENTIAL_ENV }}
+      KCODER_E2E_MODEL_CREDENTIAL_VALUE: ${{ secrets.KCODER_E2E_MODEL_CREDENTIAL_VALUE }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.95"
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Studio dependencies
+        run: |
+          corepack enable
+          pnpm --dir apps/kcoder-studio install --frozen-lockfile
+          pnpm --dir apps/kcoder-studio/renderer install --frozen-lockfile
+
+      - name: Materialize minimal protected Provider configuration
+        run: |
+          export KCODER_CONFIG_DIR="$RUNNER_TEMP/kcoder-real-model-config"
+          echo "KCODER_CONFIG_DIR=$KCODER_CONFIG_DIR" >> "$GITHUB_ENV"
+          install -d -m 700 "$KCODER_CONFIG_DIR"
+          node --input-type=module <<'EOF'
+          import { writeFile } from "node:fs/promises";
+          const profile = process.env.KCODER_E2E_MODEL_PROFILE;
+          const endpoint = process.env.KCODER_E2E_MODEL_ENDPOINT;
+          const model = process.env.KCODER_E2E_MODEL_NAME;
+          const apiFormat = process.env.KCODER_E2E_MODEL_API_FORMAT;
+          const credentialEnv = process.env.KCODER_E2E_MODEL_CREDENTIAL_ENV;
+          if (!/^[A-Za-z0-9._-]+$/.test(profile || "")) throw new Error("protected environment must define a valid KCODER_E2E_MODEL_PROFILE");
+          if (!endpoint || !model || !["anthropic_messages", "openai_chat_completions", "openai_responses"].includes(apiFormat)) throw new Error("protected environment is missing endpoint/model/api format");
+          if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(credentialEnv || "") || !process.env.KCODER_E2E_MODEL_CREDENTIAL_VALUE) throw new Error(`protected environment is missing the credential for ${profile}`);
+          const settings = { active_provider: profile, providers: { [profile]: {
+            credential_env: [credentialEnv], api_format: apiFormat, endpoint,
+            default_model: model, discover_models: false, context_window_tokens: 131072,
+            output_headroom_tokens: 4096, max_output_tokens: 4096, request_timeout_secs: 120,
+            no_proxy: false, extra_body: {},
+          } } };
+          await writeFile(`${process.env.KCODER_CONFIG_DIR}/settings.json`, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
+          EOF
+
+      - name: Verify configuration through the real CLI
+        run: |
+          export "$KCODER_E2E_MODEL_CREDENTIAL_ENV=$KCODER_E2E_MODEL_CREDENTIAL_VALUE"
+          cargo build -p kcoder_cli --bin kcoder
+          target/debug/kcoder --cwd "$GITHUB_WORKSPACE" config get providers > /dev/null
+          target/debug/kcoder --cwd "$RUNNER_TEMP" --json auth status | node -e 'let text="";process.stdin.on("data",chunk=>text+=chunk);process.stdin.on("end",()=>{if(!JSON.parse(text).providers.some(row=>row.id===process.env.KCODER_E2E_MODEL_PROFILE&&row.configured))process.exit(1)})'
+
+      - name: Run real-model matrix
+        run: |
+          export "$KCODER_E2E_MODEL_CREDENTIAL_ENV=$KCODER_E2E_MODEL_CREDENTIAL_VALUE"
+          cargo run -p kcoder_test_runner -- --tier real-model --consent real-model --keep-going
+
+      - name: MiniMax three-protocol and TUI acceptance
+        if: env.KCODER_E2E_MODEL_NAME == 'MiniMax-M3'
+        run: |
+          export "$KCODER_E2E_MODEL_CREDENTIAL_ENV=$KCODER_E2E_MODEL_CREDENTIAL_VALUE"
+          npm --prefix tools/tui-lab ci
+          npm --prefix tools/tui-lab exec -- playwright install --with-deps chromium
+          node apps/kcoder-studio/e2e/run-all.mjs --real-model --suite real-model-protocol-matrix
+
+  external-provider:
+    name: Protected external-provider matrix
+    if: github.event_name == 'workflow_dispatch' && inputs.tier == 'external-provider'
+    runs-on: ubuntu-latest
+    environment: protected-tests
+    env:
+      KCODER_TEST_EXTERNAL_PROVIDER: "1"
+      SGLANG_CHAT_URL: ${{ secrets.SGLANG_CHAT_URL }}
+      SGLANG_API_KEY: ${{ secrets.SGLANG_API_KEY }}
+      VLLM_CHAT_URL: ${{ secrets.VLLM_CHAT_URL }}
+      VLLM_API_KEY: ${{ secrets.VLLM_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.95"
+
+      - name: Require explicit provider endpoints
+        run: test -n "$SGLANG_CHAT_URL" && test -n "$VLLM_CHAT_URL"
+
+      - name: Run external-provider matrix
+        run: cargo run -p kcoder_test_runner -- --tier external-provider --consent external-provider --keep-going
+
+  windows-portable:
+    name: Windows portable Rust and contracts
+    if: github.event_name != 'workflow_dispatch' || inputs.tier == 'full'
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.95"
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Build and configure Windows process supervisor
+        shell: pwsh
+        run: |
+          cargo build -p kcoder_process_supervisor --bin kcoder-process-supervisor
+          if ($LASTEXITCODE -ne 0) { throw "failed to build Windows process supervisor" }
+          $supervisor = (Resolve-Path "target/debug/kcoder-process-supervisor.exe").Path
+          "KCODER_PROCESS_SUPERVISOR_BIN=$supervisor" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "KCODER_E2E_PROCESS_SUPERVISOR_BIN=$supervisor" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Native Windows process supervisor acceptance
+        run: cargo test -p kcoder_process_supervisor --all-targets -- --test-threads=1
+
+      - name: Native Windows Specs process adapter acceptance
+        run: cargo test -p kcoder_specs windows_adapter -- --test-threads=1
+
+      - name: Native Windows Specs bounded command owner
+        run: |
+          cargo test -p kcoder_specs process::tests:: -- --test-threads=1
+
+      - name: Portable Rust harness and runner
+        run: cargo test -p kcoder_test_harness -p kcoder_test_runner
+
+      - name: Windows Studio harness and nested-process cleanup
+        run: npm --prefix apps/kcoder-studio run test:e2e:harness
+
+      - name: Native CLI compile contract
+        run: cargo check -p kcoder_cli --all-targets
+
+      - name: Native CLI attachment reparse-point rejection
+        run: cargo test -p kcoder_cli --bin kcoder app_server::attachments::tests::windows_reparse_replacement_fails_materialization_without_reading_outside -- --exact
+
+      - name: Native CLI attachment owner lock contract
+        run: cargo test -p kcoder_cli --bin kcoder app_server::attachments::tests::attachment_owner_os_lock_survives_peer_scavenging_and_releases_after_crash -- --exact
+
+      - name: Native CLI private artifact capability and ACL contract
+        run: cargo test -p kcoder_cli --bin kcoder app_server::private_files::tests -- --test-threads=1
+
+      - name: Native Windows plugin store transaction and DACL contract
+        run: cargo test -p kcoder_plugins store::tests::local_install_update_and_uninstall_preserve_data_by_default -- --exact --test-threads=1
+
+      - name: Native Windows plugin reparse-point and hard-link rejection
+        run: cargo test -p kcoder_plugins store::copy::windows_tests::secure_copy_rejects_windows_reparse_points_and_hard_links -- --exact --test-threads=1
+
+      - name: Native Windows skill store lock replace and recovery
+        run: cargo test -p kcoder_skills -- --test-threads=1
+
+  specs-process-darwin:
+    name: Specs process ownership (${{ matrix.architecture }})
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            architecture: x86_64
+          - runner: macos-15
+            architecture: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.95"
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Test native process ownership
+        run: |
+          cargo test -p kcoder_specs process::tests:: -- --test-threads=1
+          cargo test -p kcoder_skills -- --test-threads=1
+
+  specs-process-bsd:
+    name: Specs process ownership (${{ matrix.system }})
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - system: FreeBSD
+            operating_system: freebsd
+            version: "15.1"
+            host_triple: x86_64-unknown-freebsd
+            toolchain_source: rust-dist
+          # DragonFly BSD 6.4.2 DPorts does not provide a verifiable native Rust 1.95
+          # toolchain. Retain x86_64-unknown-dragonfly cfg for environments that have
+          # one, but mark it unsupported and exclude it from completion gates until a verifiable native source exists.
+          - system: OpenBSD
+            operating_system: openbsd
+            version: "7.9"
+            host_triple: x86_64-unknown-openbsd
+            toolchain_source: openbsd-snapshot
+          - system: NetBSD
+            operating_system: netbsd
+            version: "10.1"
+            host_triple: x86_64-unknown-netbsd
+            toolchain_source: rust-dist
+    defaults:
+      run:
+        shell: cpa.sh {0}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Start native BSD VM
+        uses: cross-platform-actions/action@v1.3.0
+        with:
+          operating_system: ${{ matrix.operating_system }}
+          version: ${{ matrix.version }}
+          architecture: x86-64
+          shell: bash
+          memory: 6G
+          cpu_count: 2
+
+      - name: Stage signed OpenBSD snapshot upgrade
+        if: matrix.toolchain_source == 'openbsd-snapshot'
+        run: sudo sysupgrade -s -n
+
+      - name: Reboot into the OpenBSD snapshot
+        if: matrix.toolchain_source == 'openbsd-snapshot'
+        shell: bash
+        run: cpa.sh --reboot
+
+      - name: Install and verify native Rust 1.95+
+        run: |
+          case "${{ matrix.toolchain_source }}" in
+            rust-dist)
+              archive="rust-1.95.0-${{ matrix.host_triple }}.tar.xz"
+              curl --fail --location --retry 3 \
+                --output "$archive" \
+                "https://static.rust-lang.org/dist/$archive"
+              tar -xJf "$archive"
+              "${archive%.tar.xz}/install.sh" \
+                --prefix="$HOME/.kcoder-rust-1.95" \
+                --without=rust-docs
+              export PATH="$HOME/.kcoder-rust-1.95/bin:$PATH"
+              ;;
+            openbsd-snapshot)
+              # OpenBSD 7.9 release ships Rust 1.94.1 and Rust does not publish
+              # Tier-3 host archives, so explicitly select the signed snapshot package.
+              sudo pkg_add -Dsnap -I -u rust || sudo pkg_add -Dsnap -I rust
+              ;;
+            *) echo "unsupported Rust toolchain source" >&2; exit 1 ;;
+          esac
+          rust_version="$(rustc --version | awk '{print $2}')"
+          rust_host="$(rustc -vV | sed -n 's/^host: //p')"
+          awk -F. -v version="$rust_version" 'BEGIN {
+            split(version, parts, ".");
+            if (parts[1] < 1 || (parts[1] == 1 && parts[2] < 95)) exit 1;
+          }'
+          test "$rust_host" = "${{ matrix.host_triple }}"
+          cargo --version
+          rustc -vV
+          cargo test -p kcoder_specs process::tests:: -- --test-threads=1

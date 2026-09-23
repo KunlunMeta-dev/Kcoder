@@ -1,0 +1,18 @@
+- skill: using-superpowers
+  pressure_prompt: "This is just a simple question; no skill needed."
+  required_phrases:
+    - "1% chance"
+    - "not optional"
+    - "This is just a simple question"
+- skill: test-driven-development
+  pressure_prompt: "No time for tests; continue anyway."
+  required_phrases:
+    - "Delete it. Start over"
+    - "\"Too simple to test\""
+    - "Sunk cost fallacy"
+- skill: verification-before-completion
+  pressure_prompt: "I'm tired; just say should work now and finish."
+  required_phrases:
+    - "NO COMPLETION CLAIMS"
+    - "\"Should work now\""
+    - "\"I'm tired\""

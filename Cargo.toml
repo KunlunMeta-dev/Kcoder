@@ -1,0 +1,82 @@
+[workspace]
+members = ["crates/*", "tests/harness", "tests/runner", "tests/suites"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+authors = ["KCoder"]
+license = "MIT"
+repository = "https://github.com/yixuanchen189756-source/KCoder-public"
+rust-version = "1.95"
+
+[workspace.dependencies]
+keyring = { version = "3.6", default-features = false, features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
+tokio = { version = "1.44", features = ["full"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+reqwest = { version = "0.12", default-features = false, features = [
+  "rustls-tls",
+  "json",
+  "stream",
+  "gzip",
+  "socks",
+] }
+reqwest-eventsource = "0.6"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+jsonc-parser = { version = "0.33", features = ["serde", "cst"] }
+jsonschema = { version = "0.49.5", default-features = false }
+ratatui = "0.29"
+crossterm = { version = "0.28", features = ["event-stream"] }
+anyhow = "1.0"
+thiserror = "2.0"
+futures = "0.3"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+unicode-width = "0.2"
+unicode-segmentation = "1.12"
+url = "2"
+dirs = "6.0"
+dunce = "1.0"
+async-trait = "0.1"
+tempfile = "3.14"
+globset = "0.4"
+walkdir = "2"
+regex = "1.11"
+serde_yaml = "0.9"
+which = "7"
+async-stream = "0.3"
+pulldown-cmark = "0.12"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
+chrono-tz = "0.10.4"
+syntect = { version = "5.2", default-features = false, features = ["regex-onig"] }
+two-face = { version = "0.5", default-features = false, features = ["syntect-default-onig"] }
+similar = "2.7"
+libc = "0.2"
+rusqlite = { version = "0.32", features = ["bundled"] }
+sqlite-vfs = { version = "0.2.0", default-features = false }
+genai = "0.6.5"
+arboard = { version = "3.6.1", features = ["wayland-data-control"] }
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp"] }
+wait-timeout = "0.2"
+uuid = { version = "1.23", features = ["v4", "serde"] }
+
+[profile.dev]
+# Full debug info makes the workspace target directory grow very quickly.
+# Line tables keep useful panic/backtrace locations while cutting most debug
+# symbol volume from dev binaries and test harnesses.
+debug = 1
+
+[profile.test]
+# `cargo test` is the main source of target bloat in this workspace: every
+# hashed test binary gets full debug info plus incremental state. Prefer
+# smaller, reproducible test artifacts over keeping many old incremental caches.
+debug = 1
+incremental = false
+
+[profile.release]
+# Keep release executables lean when users build/install KCoder locally.
+strip = "symbols"
+lto = "thin"
+codegen-units = 1

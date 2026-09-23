@@ -1,0 +1,14 @@
+{
+  "$schema": "./resource_policy_schema.jsonc",
+  "meta": { "config_version": 1 },
+  "resources": {
+    "idle_budget": {
+      // Null leaves the corresponding budget disabled. Limits apply per target ID.
+      "max_processes": null,
+      "max_resident_bytes": null,
+      "sweep_interval_ms": 5000,
+      "sample_max_age_ms": 30000,
+      "sample_limit": 16
+    }
+  }
+}

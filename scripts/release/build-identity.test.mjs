@@ -1,0 +1,34 @@
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { resolve } from 'node:path';
+import test from 'node:test';
+
+test('Cargo refreshes embedded identity for a same-branch commit and a linked worktree', async t => {
+  const root = await mkdtemp(resolve(tmpdir(), 'kcoder-build-identity-'));
+  t.after(() => rm(root, {recursive:true,force:true}));
+  const source = resolve(root,'source'); await mkdir(resolve(source,'crates/kcoder_cli/src'),{recursive:true});
+  const run = (file,args,cwd=source,env=process.env) => execFileSync(file,args,{cwd,env,encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
+  await writeFile(resolve(source,'Cargo.toml'),'[workspace]\nmembers=["crates/kcoder_cli"]\nresolver="2"\n');
+  await writeFile(resolve(source,'crates/kcoder_cli/Cargo.toml'),'[package]\nname="identity-fixture"\nversion="0.0.0"\nedition="2024"\n');
+  await writeFile(resolve(source,'crates/kcoder_cli/src/main.rs'),'fn main(){println!("{}",env!("KCODER_BUILD_COMMIT"));}');
+  await writeFile(resolve(source,'crates/kcoder_cli/build.rs'),await readFile(new URL('../../crates/kcoder_cli/build.rs',import.meta.url)));
+  await writeFile(resolve(source,'.gitignore'),'target/\n');
+  run('git',['init','-b','main']);run('git',['config','user.email','fixture@example.invalid']);run('git',['config','user.name','Fixture']);
+  run('git',['add','.']);run('git',['commit','-m','initial']);
+  const env={...process.env,CARGO_TARGET_DIR:resolve(root,'cargo-target')};
+  for(const key of ['KCODER_BUILD_COMMIT','KCODER_BUILD_DIRTY','KCODER_BUILD_TIME_UNIX'])delete env[key];
+  const build = cwd => run('cargo',['run','--quiet','--offline','-p','identity-fixture'],cwd,env);
+  assert.equal(build(source),run('git',['rev-parse','HEAD']));
+  await writeFile(resolve(source,'revision.txt'),'second');run('git',['add','.']);run('git',['commit','-m','same branch']);
+  assert.equal(build(source),run('git',['rev-parse','HEAD']), 'HEAD contents did not change, but its branch ref did');
+  const linked=resolve(root,'linked');run('git',['worktree','add','-b','linked',linked]);
+  assert.equal(build(linked),run('git',['rev-parse','HEAD'],linked));
+  await writeFile(resolve(linked,'revision.txt'),'third');run('git',['add','.'],linked);run('git',['commit','-m','linked branch'],linked);
+  assert.equal(build(linked),run('git',['rev-parse','HEAD'],linked));
+  run('git',['pack-refs','--all'],linked);
+  assert.equal(build(linked),run('git',['rev-parse','HEAD'],linked));
+  run('git',['commit','--allow-empty','-m','commit after packed refs'],linked);
+  assert.equal(build(linked),run('git',['rev-parse','HEAD'],linked));
+});

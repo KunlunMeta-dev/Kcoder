@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "id": "typescript-app",
+  "version": 2,
+  "description": "无外部依赖的 TypeScript 小项目，用于代码理解、修改和测试行为。",
+  "tags": ["typescript", "code-edit", "real-model"],
+  "materializer": "copy"
+}

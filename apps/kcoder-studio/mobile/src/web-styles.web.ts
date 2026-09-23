@@ -1,0 +1,3 @@
+import "./web.css";
+
+export {};

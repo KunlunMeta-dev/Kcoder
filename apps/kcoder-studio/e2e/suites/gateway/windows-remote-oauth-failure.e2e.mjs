@@ -1,0 +1,38 @@
+import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { chmod, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { startSshFixture } from '../../harness/ssh-fixture.mjs';
+import { startOAuthMcpFixture } from '../../harness/oauth-mcp.mjs';
+import { repoRoot, runE2E } from '../../harness/run-context.mjs';
+import { startWindowsRemoteStudio } from '../../harness/windows-remote-studio.mjs';
+import { materializeWorkspace } from '../../harness/workspace-fixture.mjs';
+const target=process.env.KCODER_E2E_WINDOWS_SSH_TARGET;
+const windowsBinary=process.env.KCODER_E2E_WINDOWS_BINARY;
+const installation=process.env.KCODER_E2E_WINDOWS_STUDIO_DIRECTORY;
+const node=process.env.KCODER_E2E_WINDOWS_NODE;
+if(!target||!windowsBinary||!installation||!node)throw new Error('Explicit owned Windows probe prerequisites required');
+if(!/^[a-zA-Z0-9_.-]+@[a-zA-Z0-9.-]+$/.test(target))throw new Error('Invalid SSH target');
+await runE2E(import.meta.url,{testId:'windows-browser-local-callback-remote-credential-save-failure',tier:'manual-live',modelPolicy:'model-independent private Windows Studio/Edge profiles, real isolated SSH Linux target and owned OAuth fixture'},async context=>{
+  const {path:workspace}=await materializeWorkspace(context,'minimal',{instanceId:'remote-oauth'});
+  const config=context.pathInState('remote-profile');
+  let fixture;
+  let exchanges=0;
+  fixture=await startOAuthMcpFixture(context,{beforeTokenResponse:async()=>{
+    const key=JSON.stringify([fixture.root+'/',fixture.root+'/','fixture-client']);
+    const path=resolve(config,'mcp-oauth',createHash('sha256').update(key).digest('hex')+'.json');
+    if(++exchanges===1)await mkdir(path);else await rm(path,{recursive:true});
+  }});
+  await context.writeStateJson('remote-profile/settings.json',{providers:{},mcp_servers:[{name:'Linux remote OAuth',transport:'http',url:fixture.root+'/mcp'}]});
+  const binary=process.env.KCODER_E2E_KCODER_BIN||resolve(repoRoot,'target/debug/kcoder');
+  const launcher=context.pathInState('remote-kcoder');
+  const quote=value=>"'"+value.replaceAll("'","'\\''")+"'";
+  await writeFile(launcher,`#!/bin/sh\nexport KCODER_CONFIG_DIR=${quote(config)}\nexec ${quote(binary)} "$@"\n`);
+  await chmod(launcher,0o700);
+  const ssh=await startSshFixture(context);
+  const windows = await startWindowsRemoteStudio(context, { target, windowsBinary, installation, node, ssh, extraPorts: [Number(new URL(fixture.root).port)] });
+  await windows.run('remote-oauth', { workspace, server: { id:'local', label:'Isolated Linux remote target', transport:'ssh', host:'127.0.0.1', port:ssh.port, user:ssh.user, command:launcher, workspace } }, ['windows-remote-oauth-failure.png', 'windows-remote-oauth-recovered.png']);
+  assert.equal(fixture.events.filter(e=>e==='token-exchange').length,2);
+  await context.writeArtifactJson('binary-fingerprints.json',{windowsBootstrap:createHash('sha256').update(await readFile(windowsBinary)).digest('hex'),linuxTarget:createHash('sha256').update(await readFile(binary)).digest('hex')});
+  return {windowsBrowser:true,callbackOnWindows:true,targetSaveFailed:true,profileIsolation:true};
+});

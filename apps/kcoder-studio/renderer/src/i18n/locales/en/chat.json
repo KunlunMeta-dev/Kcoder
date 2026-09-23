@@ -1,0 +1,384 @@
+{
+  "messageActions": {
+    "copy": "Copy",
+    "copied": "Copied",
+    "copyMessage": "Copy message",
+    "collapse": "Collapse",
+    "expand": "Expand"
+  },
+  "toolStatus": {
+    "readCount_one": "Read {{count}} file",
+    "createdCount_one": "Created {{count}} file",
+    "editedCount_one": "Edited {{count}} file",
+    "ranCount_one": "Ran {{count}} command",
+    "calledCount_one": "Called {{count}} tool",
+    "failedCommandCount_one": "{{count}} command failed",
+    "failedToolCount_one": "{{count}} tool failed",
+    "fileCount_one": "{{count}} file",
+    "processed": "Processed",
+    "processedDuration": "Processed {{duration}}",
+    "seconds": "{{count}} s",
+    "minutesSeconds": "{{minutes}} m {{seconds}} s",
+    "minutes": "{{count}} min",
+    "hours": "{{count}} h",
+    "hoursMinutes": "{{hours}} h {{minutes}} min",
+    "searchedWeb": "Searched the web",
+    "searchedCode": "Searched code",
+    "guided": "Guided conversation",
+    "readCount": "Read {{count}} files",
+    "createdCount": "Created {{count}} files",
+    "editedCount": "Edited {{count}} files",
+    "ranCount": "Ran {{count}} commands",
+    "calledCount": "Called {{count}} tools",
+    "failedCommandCount": "{{count}} commands failed",
+    "failedToolCount": "{{count}} tools failed",
+    "searchedQueryScope": "Searched for {{query}} in {{scope}}",
+    "searchedQuery": "Searched for {{query}}",
+    "compactionError": "Context compaction failed",
+    "compactionDone": "Context compacted automatically",
+    "compactionRunning": "Compacting context automatically",
+    "command_done": "Run",
+    "command_running": "Running",
+    "command_error": "Command failed",
+    "create_done": "Create",
+    "create_running": "Creating",
+    "create_error": "Creation failed",
+    "edit_done": "Edit",
+    "edit_running": "Editing",
+    "edit_error": "Edit failed",
+    "read_done": "Read",
+    "read_running": "Reading",
+    "read_error": "Read failed",
+    "webSearch_done": "Search the web",
+    "webSearch_running": "Searching the web",
+    "webSearch_error": "Web search failed",
+    "guidance_done": "Guide conversation",
+    "guidance_running": "Guiding conversation",
+    "guidance_error": "Guidance failed",
+    "generic_done": "Execute",
+    "generic_running": "Executing",
+    "generic_error": "Execution failed",
+    "file_create_done": "Create file",
+    "file_create_running": "Creating file",
+    "file_create_error": "Failed to create file",
+    "file_edit_done": "Edit file",
+    "file_edit_running": "Editing file",
+    "file_edit_error": "Failed to edit file",
+    "file_read_done": "Read file",
+    "file_read_running": "Reading file",
+    "file_read_error": "Failed to read file",
+    "expand": "Expand tool details",
+    "collapse": "Collapse tool details",
+    "fileCount": "{{count}} files",
+    "unloaded": "Earlier output has been unloaded from this view.",
+    "unloadedChars": "Earlier output has been unloaded from this view (about {{count}} characters originally).",
+    "unloadedBytes": "Earlier output has been unloaded from this view (about {{count}} bytes originally).",
+    "loadingFull": "Loading full output",
+    "loadFull": "Load full output",
+    "succeeded": "Succeeded",
+    "failed": "Failed"
+  },
+  "tool_input_progress": {
+    "preparing": "Preparing {{name}} input…",
+    "characters": "{{count}} characters"
+  },
+  "continue_in_new_task": "Continue in new task",
+  "message_navigation": {
+    "label": "Previous message navigation",
+    "jump_to_message": "Jump to message {{index}}",
+    "loading_target": "Loading target position...",
+    "gap_missing": "Some history is not loaded",
+    "loading_gap": "Loading missing history..."
+  },
+  "thinking": {
+    "waiting": "Waiting for response",
+    "running": "Thinking",
+    "updating": "Organizing thoughts...",
+    "completed": "Thought process",
+    "chars": "chars"
+  },
+  "process_text": {
+    "running": "Working"
+  },
+  "tool_activity": {
+    "catalog_truncated": "Tool display metadata: {{shown}} of {{total}} entries loaded (display limit). Other tools keep their fallback labels.",
+    "reconnecting": "Connection interrupted. Reconnecting…",
+    "reconnected": "Connection restored",
+    "reconnect_failed": "Reconnection failed",
+    "summary_one": "Called {{count}} tool",
+    "summary_other": "Called {{count}} tools",
+    "mixed_summary_one": "{{toolSummary}}, edited {{count}} file",
+    "mixed_summary_other": "{{toolSummary}}, edited {{count}} files",
+    "edit_summary_one": "Edited {{count}} file",
+    "edit_summary_other": "Edited {{count}} files",
+    "command": "Commands",
+    "file": "Reads",
+    "search": "Searches",
+    "edit": "Edits",
+    "other": "Other tools",
+    "command_action": "Run command",
+    "file_action": "Read file",
+    "file_done": "Read {{name}}",
+    "file_count": "{{count}} files",
+    "file_fallback": "file",
+    "search_action": "Search code",
+    "search_running": "Searching code",
+    "search_done": "Searched code",
+    "search_error": "Failed to search code",
+    "image_view": "View {{filename}}",
+    "image_view_fallback": "View image",
+    "image_preview_alt": "Image viewed by the tool",
+    "edit_action": "Edit file",
+    "create_action": "Create file",
+    "other_action": "Call tool",
+    "wait_running": "Wait for tool result",
+    "wait_done": "Waited for tool result",
+    "wait_error": "Failed waiting for tool result",
+    "call_running": "Call {{name}}",
+    "call_done": "Called {{name}}",
+    "call_error": "Failed to call {{name}}",
+    "todo_title": "Task list",
+    "todo_progress": "{{completed}}/{{total}} completed",
+    "todo_pending": "Pending",
+    "todo_in_progress": "In progress",
+    "todo_completed": "Completed",
+    "todo_empty": "The task list is clear",
+    "todo_error": "Failed to update task list",
+    "todo_error_fallback": "The task list could not be updated. Please try again.",
+    "subagent_fallback": "Subagent task",
+    "subagent_queued": "Queued",
+    "subagent_paused": "Paused",
+    "subagent_running": "Running",
+    "subagent_completed": "Completed",
+    "subagent_failed": "Failed",
+    "subagent_interrupted": "Interrupted",
+    "subagent_group_one": "{{count}} subagent",
+    "subagent_group_other": "{{count}} subagents",
+    "edited_file": "Edited {{filename}}",
+    "created_file": "Created {{filename}}",
+    "deleted_file": "Deleted {{filename}}",
+    "renamed_file": "Renamed {{filename}}",
+    "subagent_group": "{{count}} sub-agents"
+  },
+  "assistant_status": {
+    "stopped": "Stopped",
+    "stopped_after": "You stopped after {{duration}}"
+  },
+  "queue": {
+    "paused": "Queue paused",
+    "resume": "Resume sending",
+    "send_with_paused_title": "Resume the paused queue?",
+    "send_with_paused_description": "Choose whether to keep the queued messages before sending your new message.",
+    "send_with_paused_cancel": "Cancel",
+    "send_with_paused_clear": "Clear queue",
+    "send_with_paused_preserve": "Keep and resume"
+  },
+  "request_user_input": {
+    "asked_count": "Asked {{count}} question(s)",
+    "permission_confirmation": "Permission confirmation",
+    "ignore": "Cancel",
+    "submit": "Submit",
+    "custom_placeholder": "Type your answer"
+  },
+  "plan_card": {
+    "title": "Plan",
+    "generating": "Generating",
+    "download": "Download plan",
+    "copy": "Copy plan",
+    "copy_success": "Copied",
+    "expand": "Open plan full screen",
+    "close": "Close plan"
+  },
+  "codex_context": {
+    "compacting": "Compacting context",
+    "compacted": "Context compacted"
+  },
+  "codex_references": {
+    "title": "Referenced files",
+    "open_label": "Open {{path}}",
+    "open_with": "Open with",
+    "preview_label": "Open preview",
+    "show_more": "Show {{count}} more",
+    "show_less": "Collapse files",
+    "kind": "Document",
+    "kind_with_extension": "Document · {{extension}}"
+  },
+  "memory_citations": {
+    "summary": "{{count}} memory citations",
+    "line_label": "lines {{range}}",
+    "open_label": "Open {{path}}"
+  },
+  "file_changes": {
+    "editing_files": "Editing {{count}} files",
+    "creating_files": "Creating {{count}} files",
+    "deleting_files": "Deleting {{count}} files",
+    "renaming_files": "Renaming {{count}} files",
+    "editing_file": "Editing {{filename}}",
+    "creating_file": "Creating {{filename}}",
+    "deleting_file": "Deleting {{filename}}",
+    "renaming_file": "Renaming {{filename}}",
+    "edited_files": "Edited {{count}} files",
+    "created_files": "Created {{count}} files",
+    "deleted_files": "Deleted {{count}} files",
+    "renamed_files": "Renamed {{count}} files",
+    "edited_file": "Edited {{filename}}",
+    "created_file": "Created {{filename}}",
+    "deleted_file": "Deleted {{filename}}",
+    "renamed_file": "Renamed {{filename}}",
+    "view_changes": "View changes",
+    "show_more": "Show {{count}} more files",
+    "show_less": "Collapse files",
+    "review": "Review",
+    "review_title": "Changes from this turn",
+    "preview_file_label": "Preview file changes for {{path}}",
+    "copy_code": "Copy code",
+    "revert": "Revert",
+    "confirm_revert_title": "Revert this turn's file changes?",
+    "confirm_revert_description": "The workspace changes only when the reverse patch applies safely. Later changes are never overwritten.",
+    "confirm_revert": "Confirm revert",
+    "cancel": "Cancel",
+    "close": "Close",
+    "reverting": "Reverting",
+    "loading_diff": "Loading changes from the device...",
+    "empty_diff": "No text changes to display",
+    "changes_label": "Changes",
+    "unstaged_label": "Unstaged",
+    "staged_label": "Staged",
+    "commit_label": "Commit",
+    "previous_turn_label": "Previous turn",
+    "branch_label": "Branch",
+    "branch_unknown": "Current workspace",
+    "large_diff_single_file_notice": "This diff is large, so only one file is shown at a time",
+    "file_list_label": "Changed files",
+    "file_search_placeholder": "Filter files...",
+    "file_search_empty": "No matching files",
+    "all_files_diff_label": "All file diffs",
+    "actions": {
+      "refresh": "Refresh",
+      "toggle_wrap": "Toggle word wrap",
+      "collapse_all_hunks": "Collapse all hunks",
+      "expand_all_hunks": "Expand all hunks",
+      "collapse_file_diff": "Collapse file diff",
+      "expand_file_diff": "Expand file diff",
+      "copy_git_apply": "Copy git apply command",
+      "hide_files": "Hide files",
+      "show_files": "Show files"
+    },
+    "review_failed": "Failed to load file changes",
+    "revert_failed": "Failed to revert file changes",
+    "device_offline": "The device is offline. Review and revert are unavailable.",
+    "reverted": "Reverted",
+    "conflicted": "Later changes conflict, so the workspace was not modified",
+    "artifact_missing": "The change artifact is no longer available",
+    "binary_file": "Binary file"
+  },
+  "assistant_error": {
+    "failure_phase": "Failure stage: {{phase}}",
+    "phase_model_request": "model request",
+    "phase_runtime": "runtime connection or startup",
+    "phase_unknown": "unknown",
+    "committed_boundary_preserved": "Committed steps are retained. Any execution result that was not committed still needs verification.",
+    "recovery_boundary_checked": "The server checks the saved recovery boundary before continuing. A retryable request does not by itself prove safe continuation.",
+    "retried": "A later attempt was submitted. The original failure record is retained.",
+    "continued": "Continued from this failure. The original failure record is retained.",
+    "needs_human": "Action required: check the provider configuration, credentials, or request parameters, then retry after correcting the issue.",
+    "details": "Error details",
+    "actions": {
+      "retry_original": "Continue with original settings",
+      "switch_model_retry": "Choose model and continue with current settings",
+      "retry": "Retry"
+    },
+    "types": {
+      "context_length_exceeded": {
+        "title": "The conversation is too long for this model's context window",
+        "description": "Try a model with a larger context window, or start a fresh conversation."
+      },
+      "quota_exceeded": {
+        "title": "The model's usage quota has been exhausted",
+        "description": "Switch to another available model, or continue after quota is restored."
+      },
+      "rate_limit": {
+        "title": "Too many requests. Please wait a moment before trying again",
+        "description": "Wait briefly and retry, or switch to another available model."
+      },
+      "payload_too_large": {
+        "title": "Content too large: conversation history or attachment exceeds the limit",
+        "description": "Reduce attachments or context content, then retry."
+      },
+      "network_error": {
+        "title": "Network error: Please check your connection and try again",
+        "description": "The connection was interrupted or the service is temporarily unreachable."
+      },
+      "timeout_error": {
+        "title": "Request timeout: Service response time exceeded",
+        "description": "The service did not respond in time. Try sending the message again later."
+      },
+      "llm_error": {
+        "title": "Model error: The model is temporarily unavailable",
+        "description": "The model service is unavailable. Try again later or switch models."
+      },
+      "llm_unsupported": {
+        "title": "Current model does not support this request",
+        "description": "This input or attachment type is not supported by the model. Switch to a compatible model."
+      },
+      "invalid_parameter": {
+        "title": "Invalid parameter: Request parameters are incorrect",
+        "description": "The request does not match the model requirements. Adjust the input and retry."
+      },
+      "authentication_error": {
+        "title": "API authentication failed",
+        "description": "Check the selected API key. After updating it, apply the configuration before retrying."
+      },
+      "forbidden": {
+        "title": "Access denied: You do not have permission to use this resource",
+        "description": "Check your account, device, or model permissions and retry."
+      },
+      "container_oom": {
+        "title": "Executor out of memory",
+        "description": "Start a new conversation to retry, or contact an administrator to increase memory."
+      },
+      "container_error": {
+        "title": "Task service error",
+        "description": "The container or runtime task service is temporarily unavailable. Try again later."
+      },
+      "content_filter": {
+        "title": "Content triggered security review and was rejected",
+        "description": "Modify the parts that may trigger the safety policy and retry."
+      },
+      "provider_error": {
+        "title": "Model service error. Please try again later",
+        "description": "The upstream model service returned an error. Retry later or switch models."
+      },
+      "model_or_route": {
+        "title": "Check the model name or API endpoint configuration",
+        "description": "Verify the configured model name and API endpoint against the provider's documentation. Correct and apply the configuration before retrying."
+      },
+      "image_too_large": {
+        "title": "Image exceeds size limit. Please compress the image and retry",
+        "description": "Compress the image or reduce the number of images, then send again."
+      },
+      "model_protocol_error": {
+        "title": "Model and runtime protocol do not match",
+        "description": "The current model does not support this request format. Switch to a compatible model and retry.",
+        "description_with_model": "{{model}} does not support the current runtime protocol. Switch to a compatible model and retry."
+      },
+      "invalid_role": {
+        "title": "Model parameter error: Message role format is incompatible",
+        "description": "The current model does not support this message format. Switch models and retry."
+      },
+      "permission_denied": {
+        "title": "No permission to use the current model",
+        "description": "Check model access permissions, or switch to a model within your permissions."
+      },
+      "local_runtime_error": {
+        "title": "Local runtime preparation failed",
+        "description": "The runtime could not prepare local storage or platform capabilities. Check the error details and update KCoder or fix the local environment before retrying. Switching models will not resolve this failure."
+      },
+      "generic_error": {
+        "title": "Message generation failed",
+        "description": "The request could not be completed. Try again later, or view the error details.",
+        "description_without_details": "The request could not be completed. Try again later."
+      }
+    }
+  }
+}

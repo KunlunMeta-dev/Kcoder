@@ -1,0 +1,4 @@
+[
+  { "message": "initial", "file": "story.txt", "content": "one\n" },
+  { "message": "second", "file": "story.txt", "content": "one\ntwo\n" }
+]

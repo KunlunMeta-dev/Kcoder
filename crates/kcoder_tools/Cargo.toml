@@ -1,0 +1,65 @@
+[package]
+name = "kcoder_tools"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+kcoder_types = { path = "../kcoder_types", features = ["json-schema"] }
+kcoder_config = { path = "../kcoder_config" }
+kcoder_state = { path = "../kcoder_state" }
+kcoder_memory = { path = "../kcoder_memory" }
+kcoder_skills = { path = "../kcoder_skills" }
+kcoder_specs = { path = "../kcoder_specs" }
+kcoder_workflow = { path = "../kcoder_workflow" }
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+futures = { workspace = true }
+tracing = { workspace = true }
+reqwest = { workspace = true }
+chrono = { workspace = true }
+chrono-tz = { workspace = true }
+dirs = { workspace = true }
+schemars = "0.8"
+base64 = "0.22"
+html-escape = "0.2"
+globset = { workspace = true }
+walkdir = { workspace = true }
+regex = { workspace = true }
+which = { workspace = true }
+url = { workspace = true }
+similar = { workspace = true }
+flate2 = "1.1"
+libc = { workspace = true }
+nix = { version = "0.30", features = ["fs"] }
+dunce = { workspace = true }
+tempfile = { workspace = true }
+sha2 = { workspace = true }
+uuid = { workspace = true }
+fs2 = "0.4"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = [
+  "Win32_Globalization",
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_Security_Authorization",
+  "Win32_Storage_FileSystem",
+  "Win32_System_Pipes",
+  "Win32_System_JobObjects",
+  "Win32_System_Threading",
+] }
+
+[dev-dependencies]
+kcoder_types = { path = "../kcoder_types" }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+landlock = "0.4"

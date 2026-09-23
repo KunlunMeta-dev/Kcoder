@@ -1,0 +1,43 @@
+import assert from 'node:assert/strict';
+import { startChromium } from '../../harness/chromium.mjs';
+import { startGateway, waitForGatewayRpcToken } from '../../harness/gateway.mjs';
+import { gatewayRpcUrl, initializeRpc, openRpc } from '../../harness/rpc.mjs';
+import { pluginCancellationFixture } from '../../harness/plugin-cancellation-fixture.mjs';
+import { materializeWorkspace } from '../../harness/workspace-fixture.mjs';
+import { assertRendererBuildFresh } from '../../harness/renderer-build.mjs';
+import { runE2E, waitFor } from '../../harness/run-context.mjs';
+await assertRendererBuildFresh();
+await runE2E(import.meta.url, { testId: 'studio-cancels-active-plugin-download-and-retries', tier: 'full-integration', modelPolicy: 'model-independent real npm process, registry HTTP, Studio cancel action and actual plugin inventory' }, async context => {
+  const { path: workspace } = await materializeWorkspace(context, 'minimal');
+  const fixture = await pluginCancellationFixture(context);
+  await context.writeStateJson('config/settings.json', { providers: {}, plugins: { installation: { timeout_ms: 30000 } } });
+  const gateway = await startGateway(context, { workspace, env: { KCODER_CONFIG_DIR: context.pathInState('config') } });
+  const browser = await startChromium(context);
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  const rpc = await openRpc(gatewayRpcUrl(gateway, 'local', await waitForGatewayRpcToken(context, gateway)));
+  context.addCleanup('close cancellation inventory', () => rpc.close());
+  await initializeRpc(rpc, 'plugin-cancel');
+  try {
+    await page.goto(gateway.baseUrl);
+    await page.getByTestId('plugins-button').click();
+    await page.getByTestId('plugins-add-marketplace-button').click();
+    await page.getByTestId('plugins-add-custom-marketplace-button').click();
+    await page.getByTestId('plugins-marketplace-path-input').fill(fixture.source);
+    await page.getByTestId('plugins-marketplace-trust-directory').check();
+    await page.getByTestId('plugins-marketplace-save-button').click();
+    const install = page.getByTestId(`plugin-marketplace-install-${fixture.id}`);
+    await install.waitFor(); await install.click();
+    await waitFor(() => fixture.requests > 0, 15000, 'real active npm download');
+    await waitFor(async () => (await install.innerText()).includes('取消安装'), 5000, 'cancel action');
+    await install.click();
+    await page.getByText('操作已取消。请刷新列表确认当前安装状态。', { exact: true }).waitFor({ timeout: 15000 });
+    assert.ok(!(await rpc.request('plugin/list')).plugins.some(plugin => plugin.id === fixture.id));
+    await page.screenshot({ path: context.pathInArtifacts('cancelled-install.png') });
+    fixture.unblock();
+    await install.click();
+    await waitFor(async () => (await install.innerText()).includes('在对话中试用'), 30000, 'retry installed');
+    assert.equal((await rpc.request('plugin/read', { pluginId: fixture.id })).plugin.version, '1.0.0');
+    assert.equal(gateway.child.exitCode, null);
+    return { cancelledInStudio: true, noPartialInstallation: true, retryWithoutRestart: true };
+  } finally { await page.close(); }
+});

@@ -1,0 +1,23 @@
+[package]
+name = "kcoder_permissions"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+kcoder_config = { path = "../kcoder_config" }
+kcoder_tools = { path = "../kcoder_tools" }
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tree-sitter = "0.25"
+tree-sitter-bash = "0.25"
+
+[dev-dependencies]
+tokio = { workspace = true }

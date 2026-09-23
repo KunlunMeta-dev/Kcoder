@@ -1,0 +1,126 @@
+{
+  "$schema": "./settings.schema.jsonc",
+  "permission_mode": "yolo",
+  "providers": {
+    "openai-responses": {
+      "api_format": "openai_responses",
+      "endpoint": "https://api.openai.com/v1",
+      "default_model": "gpt-5.2",
+      "reasoning_effort": "high",
+      "context_window_tokens": 400000,
+      "output_headroom_tokens": 32768,
+      "max_output_tokens": 32768,
+      "request_timeout_secs": 300,
+      "no_proxy": false,
+      "extra_body": {}
+    },
+    "openai-chat": {
+      "api_format": "openai_chat_completions",
+      "endpoint": "https://api.openai.com/v1",
+      "default_model": "gpt-4o",
+      "context_window_tokens": 128000,
+      "output_headroom_tokens": 16384,
+      "max_output_tokens": 16384,
+      "request_timeout_secs": 300,
+      "no_proxy": false,
+      "extra_body": {}
+    },
+    "local-openai-chat": {
+      "api_format": "openai_chat_completions",
+      "endpoint": "http://127.0.0.1:8000/v1",
+      "default_model": "local-model",
+      "context_window_tokens": 128000,
+      "output_headroom_tokens": 8192,
+      "max_output_tokens": 8192,
+      "request_timeout_secs": 300,
+      "no_proxy": true,
+      "extra_body": {}
+    },
+    "kimi": {
+      "api_format": "openai_chat_completions",
+      "endpoint": "https://api.kimi.com/coding/v1",
+      "default_model": "kimi-for-coding",
+      "context_window_tokens": 256000,
+      "output_headroom_tokens": 40960,
+      "max_output_tokens": 40960,
+      "request_timeout_secs": 600,
+      "user_agent": "kcoder-rust/0.1.0",
+      "max_retries": 3,
+      "retry_base_delay_ms": 500,
+      "no_proxy": false,
+      "extra_body": {}
+    }
+  },
+  "tui": {
+    "alternate_screen": "auto"
+  },
+  "default_subagent_max_turns": 60,
+  "goal_pro": {
+    "verifier_max_turns": 30,
+    "verification": {
+      "require_tests": true,
+      "minimum_test_scope": "target_suite",
+      "require_raw_exit_code": true,
+      "allow_workspace_changes": false,
+      "isolate_environment": true,
+      "allow_dependency_changes": false,
+      "allow_network_only_failures": true
+    }
+  },
+  "summary_max_tokens": 20000,
+  "moa": {
+    "enabled": true,
+    "default_preset": "default",
+    "max_reference_workers": 8,
+    "presets": {
+      "default": {
+        "enabled": true,
+        "reference_models": [
+          {
+            "provider": "current",
+            "model": "current"
+          }
+        ],
+        "aggregator": {
+          "provider": "current",
+          "model": "current"
+        },
+        "reference_max_tokens": 16384,
+        "aggregator_max_tokens": 32768
+      }
+    }
+  },
+  "moa_plan": {
+    "enabled": true,
+    "preset": "default",
+    "draft_max_turns": 60,
+    "draft_max_tokens": 16384,
+    "synthesis_max_tokens": 32768,
+    "draft_timeout_secs": 300,
+    "max_planner_workers": 3
+  },
+  "tool_limits": {
+    "doom_loop": {
+      "default_repetitions": 6,
+      "tools": {
+        "TaskOutput": -1
+      }
+    },
+    "foreground_budget_ms": {
+      "default_ms": 300000,
+      "tools": {}
+    },
+    "task_output_timeout_ms": {
+      "default_ms": 5000,
+      "min_ms": 1000,
+      "max_ms": 15000
+    },
+    "permission_denials": {
+      "consecutive_limit": 2
+    }
+  },
+  "memory": {
+    "legacy_prompt_enabled": false,
+    "structured_enabled": false
+  }
+}

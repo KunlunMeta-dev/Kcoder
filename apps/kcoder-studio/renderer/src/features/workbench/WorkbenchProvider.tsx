@@ -1,0 +1,1991 @@
+import { safeErrorDiagnostic } from '@/lib/error-diagnostics'
+import { listenAccountContextChanges } from '@/kcoder/accountContextEvents'
+import { workbenchModelTarget } from './workbenchModelTarget'
+import { isKCoderGatewayPage } from '@/kcoder/gatewayRpc'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from 'react'
+import { LocalExecutorCloudBridge } from '@/features/cloud-connection/LocalExecutorCloudBridge'
+import { createRuntimeTaskActivity } from './runtimeWorkActivity'
+import { useOptionalCloudConnection } from '@/features/cloud-connection/useCloudConnection'
+import { getRuntimeConfig, stripAppBasePath } from '@/config/runtime'
+import { getPreferredStandaloneDeviceId } from '@/lib/device-selection'
+import { updateWorkbenchDebugSnapshot } from '@/lib/debugPanel'
+import { navigateTo, parseRuntimeTaskRoute } from '@/lib/navigation'
+import { localSkillReference } from '@/lib/local-skill-reference'
+import { createRandomUuid } from '@/lib/random-id'
+import { localModelIdFromModelName } from '@/features/model-settings/localModelSettings'
+import { supportsGitWorktreeExecution } from '@/lib/projectClassification'
+import { runtimeContextUsageMetrics } from '@/lib/runtime-context-usage'
+import { findWorkbenchDevice, resolveLocalWorkbenchDeviceId } from '@/lib/workbench-device'
+import {
+  findActiveRuntimeProjectId,
+  getLocalRuntimeStateDeviceId,
+  getRuntimeProjectActivation,
+  getRuntimeRemoteProjectRegistrations,
+} from '@/lib/runtime-project-state'
+import { requestNewChatComposerFocus } from '@/lib/workbenchComposerFocus'
+import { installLocalWorkspaceOpenListener } from '@/tauri/localWorkspaceOpen'
+import { createLocalCodexPluginApi } from '@/api/local/codexPlugins'
+import { listWegentInstalledConnectorApps } from '@/api/cloud/connectorApps'
+import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { runtimeNameForCurrentHost } from '@/kcoder/legacyRuntimeAbi'
+import type {
+  LocalDeviceApp,
+  LocalDeviceSkill,
+  ModelCompatibilityDisabledReason,
+  ModelSelectionConfig,
+  PluginPathComponent,
+  ProjectExecutionMode,
+  ProjectWithTasks,
+  RuntimeContextUsage,
+  RuntimeWorkListResponse,
+  RuntimeTaskAddress,
+  RuntimeGlobalIMNotificationUpdateRequest,
+  RuntimeTaskIMNotificationSubscriptionRequest,
+  UnifiedModel,
+  UserPreferences,
+} from '@/types/api'
+import { normalizeRuntimeWorkspacePaths } from './workbenchRuntimeHelpers'
+import { useWorkbenchAttachments } from './useWorkbenchAttachments'
+import { useWorkbenchDeviceUpgrades } from './useWorkbenchDeviceUpgrades'
+import { useWorkbenchModels } from './useWorkbenchModels'
+import { useWorkbenchProjectActions } from './useWorkbenchProjectActions'
+import { useWorkbenchRuntimeMessaging } from './useWorkbenchRuntimeMessaging'
+import { useWorkbenchRuntimeTasks } from './useWorkbenchRuntimeTasks'
+import { useWorkbenchSkills } from './useWorkbenchSkills'
+import { useWorkbenchDataRefresh } from './useWorkbenchDataRefresh'
+import { useStableEvent } from './useStableEvent'
+import { initialWorkbenchState, workbenchReducer } from './workbenchReducer'
+import { RuntimeTaskCloseGuard } from './RuntimeTaskCloseGuard'
+import { useRuntimeTaskReminders } from './runtimeTaskReminders'
+import { WorkbenchContext, WorkbenchPaneContext } from './useWorkbench'
+import {
+  consumePluginTrial,
+  FOCUS_PLUGIN_TRIAL_COMPOSER_EVENT,
+  LOCAL_PLUGIN_SKILLS_CHANGED_EVENT,
+  PLUGIN_TRIAL_QUEUED_EVENT,
+} from '@/features/plugins/pluginTrial'
+import type {
+  WorkbenchContextValue,
+  WorkbenchPaneContextValue,
+  WorkbenchProviderProps,
+} from './workbenchContextTypes'
+import {
+  getBlockedModelSelectionMessage,
+  getNewChatModelSelection,
+  getRuntimeTaskChatScopeKey,
+} from './workbenchProviderHelpers'
+import {
+  RuntimeTaskLifecycleProvider,
+  RuntimeTaskLifecycleStore,
+  useRuntimeTaskLifecycleStoreSnapshot,
+} from './runtimeTaskLifecycle'
+import { applyRuntimeConversationAction, evictRuntimeTargetConversations } from './runtimeConversationCache'
+import {
+  applyModelContextWindowOverride,
+  findModelForSelection,
+  modelSelectionFromRuntimeHandle,
+} from './runtimeContextUsage'
+import {
+  findSelectableProject,
+  findProjectDeviceWorkspace,
+  findRuntimeTask,
+  getRememberedStandaloneDeviceId,
+  getRuntimeTaskRouteKey,
+  getDefaultProjectDeviceWorkspaceId,
+  readLastProjectId,
+  writeLastProjectId,
+} from './workbenchRuntimeHelpers'
+import { defaultNewChatModelSelection, disableCrossProviderModels } from './runtimeModelSelection'
+import {
+  createDefaultWorkbenchServices,
+  createExecutorClientForWorkbenchServices,
+} from './workbenchServices'
+
+export type { WorkbenchServices } from './workbenchServices'
+
+const LOCAL_SKILLS_CACHE_TTL_MS = 30_000
+const EMPTY_PLUGIN_TRIAL_TEMPLATES: PluginPathComponent[] = []
+
+type ProjectWorkPreferencePatch = {
+  executionMode?: ProjectExecutionMode
+  worktreeBranch?: string | null
+}
+
+function findFirstSelectableProject(
+  projects: ProjectWithTasks[],
+  runtimeWork: RuntimeWorkListResponse | null | undefined,
+  projectIds: Array<number | null | undefined>
+): ProjectWithTasks | null {
+  for (const projectId of projectIds) {
+    if (!projectId) continue
+    const project = findSelectableProject(projects, runtimeWork, projectId)
+    if (project) return project
+  }
+  return null
+}
+
+function getProjectWorkPreferenceKey(project: { id: number } | null | undefined): string | null {
+  return project ? `project:${project.id}` : null
+}
+
+function normalizeProjectWorkPreference(value?: {
+  executionMode?: ProjectExecutionMode | null
+  worktreeBranch?: string | null
+}): Required<ProjectWorkPreferencePatch> {
+  const executionMode =
+    value?.executionMode === 'git_worktree' ? 'git_worktree' : 'current_workspace'
+  const worktreeBranch = value?.worktreeBranch?.trim() || null
+
+  return { executionMode, worktreeBranch }
+}
+
+function readProjectWorkPreference(
+  preferences: UserPreferences | null | undefined,
+  project: { id: number } | null | undefined
+): Required<ProjectWorkPreferencePatch> {
+  const key = getProjectWorkPreferenceKey(project)
+  if (!key) return normalizeProjectWorkPreference()
+
+  return normalizeProjectWorkPreference(preferences?.wework_project_work_preferences?.[key])
+}
+
+function mergeProjectWorkPreference(
+  preferences: UserPreferences | null | undefined,
+  project: { id: number },
+  patch: ProjectWorkPreferencePatch
+): UserPreferences {
+  const key = getProjectWorkPreferenceKey(project)
+  const current = readProjectWorkPreference(preferences, project)
+  const next = normalizeProjectWorkPreference({ ...current, ...patch })
+
+  return {
+    ...(preferences ?? {}),
+    wework_project_work_preferences: {
+      ...(preferences?.wework_project_work_preferences ?? {}),
+      [key ?? `project:${project.id}`]: next,
+    },
+  }
+}
+
+export function WorkbenchProvider({
+  children,
+  user,
+  services,
+  onStartupReadyChange,
+}: WorkbenchProviderProps) {
+  const cloudConnection = useOptionalCloudConnection()
+  const resolvedServices = useMemo(
+    () =>
+      services ??
+      createDefaultWorkbenchServices({
+        isConnected: cloudConnection.isConnected,
+        backendUrl: cloudConnection.backendUrl,
+        apiBaseUrl: cloudConnection.apiBaseUrl,
+        socketBaseUrl: cloudConnection.socketBaseUrl,
+        socketPath: cloudConnection.socketPath,
+        token: cloudConnection.token,
+        user: cloudConnection.user ?? user,
+      }),
+    [
+      cloudConnection.apiBaseUrl,
+      cloudConnection.backendUrl,
+      cloudConnection.isConnected,
+      cloudConnection.socketBaseUrl,
+      cloudConnection.socketPath,
+      cloudConnection.token,
+      cloudConnection.user,
+      services,
+      user,
+    ]
+  )
+  const executorClient = useMemo(() => {
+    return createExecutorClientForWorkbenchServices(resolvedServices)
+  }, [resolvedServices])
+  const lifecycleStore = useMemo(() => new RuntimeTaskLifecycleStore(user.id), [user.id])
+  const lifecycleSnapshot = useRuntimeTaskLifecycleStoreSnapshot(lifecycleStore)
+  const [state, dispatch] = useReducer(workbenchReducer, initialWorkbenchState)
+  const remoteProjectSyncSignatureRef = useRef('')
+  const projectActivationSignatureRef = useRef('')
+  const lastProjectRestoreAttemptedRef = useRef(false)
+  const projectSelectionStartedRef = useRef(false)
+  const [projectExecutionMode, setProjectExecutionMode] =
+    useState<ProjectExecutionMode>('current_workspace')
+  const [projectWorktreeBranch, setProjectWorktreeBranchState] = useState<string | null>(null)
+  const [contextUsageByRuntimeTask, setContextUsageByRuntimeTask] = useState<
+    Record<string, RuntimeContextUsage>
+  >({})
+  const localSkillsCacheRef = useRef<
+    Map<string, { expiresAt: number; skills: LocalDeviceSkill[] }>
+  >(new Map())
+  const localAppsCacheRef = useRef<{ expiresAt: number; apps: LocalDeviceApp[] } | null>(null)
+  const localPluginApi = useMemo(() => createLocalCodexPluginApi(), [])
+  const isOptionsLocked = Boolean(state.currentRuntimeTask)
+  useLayoutEffect(() => {
+    lifecycleStore.syncRuntimeWork(state.runtimeWork)
+  }, [lifecycleStore, state.runtimeWork])
+  useLayoutEffect(() => {
+    lifecycleStore.setCurrentTask(state.currentRuntimeTask)
+  }, [lifecycleStore, state.currentRuntimeTask])
+  const runtimeTaskReminders = useRuntimeTaskReminders({
+    runtimeWork: state.runtimeWork,
+    lifecycleStore,
+    lifecycleSnapshot,
+  })
+  const currentContextUsage = state.currentRuntimeTask
+    ? contextUsageByRuntimeTask[getRuntimeTaskRouteKey(state.currentRuntimeTask)]
+    : undefined
+
+  const currentUser = state.user ?? user
+  const shouldPersistNewChatModelSelection = getRuntimeConfig().runtimeMode === 'backend'
+  const activeProject = state.currentProject
+  const projectChatScopeKey = getProjectChatScopeKey({
+    currentRuntimeTask: state.currentRuntimeTask,
+    standaloneChatKey: state.standaloneChatKey,
+  })
+  const [draftInputByScope, setDraftInputByScope] = useState<Record<string, string>>({})
+  const [trialTemplatesByScope, setTrialTemplatesByScope] = useState<
+    Record<string, PluginPathComponent[]>
+  >({})
+  const draftInput = draftInputByScope[projectChatScopeKey] ?? ''
+  const trialTemplates = trialTemplatesByScope[projectChatScopeKey] ?? EMPTY_PLUGIN_TRIAL_TEMPLATES
+  const setDraftInput = useCallback(
+    (value: string) => {
+      setDraftInputByScope(current => {
+        if ((current[projectChatScopeKey] ?? '') === value) return current
+        return { ...current, [projectChatScopeKey]: value }
+      })
+      if (!value.trim()) {
+        setTrialTemplatesByScope(current => {
+          if (!current[projectChatScopeKey]) return current
+          const next = { ...current }
+          delete next[projectChatScopeKey]
+          return next
+        })
+      }
+    },
+    [projectChatScopeKey]
+  )
+  const consumeQueuedPluginTrial = useCallback(() => {
+    const trial = consumePluginTrial()
+    if (!trial) return
+    const nextStandaloneChatKey = state.currentRuntimeTask
+      ? state.standaloneChatKey
+      : state.standaloneChatKey + 1
+    const nextScopeKey = getProjectChatScopeKey({
+      currentRuntimeTask: null,
+      standaloneChatKey: nextStandaloneChatKey,
+    })
+    dispatch({
+      type: 'project_cleared',
+      standaloneDeviceId: getRememberedStandaloneDeviceId(
+        user,
+        state.devices,
+        state.standaloneDeviceId
+      ),
+      standaloneWorkspacePath: null,
+      startFreshChat: !state.currentRuntimeTask,
+    })
+    setDraftInputByScope(current => ({ ...current, [nextScopeKey]: trial.input }))
+    setTrialTemplatesByScope(current => ({ ...current, [nextScopeKey]: trial.templates }))
+    navigateTo('/')
+    window.dispatchEvent(
+      new CustomEvent(FOCUS_PLUGIN_TRIAL_COMPOSER_EVENT, {
+        detail: { expectedValue: trial.input },
+      })
+    )
+  }, [
+    state.currentRuntimeTask,
+    state.devices,
+    state.standaloneChatKey,
+    state.standaloneDeviceId,
+    user,
+  ])
+
+  useEffect(() => {
+    queueMicrotask(consumeQueuedPluginTrial)
+    window.addEventListener(PLUGIN_TRIAL_QUEUED_EVENT, consumeQueuedPluginTrial)
+    return () => {
+      window.removeEventListener(PLUGIN_TRIAL_QUEUED_EVENT, consumeQueuedPluginTrial)
+    }
+  }, [consumeQueuedPluginTrial])
+  useEffect(() => {
+    const socketClient = resolvedServices.socketClient
+    if (!socketClient) return undefined
+
+    let isMounted = true
+    void socketClient.ensureConnected().catch(error => {
+      if (isMounted) {
+        console.error('[Workbench] Failed to connect chat socket', safeErrorDiagnostic(error))
+      }
+    })
+
+    return () => {
+      isMounted = false
+      socketClient.dispose()
+    }
+  }, [resolvedServices.socketClient])
+
+  const selectProjectExecutionMode = useCallback(
+    (mode: ProjectExecutionMode) => {
+      const nextMode: ProjectExecutionMode =
+        mode === 'git_worktree' ? 'git_worktree' : 'current_workspace'
+      setProjectExecutionMode(nextMode)
+      if (!state.currentProject || !supportsGitWorktreeExecution(state.currentProject)) {
+        return
+      }
+      const preferences = mergeProjectWorkPreference(
+        currentUser.preferences,
+        state.currentProject,
+        {
+          executionMode: nextMode,
+          worktreeBranch: projectWorktreeBranch,
+        }
+      )
+      dispatch({ type: 'user_preferences_updated', preferences })
+      void resolvedServices.userApi?.updateCurrentUser({ preferences }).catch(() => {
+        dispatch({ type: 'error_set', error: '启动模式保存失败' })
+      })
+    },
+    [currentUser.preferences, projectWorktreeBranch, resolvedServices.userApi, state.currentProject]
+  )
+
+  useEffect(() => {
+    const project = state.currentProject
+    const preferences = currentUser.preferences
+    const timer = window.setTimeout(() => {
+      if (!project || !supportsGitWorktreeExecution(project)) {
+        setProjectExecutionMode('current_workspace')
+        setProjectWorktreeBranchState(null)
+        return
+      }
+
+      const preference = readProjectWorkPreference(preferences, project)
+      setProjectExecutionMode(preference.executionMode)
+      setProjectWorktreeBranchState(preference.worktreeBranch)
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [currentUser.preferences, state.currentProject])
+  const setProjectWorktreeBranch = useCallback(
+    (branchName: string | null) => {
+      const normalizedBranch = branchName?.trim() || null
+      setProjectWorktreeBranchState(normalizedBranch)
+      if (!state.currentProject || !supportsGitWorktreeExecution(state.currentProject)) {
+        return
+      }
+      const preferences = mergeProjectWorkPreference(
+        currentUser.preferences,
+        state.currentProject,
+        {
+          executionMode: projectExecutionMode,
+          worktreeBranch: normalizedBranch,
+        }
+      )
+      dispatch({ type: 'user_preferences_updated', preferences })
+      void resolvedServices.userApi?.updateCurrentUser({ preferences }).catch(() => {
+        dispatch({ type: 'error_set', error: '启动分支保存失败' })
+      })
+    },
+    [currentUser.preferences, projectExecutionMode, resolvedServices.userApi, state.currentProject]
+  )
+  const modelSelectionConfig = useMemo(() => {
+    if (state.currentRuntimeTask) {
+      return (
+        findRuntimeTask(state.runtimeWork, state.currentRuntimeTask)?.modelSelection ??
+        modelSelectionFromRuntimeHandle(state.currentRuntimeTask.runtimeHandle) ??
+        null
+      )
+    }
+    return shouldPersistNewChatModelSelection
+      ? (getNewChatModelSelection(currentUser) ?? null)
+      : null
+  }, [currentUser, shouldPersistNewChatModelSelection, state.currentRuntimeTask, state.runtimeWork])
+  const defaultModelSelectionConfig = useCallback(
+    (models: UnifiedModel[]) => defaultNewChatModelSelection(models),
+    []
+  )
+  const persistNewChatModelSelection = useCallback(
+    (selection: ModelSelectionConfig) => {
+      if (!shouldPersistNewChatModelSelection) return
+      const preferences = {
+        ...(currentUser.preferences ?? {}),
+        new_chat_model_selection: selection,
+      }
+      dispatch({ type: 'user_preferences_updated', preferences })
+      void resolvedServices.userApi?.updateCurrentUser({ preferences }).catch(() => {
+        dispatch({ type: 'error_set', error: '模型配置保存失败' })
+      })
+    },
+    [currentUser.preferences, resolvedServices.userApi, shouldPersistNewChatModelSelection]
+  )
+  const handleBlockedModelSelection = useCallback(
+    (reason: ModelCompatibilityDisabledReason | 'locked', model?: UnifiedModel | null) => {
+      dispatch({
+        type: 'error_set',
+        error: getBlockedModelSelectionMessage(reason, model),
+      })
+    },
+    []
+  )
+  const handleBlockedModelSelect = useCallback((model: UnifiedModel, message?: string) => {
+    dispatch({
+      type: 'error_set',
+      error: message || getBlockedModelSelectionMessage('runtime_family_mismatch', model),
+    })
+  }, [])
+  const modelTarget = workbenchModelTarget(state)
+  const modelExecutionDeviceId = modelTarget.deviceId
+  const modelExecutionDevice = findWorkbenchDevice(state.devices, modelExecutionDeviceId)
+  const hideConfiguredLocalModels = Boolean(
+    modelExecutionDevice && modelExecutionDevice.device_type !== 'local'
+  )
+  const filterModelForExecution = useCallback(
+    (model: UnifiedModel) =>
+      !hideConfiguredLocalModels || localModelIdFromModelName(model.name) === null,
+    [hideConfiguredLocalModels]
+  )
+  const modelSelection = useWorkbenchModels({
+    api: resolvedServices.modelApi,
+    target: isKCoderGatewayPage() ? modelTarget : undefined,
+    filterModel: filterModelForExecution,
+    locked: false,
+    scopeKey: projectChatScopeKey,
+    persistSelection: !state.currentRuntimeTask && shouldPersistNewChatModelSelection,
+    selectionConfig: modelSelectionConfig,
+    defaultSelectionConfig: defaultModelSelectionConfig,
+    selectionReady: !state.isBootstrapping,
+    onSelectionChange: persistNewChatModelSelection,
+    onSelectionBlocked: handleBlockedModelSelection,
+  })
+  const activeModel = useMemo(
+    () =>
+      state.currentRuntimeTask
+        ? findModelForSelection(modelSelection.models, modelSelectionConfig)
+        : null,
+    [modelSelection.models, modelSelectionConfig, state.currentRuntimeTask]
+  )
+  const conversationModels = useMemo(
+    () =>
+      disableCrossProviderModels(
+        modelSelection.models,
+        state.currentRuntimeTask ? activeModel : null
+      ),
+    [activeModel, modelSelection.models, state.currentRuntimeTask]
+  )
+  const skillSelection = useWorkbenchSkills({
+    api: resolvedServices.skillApi,
+    teamId: state.defaultTeam?.id,
+    locked: isOptionsLocked,
+    scopeKey: projectChatScopeKey,
+  })
+  const isWorkbenchShellReady = !state.isBootstrapping
+  const isStartupReady =
+    isWorkbenchShellReady && modelSelection.isSelectionReady && !skillSelection.isLoading
+
+  useEffect(() => {
+    onStartupReadyChange?.(isWorkbenchShellReady)
+  }, [isWorkbenchShellReady, onStartupReadyChange])
+
+  const uploadWorkbenchAttachment = useMemo(() => {
+    if (!resolvedServices.attachmentApi?.uploadAttachment) return undefined
+    return (file: File, onProgress?: (progress: number) => void, signal?: AbortSignal) =>
+      resolvedServices.attachmentApi!.uploadAttachment(file, onProgress, signal)
+  }, [resolvedServices.attachmentApi])
+  const attachmentSelection = useWorkbenchAttachments({
+    uploadAttachment: uploadWorkbenchAttachment,
+    deleteAttachment: resolvedServices.attachmentApi?.deleteAttachment,
+    scopeKey: projectChatScopeKey,
+  })
+  const invalidateAccountTarget = useStableEvent((targetId: string) => {
+    evictRuntimeTargetConversations(targetId)
+    lifecycleStore.removeTarget(targetId)
+    const affected = state.currentRuntimeTask
+      ? state.currentRuntimeTask.deviceId === targetId
+      : state.standaloneDeviceId === targetId
+    const keepScope = (key: string) => !key.startsWith(`runtime:${targetId}:`)
+      && !(affected && key === projectChatScopeKey)
+    setDraftInputByScope(current => Object.fromEntries(Object.entries(current).filter(([key]) => keepScope(key))))
+    setTrialTemplatesByScope(current => Object.fromEntries(Object.entries(current).filter(([key]) => keepScope(key))))
+    attachmentSelection.invalidateScopes(key => !keepScope(key))
+    dispatch({ type: 'runtime_target_invalidated', targetId })
+    const route = parseRuntimeTaskRoute(stripAppBasePath(window.location.pathname), window.location.search)
+    if (route?.deviceId === targetId) navigateTo('/')
+  })
+  useEffect(() => listenAccountContextChanges(invalidateAccountTarget), [invalidateAccountTarget])
+  const {
+    cloudWorkStatus,
+    markRuntimeTasksArchived,
+    markRuntimeProjectRemoved,
+    clearRuntimeProjectRemoval,
+    refreshWorkLists,
+    refreshDevices,
+    getRemoteDeviceStartupCommand,
+  } = useWorkbenchDataRefresh({
+    user,
+    state,
+    dispatch,
+    executorClient,
+    services: resolvedServices,
+  })
+
+  const localRuntimeStateDeviceId = useMemo(
+    () => getLocalRuntimeStateDeviceId(state.devices),
+    [state.devices]
+  )
+
+  useEffect(() => {
+    const projects = getRuntimeRemoteProjectRegistrations(
+      state.runtimeWork,
+      localRuntimeStateDeviceId
+    ).sort((left, right) => left.id.localeCompare(right.id))
+    if (!localRuntimeStateDeviceId || projects.length === 0) return
+    const signature = JSON.stringify({ deviceId: localRuntimeStateDeviceId, projects })
+    if (remoteProjectSyncSignatureRef.current === signature) return
+    remoteProjectSyncSignatureRef.current = signature
+    void executorClient.runtime
+      .syncRuntimeRemoteProjects({ deviceId: localRuntimeStateDeviceId, projects })
+      .then(refreshWorkLists)
+      .catch(error => {
+        remoteProjectSyncSignatureRef.current = ''
+        console.warn(
+          '[KCoder Studio] Failed to sync remote projects into Codex global state',
+          safeErrorDiagnostic(error)
+        )
+      })
+  }, [executorClient, localRuntimeStateDeviceId, refreshWorkLists, state.runtimeWork])
+
+  useEffect(() => {
+    if (lastProjectRestoreAttemptedRef.current || !state.runtimeWork) return
+    if (
+      projectSelectionStartedRef.current ||
+      parseRuntimeTaskRoute(stripAppBasePath(window.location.pathname), window.location.search) ||
+      state.currentProject ||
+      state.currentRuntimeTask ||
+      state.standaloneWorkspacePath
+    ) {
+      lastProjectRestoreAttemptedRef.current = true
+      return
+    }
+    const lastProjectId = readLastProjectId(user.id)
+    const candidateProjectIds =
+      lastProjectId === undefined
+        ? [findActiveRuntimeProjectId(state.runtimeWork)]
+        : [lastProjectId]
+    lastProjectRestoreAttemptedRef.current = true
+    const project = findFirstSelectableProject(
+      state.projects,
+      state.runtimeWork,
+      candidateProjectIds
+    )
+    if (project) dispatch({ type: 'project_selected', project })
+  }, [
+    state.currentProject,
+    state.currentRuntimeTask,
+    state.projects,
+    state.runtimeWork,
+    state.standaloneWorkspacePath,
+    user.id,
+  ])
+
+  useEffect(() => {
+    const activation = getRuntimeProjectActivation(
+      state.runtimeWork,
+      state.currentProject?.id,
+      localRuntimeStateDeviceId
+    )
+    if (!activation) {
+      projectActivationSignatureRef.current = ''
+      return
+    }
+    const signature = JSON.stringify(activation)
+    if (projectActivationSignatureRef.current === signature) return
+    projectActivationSignatureRef.current = signature
+    void executorClient.runtime.activateRuntimeProject(activation).catch(error => {
+      projectActivationSignatureRef.current = ''
+      console.warn('[KCoder Studio] Failed to save the active Codex project', safeErrorDiagnostic(error))
+    })
+  }, [executorClient, localRuntimeStateDeviceId, state.currentProject?.id, state.runtimeWork])
+
+  useEffect(() => {
+    updateWorkbenchDebugSnapshot({
+      state,
+      lifecycle: lifecycleSnapshot,
+      cloudWorkStatus,
+      composer: {
+        scopeKey: projectChatScopeKey,
+        standaloneChatKey: state.standaloneChatKey,
+        availableModelNames: modelSelection.models.map(model => model.name),
+        currentInputLength: draftInput.length,
+        scopedInputLengths: Object.fromEntries(
+          Object.entries(draftInputByScope).map(([scopeKey, value]) => [scopeKey, value.length])
+        ),
+        attachmentCount: attachmentSelection.attachments.length,
+        contextUsagePercent: currentContextUsage
+          ? (runtimeContextUsageMetrics(currentContextUsage)?.usedPercent ?? undefined)
+          : undefined,
+      },
+    })
+  }, [
+    attachmentSelection.attachments.length,
+    cloudWorkStatus,
+    currentContextUsage,
+    draftInput.length,
+    lifecycleSnapshot,
+    draftInputByScope,
+    modelSelection.models,
+    projectChatScopeKey,
+    state,
+  ])
+
+  const { upgradingDevices, upgradeDevice } = useWorkbenchDeviceUpgrades({
+    state,
+    dispatch,
+    executorClient,
+    services: resolvedServices,
+    refreshDevices,
+  })
+
+  const rememberExecutionDevice = useCallback(
+    (deviceId: string) => {
+      dispatch({
+        type: 'standalone_device_preference_changed',
+        standaloneDeviceId: getPreferredStandaloneDeviceId(state.devices, deviceId) ?? deviceId,
+      })
+      void resolvedServices.userApi
+        ?.updateCurrentUser({
+          preferences: {
+            ...(currentUser.preferences ?? {}),
+            default_execution_target: deviceId,
+          },
+        })
+        .catch(() => {
+          // Keep the in-session selection even if preference persistence fails.
+        })
+    },
+    [currentUser.preferences, resolvedServices.userApi, state.devices]
+  )
+
+  const selectProject = useCallback(
+    (projectId: number | null) => {
+      projectSelectionStartedRef.current = true
+      if (projectId === null) {
+        writeLastProjectId(user.id, null)
+        dispatch({
+          type: 'project_cleared',
+          standaloneDeviceId: getRememberedStandaloneDeviceId(
+            user,
+            state.devices,
+            state.standaloneDeviceId
+          ),
+          standaloneWorkspacePath: null,
+        })
+        navigateTo('/')
+        return
+      }
+      const project = findSelectableProject(state.projects, state.runtimeWork, projectId)
+      if (project) {
+        writeLastProjectId(user.id, project.id)
+        dispatch({ type: 'project_selected', project })
+        navigateTo('/')
+      }
+    },
+    [state.devices, state.projects, state.runtimeWork, state.standaloneDeviceId, user]
+  )
+
+  const selectProjectWorkspace = useCallback(
+    (projectId: number, deviceWorkspaceId: number | null) => {
+      projectSelectionStartedRef.current = true
+      const project = findSelectableProject(state.projects, state.runtimeWork, projectId)
+      if (!project) return
+      writeLastProjectId(user.id, project.id)
+      dispatch({
+        type: 'project_workspace_selected',
+        project,
+        deviceWorkspaceId,
+      })
+      navigateTo('/')
+    },
+    [state.projects, state.runtimeWork, user.id]
+  )
+
+  const selectStandaloneDevice = useCallback(
+    (deviceId: string | null) => {
+      projectSelectionStartedRef.current = true
+      writeLastProjectId(user.id, null)
+      const standaloneDeviceId = getPreferredStandaloneDeviceId(
+        state.devices,
+        deviceId ?? user.preferences?.default_execution_target ?? state.standaloneDeviceId
+      )
+      if (standaloneDeviceId) {
+        rememberExecutionDevice(standaloneDeviceId)
+      }
+      dispatch({
+        type: 'project_cleared',
+        standaloneDeviceId,
+        standaloneWorkspacePath: null,
+        startFreshChat: true,
+      })
+      navigateTo('/')
+    },
+    [
+      rememberExecutionDevice,
+      state.devices,
+      state.standaloneDeviceId,
+      user.id,
+      user.preferences?.default_execution_target,
+    ]
+  )
+
+  const openStandaloneWorkspace = useCallback(
+    async (deviceId: string, workspacePath: string, label?: string, projectRoots?: string[]) => {
+      projectSelectionStartedRef.current = true
+      const requestDeviceId = deviceId.trim()
+      const normalizedWorkspacePath = workspacePath.trim()
+      if (!requestDeviceId || !normalizedWorkspacePath) return
+      const normalizedLabel = label?.trim()
+      const normalizedRoots = Array.from(
+        new Set((projectRoots ?? []).map(root => root.trim()).filter(Boolean))
+      )
+
+      // CLI open uses the local-device alias. Resolve the real executor device id so
+      // online checks, composer enablement, and new-chat buttons match listDevices.
+      let devicesForResolution = state.devices
+      const needsDeviceLookup =
+        !devicesForResolution.some(device => device.device_id === requestDeviceId) &&
+        resolveLocalWorkbenchDeviceId(devicesForResolution, requestDeviceId) === requestDeviceId
+      if (needsDeviceLookup) {
+        try {
+          const listedDevices = await executorClient.commands.listDevices()
+          if (listedDevices.length > 0) {
+            devicesForResolution = listedDevices
+            dispatch({
+              type: 'devices_refreshed',
+              devices: listedDevices,
+              standaloneDeviceId: getPreferredStandaloneDeviceId(listedDevices, requestDeviceId),
+            })
+          }
+        } catch (error) {
+          console.warn('[KCoder Studio] Failed to load devices before opening workspace', safeErrorDiagnostic(error))
+        }
+      }
+
+      if (projectRoots && normalizedRoots.length > 0) {
+        const projectName =
+          normalizedLabel ||
+          normalizedWorkspacePath.split(/[\\/]/).filter(Boolean).at(-1) ||
+          'Project'
+        const response = await executorClient.runtime.upsertLocalRuntimeProject({
+          deviceId: requestDeviceId,
+          projectKey: createRandomUuid(),
+          name: projectName,
+          roots: normalizedRoots,
+          runtime: runtimeNameForCurrentHost(),
+        })
+        if (!response.accepted) {
+          throw new Error(response.error || 'Failed to register local project')
+        }
+        response.roots.forEach(workspacePath =>
+          clearRuntimeProjectRemoval({ deviceId: response.deviceId, workspacePath })
+        )
+        rememberExecutionDevice(response.deviceId)
+        await refreshWorkLists()
+        dispatch({
+          type: 'runtime_workspace_opened',
+          deviceId: response.deviceId,
+          workspacePath: response.roots[0],
+          label: response.name,
+        })
+        navigateTo('/')
+        return
+      }
+
+      const response = await executorClient.runtime.openRuntimeWorkspace({
+        deviceId: requestDeviceId,
+        workspacePath: normalizedWorkspacePath,
+        runtime: runtimeNameForCurrentHost(),
+        ...(normalizedLabel ? { label: normalizedLabel } : {}),
+      })
+      if (!response.accepted) {
+        throw new Error(response.error || 'Failed to register runtime workspace')
+      }
+      const openedWorkspacePath = response.workspacePath || normalizedWorkspacePath
+      const openedDeviceId =
+        resolveLocalWorkbenchDeviceId(
+          devicesForResolution,
+          response.deviceId?.trim() || requestDeviceId
+        ) ||
+        response.deviceId?.trim() ||
+        requestDeviceId
+
+      clearRuntimeProjectRemoval({
+        deviceId: openedDeviceId,
+        workspacePath: openedWorkspacePath,
+      })
+      writeLastProjectId(user.id, null)
+      rememberExecutionDevice(openedDeviceId)
+      dispatch({
+        type: 'runtime_workspace_opened',
+        deviceId: openedDeviceId,
+        workspacePath: openedWorkspacePath,
+        label: normalizedLabel,
+      })
+      navigateTo('/')
+    },
+    [
+      clearRuntimeProjectRemoval,
+      executorClient,
+      refreshWorkLists,
+      rememberExecutionDevice,
+      state.devices,
+      user.id,
+    ]
+  )
+
+  const startNewChat = useCallback(() => {
+    const project = state.currentProject
+      ? findFirstSelectableProject(state.projects, state.runtimeWork, [state.currentProject.id])
+      : null
+    if (project) {
+      writeLastProjectId(user.id, project.id)
+      dispatch({
+        type: 'project_workspace_selected',
+        project,
+        deviceWorkspaceId: getDefaultProjectDeviceWorkspaceId(state.runtimeWork, project.id),
+      })
+      navigateTo('/')
+      requestNewChatComposerFocus()
+      return
+    }
+
+    writeLastProjectId(user.id, null)
+    dispatch({
+      type: 'project_cleared',
+      standaloneDeviceId: getRememberedStandaloneDeviceId(
+        user,
+        state.devices,
+        state.standaloneDeviceId
+      ),
+      standaloneWorkspacePath: null,
+    })
+    navigateTo('/')
+    requestNewChatComposerFocus()
+  }, [
+    state.currentProject,
+    state.devices,
+    state.projects,
+    state.runtimeWork,
+    state.standaloneDeviceId,
+    user,
+  ])
+
+  const listLocalSkills = useCallback(
+    async (forceReload = false) => {
+      const selectedProjectWorkspace = findProjectDeviceWorkspace(
+        state.runtimeWork,
+        activeProject?.id,
+        state.selectedDeviceWorkspaceId
+      )
+      const cwd =
+        state.currentRuntimeTask?.workspacePath ??
+        selectedProjectWorkspace?.workspacePath ??
+        state.standaloneWorkspacePath ??
+        null
+      const cwds = cwd ? [cwd] : []
+      const cacheKey = cwds.length > 0 ? cwds.join('\u0000') : 'default'
+
+      const cached = localSkillsCacheRef.current.get(cacheKey)
+      if (!forceReload && cached && cached.expiresAt > Date.now()) {
+        return cached.skills
+      }
+
+      const skills = await localPluginApi.listSkills({ cwds, forceReload })
+      localSkillsCacheRef.current.set(cacheKey, {
+        expiresAt: Date.now() + LOCAL_SKILLS_CACHE_TTL_MS,
+        skills,
+      })
+      return skills
+    },
+    [
+      activeProject?.id,
+      localPluginApi,
+      state.currentRuntimeTask?.workspacePath,
+      state.runtimeWork,
+      state.selectedDeviceWorkspaceId,
+      state.standaloneWorkspacePath,
+    ]
+  )
+
+  const availableSkills = skillSelection.skills
+  const setSelectedSkillsForScope = skillSelection.setSelectedSkillsForScope
+  const startNewSkillChat = useCallback(
+    async (
+      skillNames: string[],
+      options: { allowLocalSkills?: boolean } = {}
+    ): Promise<boolean> => {
+      const requestedNames = skillNames.map(name => name.trim()).filter(Boolean)
+      if (requestedNames.length === 0) {
+        return false
+      }
+
+      const requestedUnifiedSkills = requestedNames.map(name =>
+        availableSkills.find(
+          skill =>
+            skill.is_active && (skill.name === name || `${skill.namespace}:${skill.name}` === name)
+        )
+      )
+      const unresolvedNames = requestedNames.filter((_, index) => !requestedUnifiedSkills[index])
+      const localSkills =
+        options.allowLocalSkills !== false && unresolvedNames.length > 0
+          ? await listLocalSkills(true)
+          : []
+      const requestedLocalSkills = unresolvedNames.map(name =>
+        localSkills.find(
+          skill =>
+            skill.name === name || (!skill.name.includes(':') && name.endsWith(`:${skill.name}`))
+        )
+      )
+      if (requestedLocalSkills.some(skill => !skill)) return false
+      const resolvedLocalSkills = requestedLocalSkills.filter((skill): skill is LocalDeviceSkill =>
+        Boolean(skill)
+      )
+
+      const nextScopeKey = getProjectChatScopeKey({
+        currentRuntimeTask: null,
+        standaloneChatKey: state.standaloneChatKey + 1,
+      })
+      setSelectedSkillsForScope(
+        nextScopeKey,
+        requestedUnifiedSkills.flatMap(skill =>
+          skill
+            ? [
+                {
+                  name: skill.name,
+                  namespace: skill.namespace,
+                  is_public: skill.is_public,
+                },
+              ]
+            : []
+        )
+      )
+      if (resolvedLocalSkills.length > 0) {
+        const references = resolvedLocalSkills.map((skill, index) => {
+          const requestedName = unresolvedNames[index]
+          const namespaceSeparator = requestedName.indexOf(':')
+          const mentionName =
+            namespaceSeparator > 0 ? requestedName.slice(0, namespaceSeparator) : skill.name
+          return localSkillReference(skill, mentionName)
+        })
+        const input = `${references.join(' ')} `
+        setDraftInputByScope(current => ({ ...current, [nextScopeKey]: input }))
+      }
+      writeLastProjectId(user.id, null)
+      dispatch({
+        type: 'project_cleared',
+        standaloneDeviceId: getRememberedStandaloneDeviceId(
+          user,
+          state.devices,
+          state.standaloneDeviceId
+        ),
+        standaloneWorkspacePath: null,
+        startFreshChat: true,
+      })
+      navigateTo('/')
+      requestNewChatComposerFocus()
+      return true
+    },
+    [
+      availableSkills,
+      listLocalSkills,
+      setSelectedSkillsForScope,
+      state.devices,
+      state.standaloneChatKey,
+      state.standaloneDeviceId,
+      user,
+    ]
+  )
+
+  const startStandaloneChat = useCallback(() => {
+    writeLastProjectId(user.id, null)
+    dispatch({
+      type: 'project_cleared',
+      standaloneDeviceId: getRememberedStandaloneDeviceId(
+        user,
+        state.devices,
+        state.standaloneDeviceId
+      ),
+      standaloneWorkspacePath: null,
+      startFreshChat: true,
+    })
+    navigateTo('/')
+  }, [state.devices, state.standaloneDeviceId, user])
+
+  const startNewProjectChat = useCallback(
+    (projectId: number) => {
+      const deviceWorkspaceId = getDefaultProjectDeviceWorkspaceId(state.runtimeWork, projectId)
+      const project = findSelectableProject(state.projects, state.runtimeWork, projectId)
+      if (!project) return
+      projectSelectionStartedRef.current = true
+      writeLastProjectId(user.id, project.id)
+      dispatch({
+        type: 'project_workspace_selected',
+        project,
+        deviceWorkspaceId,
+      })
+      navigateTo('/')
+      requestNewChatComposerFocus()
+    },
+    [state.projects, state.runtimeWork, user.id]
+  )
+
+  const runtimeTasks = useWorkbenchRuntimeTasks({
+    user,
+    state,
+    dispatch,
+    executorClient,
+    services: resolvedServices,
+    lifecycleStore,
+    markRuntimeTasksArchived,
+    refreshWorkLists,
+  })
+
+  const listImPrivateSessions = useCallback(
+    () =>
+      resolvedServices.imSessionApi?.listPrivateSessions() ??
+      Promise.resolve({ total: 0, items: [] }),
+    [resolvedServices]
+  )
+
+  const bindRuntimeTaskToImSessions = useCallback(
+    (address: RuntimeTaskAddress, sessionKeys: string[]) => {
+      if (!resolvedServices.runtimeWorkApi) {
+        return Promise.reject(new Error('Runtime work API is unavailable'))
+      }
+      return resolvedServices.runtimeWorkApi.bindRuntimeTaskImSessions({
+        address,
+        sessionKeys,
+      })
+    },
+    [resolvedServices]
+  )
+
+  const getImNotificationSettings = useCallback(() => {
+    if (!resolvedServices.runtimeWorkApi) {
+      return Promise.reject(new Error('Runtime work API is unavailable'))
+    }
+    return resolvedServices.runtimeWorkApi.getImNotificationSettings()
+  }, [resolvedServices])
+
+  const updateGlobalImNotification = useCallback(
+    (data: RuntimeGlobalIMNotificationUpdateRequest) => {
+      if (!resolvedServices.runtimeWorkApi) {
+        return Promise.reject(new Error('Runtime work API is unavailable'))
+      }
+      return resolvedServices.runtimeWorkApi.updateGlobalImNotification(data)
+    },
+    [resolvedServices]
+  )
+
+  const subscribeRuntimeTaskNotifications = useCallback(
+    (data: RuntimeTaskIMNotificationSubscriptionRequest) => {
+      if (!resolvedServices.runtimeWorkApi) {
+        return Promise.reject(new Error('Runtime work API is unavailable'))
+      }
+      return resolvedServices.runtimeWorkApi.subscribeRuntimeTaskNotifications(data)
+    },
+    [resolvedServices]
+  )
+
+  const unsubscribeRuntimeTaskNotifications = useCallback(
+    (address: RuntimeTaskAddress) => {
+      if (!resolvedServices.runtimeWorkApi) {
+        return Promise.reject(new Error('Runtime work API is unavailable'))
+      }
+      return resolvedServices.runtimeWorkApi.unsubscribeRuntimeTaskNotifications(address)
+    },
+    [resolvedServices]
+  )
+
+  const projectActions = useWorkbenchProjectActions({
+    user,
+    state,
+    dispatch,
+    executorClient,
+    services: resolvedServices,
+    refreshWorkLists,
+    markRuntimeProjectRemoved,
+    clearRuntimeProjectRemoval,
+    rememberExecutionDevice,
+  })
+  const runtimeMessaging = useWorkbenchRuntimeMessaging({
+    state,
+    dispatch,
+    executorClient,
+    services: resolvedServices,
+    runtimeTasks,
+    lifecycleStore,
+    projectExecutionMode,
+    projectWorktreeBranch,
+    isOptionsLocked,
+    attachmentSelection,
+    modelSelection,
+    skillSelection,
+    refreshWorkLists,
+    rememberExecutionDevice,
+  })
+  const stableSelectProject = useStableEvent(selectProject)
+  const stableSetProjectExecutionMode = useStableEvent(selectProjectExecutionMode)
+  const setWorkbenchError = useCallback(
+    (error: string | null) => dispatch({ type: 'error_set', error }),
+    [dispatch]
+  )
+  const stableSetWorkbenchError = useStableEvent(setWorkbenchError)
+  const stableSetProjectWorktreeBranch = useStableEvent(setProjectWorktreeBranch)
+  const stableSelectProjectWorkspace = useStableEvent(selectProjectWorkspace)
+  const stableSelectStandaloneDevice = useStableEvent(selectStandaloneDevice)
+  const stableOpenStandaloneWorkspace = useStableEvent(openStandaloneWorkspace)
+  const stableStartNewChat = useStableEvent(startNewChat)
+  const stableStartNewSkillChat = useStableEvent(startNewSkillChat)
+  const stableStartStandaloneChat = useStableEvent(startStandaloneChat)
+  const stableStartNewProjectChat = useStableEvent(startNewProjectChat)
+  const stableOpenRuntimeTask = useStableEvent(runtimeTasks.openRuntimeTask)
+  const stableSearchRuntimeWork = useStableEvent(runtimeTasks.searchRuntimeWork)
+  const resolveRuntimeContextUsage = useCallback(
+    (address: RuntimeTaskAddress, usage: RuntimeContextUsage): RuntimeContextUsage => {
+      const taskSelection =
+        findRuntimeTask(state.runtimeWork, address)?.modelSelection ??
+        modelSelectionFromRuntimeHandle(address.runtimeHandle) ??
+        null
+      const selectedModel = modelSelection.selectedModel
+      const taskModel = findModelForSelection(modelSelection.models, taskSelection)
+      const matchingSelectedModel =
+        taskSelection?.modelName &&
+        selectedModel?.name === taskSelection.modelName &&
+        (!taskSelection.modelType || selectedModel.type === taskSelection.modelType)
+          ? selectedModel
+          : null
+
+      return applyModelContextWindowOverride(usage, taskModel ?? matchingSelectedModel)
+    },
+    [modelSelection.models, modelSelection.selectedModel, state.runtimeWork]
+  )
+  const stableLoadRuntimeTranscriptForPane = useStableEvent(
+    async (
+      address: RuntimeTaskAddress,
+      options?: Parameters<typeof runtimeTasks.loadRuntimeTranscriptForPane>[1]
+    ) => {
+      const transcript = await runtimeTasks.loadRuntimeTranscriptForPane(address, options)
+      if (transcript.contextUsage) {
+        const contextUsage = resolveRuntimeContextUsage(address, transcript.contextUsage)
+        setContextUsageByRuntimeTask(current => ({
+          ...current,
+          [getRuntimeTaskRouteKey(address)]: contextUsage,
+        }))
+      }
+      return transcript
+    }
+  )
+
+  useEffect(() => {
+    const listener = installLocalWorkspaceOpenListener(
+      stableOpenStandaloneWorkspace,
+      stableSetWorkbenchError
+    )
+
+    return () => {
+      void listener?.then(unlisten => unlisten())
+    }
+  }, [stableOpenStandaloneWorkspace, stableSetWorkbenchError])
+  const recordRuntimeTaskActivity = useStableEvent((address: RuntimeTaskAddress) => {
+    dispatch({
+      type: 'runtime_task_activity',
+      activity: createRuntimeTaskActivity(
+        address,
+        lifecycleStore.getTask(address)?.derived.isRunning
+      ),
+    })
+  })
+  const stableSubscribeRuntimeTaskStream = useStableEvent(
+    (
+      address: RuntimeTaskAddress,
+      handlers: Parameters<typeof runtimeTasks.subscribeRuntimeTaskStream>[1]
+    ) =>
+      runtimeTasks.subscribeRuntimeTaskStream(address, {
+        ...handlers,
+        onContextUsageUpdated: usage => {
+          const contextUsage = resolveRuntimeContextUsage(address, usage)
+          setContextUsageByRuntimeTask(current => ({
+            ...current,
+            [getRuntimeTaskRouteKey(address)]: contextUsage,
+          }))
+          handlers.onContextUsageUpdated?.(contextUsage)
+        },
+        onAssistantSettled: turnId => {
+          console.info('[KCoder Studio] Runtime task settlement dispatched', {
+            deviceId: address.deviceId,
+            taskId: address.taskId,
+            workspacePath: address.workspacePath ?? null,
+          })
+          lifecycleStore.turnSettled(address, turnId)
+          recordRuntimeTaskActivity(address)
+          handlers.onAssistantSettled?.(turnId)
+        },
+        onRuntimeTransportReplaced: replacement => {
+          lifecycleStore.resetBackgroundActivity(address)
+          handlers.onRuntimeTransportReplaced?.(replacement)
+        },
+        onAssistantActivity: turnId => lifecycleStore.turnActivity(address, turnId),
+        onSubagentActivity: activity => {
+          if (activity.kind === 'background' && !activity.steerStatus)
+            lifecycleStore.backgroundActivity(
+              address,
+              activity.agentId ?? activity.agentPath,
+              activity.status ?? ''
+            )
+          handlers.onSubagentActivity?.(activity)
+        },
+        onAssistantStart: turnId => {
+          lifecycleStore.turnStarted(address, turnId)
+          recordRuntimeTaskActivity(address)
+          handlers.onAssistantStart?.(turnId)
+        },
+      })
+  )
+
+  const nextBackgroundRunningTasks = getBackgroundRunningRuntimeTasks(
+    state.runtimeWork,
+    state.currentRuntimeTask,
+    lifecycleSnapshot
+  )
+  const backgroundRunningTaskRoutes = nextBackgroundRunningTasks
+    .map(address => `${address.deviceId}:${address.taskId}`)
+    .join('|')
+  const getLatestBackgroundRunningTasks = useStableEvent(() =>
+    getBackgroundRunningRuntimeTasks(state.runtimeWork, state.currentRuntimeTask, lifecycleSnapshot)
+  )
+  const subscribeBackgroundRuntimeTaskStream = runtimeTasks.subscribeRuntimeTaskStream
+  const stableRefreshWorkLists = useStableEvent(refreshWorkLists)
+  useEffect(() => {
+    const unsubscribers = getLatestBackgroundRunningTasks().map(address =>
+      subscribeBackgroundRuntimeTaskStream(address, {
+        onMessageAction: action => applyRuntimeConversationAction(address, action),
+        onRuntimeTransportReplaced: () => lifecycleStore.resetBackgroundActivity(address),
+        onAssistantActivity: turnId => lifecycleStore.turnActivity(address, turnId),
+        onSubagentActivity: activity => {
+          if (activity.kind === 'background' && !activity.steerStatus)
+            lifecycleStore.backgroundActivity(
+              address,
+              activity.agentId ?? activity.agentPath,
+              activity.status ?? ''
+            )
+        },
+        onAssistantStart: turnId => {
+          lifecycleStore.turnStarted(address, turnId)
+          recordRuntimeTaskActivity(address)
+        },
+        onAssistantSettled: turnId => {
+          lifecycleStore.turnSettled(address, turnId)
+          recordRuntimeTaskActivity(address)
+        },
+        onRefreshWorkLists: () => {
+          void stableRefreshWorkLists().catch(error => {
+            console.warn('[KCoder Studio] Background runtime work list refresh failed', {
+              deviceId: address.deviceId,
+              taskId: address.taskId,
+              error: safeErrorDiagnostic(error),
+            })
+          })
+        },
+      })
+    )
+    return () => unsubscribers.forEach(unsubscribe => unsubscribe())
+  }, [
+    backgroundRunningTaskRoutes,
+    getLatestBackgroundRunningTasks,
+    lifecycleStore,
+    recordRuntimeTaskActivity,
+    stableRefreshWorkLists,
+    subscribeBackgroundRuntimeTaskStream,
+  ])
+  const stableRenameRuntimeTask = useStableEvent(runtimeTasks.renameRuntimeTask)
+  const stableArchiveRuntimeTask = useStableEvent(runtimeTasks.archiveRuntimeTask)
+  const stableArchiveProjectConversations = useStableEvent(runtimeTasks.archiveProjectConversations)
+  const stableArchiveProjectsConversations = useStableEvent(
+    runtimeTasks.archiveProjectsConversations
+  )
+  const stableArchiveChatConversations = useStableEvent(runtimeTasks.archiveChatConversations)
+  const stableForkCurrentRuntimeTask = useStableEvent(runtimeTasks.forkCurrentRuntimeTask)
+  const stableGetRuntimeGoal = useStableEvent(runtimeTasks.getRuntimeGoal)
+  const stableGetRuntimeSessionModes = useStableEvent(runtimeTasks.getRuntimeSessionModes)
+  const stableSetRuntimeGoal = useStableEvent(runtimeTasks.setRuntimeGoal)
+  const stableClearRuntimeGoal = useStableEvent(runtimeTasks.clearRuntimeGoal)
+  const stableListImPrivateSessions = useStableEvent(listImPrivateSessions)
+  const stableBindRuntimeTaskToImSessions = useStableEvent(bindRuntimeTaskToImSessions)
+  const stableGetImNotificationSettings = useStableEvent(getImNotificationSettings)
+  const stableUpdateGlobalImNotification = useStableEvent(updateGlobalImNotification)
+  const stableSubscribeRuntimeTaskNotifications = useStableEvent(subscribeRuntimeTaskNotifications)
+  const stableUnsubscribeRuntimeTaskNotifications = useStableEvent(
+    unsubscribeRuntimeTaskNotifications
+  )
+  const stableRememberExecutionDevice = useStableEvent(rememberExecutionDevice)
+  const stableRefreshDevices = useStableEvent(refreshDevices)
+  const stableGetRemoteDeviceStartupCommand = useStableEvent(getRemoteDeviceStartupCommand)
+  const stableUpgradeDevice = useStableEvent(upgradeDevice)
+  const stableCreateProject = useStableEvent(projectActions.createProject)
+  const stableCreateGitWorkspaceProject = useStableEvent(projectActions.createGitWorkspaceProject)
+  const stablePrepareDeviceWorkspace = useStableEvent(projectActions.prepareDeviceWorkspace)
+  const stableDeleteDeviceWorkspace = useStableEvent(projectActions.deleteDeviceWorkspace)
+  const stableListGitRepositories = useStableEvent(projectActions.listGitRepositories)
+  const stableListGitBranches = useStableEvent(projectActions.listGitBranches)
+  const stableUpdateProjectName = useStableEvent(projectActions.updateProjectName)
+  const stableUpdateLocalRuntimeProject = useStableEvent(projectActions.updateLocalRuntimeProject)
+  const stableRemoveProject = useStableEvent(projectActions.removeProject)
+  const stableReorderRuntimeProjects = useStableEvent(projectActions.reorderRuntimeProjects)
+  const stableSetRuntimeProjectPinned = useStableEvent(projectActions.setRuntimeProjectPinned)
+  const stableSetRuntimeProjectAppearance = useStableEvent(
+    projectActions.setRuntimeProjectAppearance
+  )
+  const stableReorderRuntimeProjectTasks = useStableEvent(projectActions.reorderRuntimeProjectTasks)
+  const stableSetRuntimeTaskPinned = useStableEvent(projectActions.setRuntimeTaskPinned)
+  const stableGetDeviceHomeDirectory = useStableEvent(projectActions.getDeviceHomeDirectory)
+  const stableGetProjectWorkspaceRoot = useStableEvent(projectActions.getProjectWorkspaceRoot)
+  const stableListDeviceDirectories = useStableEvent(projectActions.listDeviceDirectories)
+  const stableCreateDeviceDirectory = useStableEvent(projectActions.createDeviceDirectory)
+  const stableLoadEnvironmentInfo = useStableEvent(projectActions.loadEnvironmentInfo)
+  const stableLoadEnvironmentDiff = useStableEvent(projectActions.loadEnvironmentDiff)
+  const stableCommitEnvironmentChanges = useStableEvent(projectActions.commitEnvironmentChanges)
+  const stableCommitAndPushEnvironmentChanges = useStableEvent(
+    projectActions.commitAndPushEnvironmentChanges
+  )
+  const stablePushEnvironmentChanges = useStableEvent(projectActions.pushEnvironmentChanges)
+  const stableListEnvironmentBranches = useStableEvent(projectActions.listEnvironmentBranches)
+  const stableCheckoutEnvironmentBranch = useStableEvent(projectActions.checkoutEnvironmentBranch)
+  const stableCreateEnvironmentBranch = useStableEvent(projectActions.createEnvironmentBranch)
+  const stableSendRuntimePaneMessage = useStableEvent(runtimeMessaging.sendRuntimePaneMessage)
+  const stableInterruptAndSendRuntimePaneMessage = useStableEvent(
+    runtimeMessaging.interruptAndSendRuntimePaneMessage
+  )
+  const stableSendRuntimePaneGuidance = useStableEvent(runtimeMessaging.sendRuntimePaneGuidance)
+  const stableSteerRuntimePaneSubagent = useStableEvent(runtimeMessaging.steerRuntimePaneSubagent)
+  const stableReadRuntimePaneSubagentArtifact = useStableEvent(
+    runtimeMessaging.readRuntimePaneSubagentArtifact
+  )
+  const stableCompactRuntimePaneTask = useStableEvent(runtimeMessaging.compactRuntimePaneTask)
+  const stableEditLastUserMessage = useStableEvent(runtimeMessaging.editLastUserMessage)
+  const stableCancelRuntimePaneTask = useStableEvent(runtimeMessaging.cancelRuntimePaneTask)
+  const stableSendCurrentInput = useStableEvent(runtimeMessaging.sendCurrentInput)
+  const stableCreateTemporaryRuntimeTask = useStableEvent(
+    runtimeMessaging.createTemporaryRuntimeTask
+  )
+  const stableCreateProjectRuntimeTask = useStableEvent(runtimeMessaging.createProjectRuntimeTask)
+  const stableRetryFailedMessage = useStableEvent(runtimeMessaging.retryFailedMessage)
+  const stablePauseCurrentResponse = useStableEvent(runtimeMessaging.pauseCurrentResponse)
+  const stableShortenCurrentWait = useStableEvent(runtimeMessaging.shortenCurrentWait)
+  const stableLoadTurnFileChangesDiff = useStableEvent(runtimeMessaging.loadTurnFileChangesDiff)
+  const stableRevertTurnFileChanges = useStableEvent(runtimeMessaging.revertTurnFileChanges)
+
+  const listLocalApps = useCallback(async () => {
+    const cached = localAppsCacheRef.current
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.apps
+    }
+
+    let apps: LocalDeviceApp[] = []
+    try {
+      apps = await localPluginApi.listApps()
+    } catch (error) {
+      console.warn(
+        '[KCoder Studio] Failed to load local Codex apps; continuing with skills only.',
+        safeErrorDiagnostic(error)
+      )
+    }
+    if (cloudConnection.isConnected && cloudConnection.apiBaseUrl && cloudConnection.token) {
+      try {
+        const installedConnectors = await listWegentInstalledConnectorApps(
+          cloudConnection.apiBaseUrl,
+          cloudConnection.token
+        )
+        const connectedApps = installedConnectors.apps.filter(app => app.enabled && app.callable)
+        const synced = await requestLocalExecutor<{
+          apps: Array<{ slug: string; skillPath: string }>
+        }>('runtime.connectors.apps.sync', {
+          apps: connectedApps.map(app => ({
+            slug: app.slug,
+            name: app.runtime_name ?? app.slug,
+            description: app.description ?? '',
+            tools: app.tool_summaries ?? [],
+          })),
+        })
+        const skillPathBySlug = new Map(synced.apps.map(app => [app.slug, app.skillPath]))
+        apps.push(
+          ...connectedApps.map(app => ({
+            id: `wegent:${app.slug}`,
+            name: app.runtime_name ?? app.slug,
+            description: app.description ?? '',
+            logoUrl: app.icon_url ?? null,
+            isAccessible: true,
+            isEnabled: true,
+            pluginDisplayNames: ['Wegent Cloud'],
+            source: 'wegent-connector',
+            skillPath: skillPathBySlug.get(app.slug) ?? null,
+          }))
+        )
+      } catch (error) {
+        console.warn('[KCoder Studio] Failed to load Wegent connector apps.', safeErrorDiagnostic(error))
+      }
+    }
+    localAppsCacheRef.current = {
+      expiresAt: Date.now() + LOCAL_SKILLS_CACHE_TTL_MS,
+      apps,
+    }
+    return apps
+  }, [
+    cloudConnection.apiBaseUrl,
+    cloudConnection.isConnected,
+    cloudConnection.token,
+    localPluginApi,
+  ])
+
+  useEffect(() => {
+    const clearLocalSkillCache = () => {
+      localSkillsCacheRef.current.clear()
+      localAppsCacheRef.current = null
+    }
+    clearLocalSkillCache()
+    window.addEventListener(LOCAL_PLUGIN_SKILLS_CHANGED_EVENT, clearLocalSkillCache)
+    return () => {
+      window.removeEventListener(LOCAL_PLUGIN_SKILLS_CHANGED_EVENT, clearLocalSkillCache)
+    }
+  }, [cloudConnection.apiBaseUrl, cloudConnection.isConnected, cloudConnection.token])
+
+  const workspaceFileApi = useMemo(
+    () => ({
+      listWorkspaceEntries: executorClient.files.listWorkspaceEntries,
+      searchWorkspaceEntries: executorClient.files.searchWorkspaceEntries,
+      readWorkspaceTextFile: executorClient.files.readWorkspaceTextFile,
+      writeWorkspaceTextFile: executorClient.files.writeWorkspaceTextFile,
+      readWorkspaceFileChunk: executorClient.files.readWorkspaceFileChunk,
+      createWorkspaceTextFile: executorClient.files.createWorkspaceTextFile,
+      createWorkspaceDirectory: executorClient.files.createWorkspaceDirectory,
+      renameWorkspaceEntry: executorClient.files.renameWorkspaceEntry,
+      deleteWorkspaceEntry: executorClient.files.deleteWorkspaceEntry,
+    }),
+    [executorClient]
+  )
+  const paneState = useMemo(
+    () => ({
+      isBootstrapping: state.isBootstrapping,
+      projects: state.projects,
+      devices: state.devices,
+      runtimeWork: state.runtimeWork,
+      standaloneDeviceId: state.standaloneDeviceId,
+      standaloneWorkspacePath: state.standaloneWorkspacePath,
+      selectedDeviceWorkspaceId: state.selectedDeviceWorkspaceId,
+      pendingProjectWorkspaceProjectId: state.pendingProjectWorkspaceProjectId,
+      user: state.user,
+      error: state.error,
+    }),
+    [
+      state.devices,
+      state.error,
+      state.isBootstrapping,
+      state.pendingProjectWorkspaceProjectId,
+      state.projects,
+      state.runtimeWork,
+      state.selectedDeviceWorkspaceId,
+      state.standaloneDeviceId,
+      state.standaloneWorkspacePath,
+      state.user,
+    ]
+  )
+  const projectChatValue = useMemo(
+    () => ({
+      scopeKey: projectChatScopeKey,
+      models: conversationModels,
+      skills: skillSelection.skills,
+      selectedModel: modelSelection.displaySelectedModel,
+      activeModel,
+      selectedModelOptions: modelSelection.selectedModelOptions,
+      isModelSelectionReady: modelSelection.isSelectionReady,
+      input: draftInput,
+      trialTemplates,
+      selectedSkills: skillSelection.selectedSkills,
+      attachments: attachmentSelection.attachments,
+      uploadingFiles: attachmentSelection.uploadingFiles,
+      errors: attachmentSelection.errors,
+      contextUsage: currentContextUsage,
+      isOptionsLocked,
+      isAttachmentReadyToSend: attachmentSelection.isAttachmentReadyToSend,
+      setSelectedModel: modelSelection.setSelectedModel,
+      setSelectedModelAndOptions: modelSelection.setSelectedModelAndOptions,
+      setSelectedModelOption: modelSelection.setSelectedModelOption,
+      getSelectedModel: modelSelection.getSelectedModel,
+      isSelectedModelUnavailable: modelSelection.isSelectedModelUnavailable,
+      getModelSelectionMode: modelSelection.getModelSelectionMode,
+      getSelectedModelOptions: modelSelection.getSelectedModelOptions,
+      onBlockedModelSelect: handleBlockedModelSelect,
+      setInput: setDraftInput,
+      setSelectedSkills: skillSelection.setSelectedSkills,
+      toggleSkill: skillSelection.toggleSkill,
+      handleFileSelect: attachmentSelection.handleFileSelect,
+      cancelUpload: attachmentSelection.cancelUpload,
+      addExistingAttachment: attachmentSelection.addExistingAttachment,
+      removeAttachment: attachmentSelection.removeAttachment,
+      resetAttachments: attachmentSelection.resetAttachments,
+      listLocalSkills,
+      listLocalApps,
+    }),
+    [
+      attachmentSelection.addExistingAttachment,
+      attachmentSelection.attachments,
+      attachmentSelection.errors,
+      attachmentSelection.handleFileSelect,
+      attachmentSelection.cancelUpload,
+      attachmentSelection.isAttachmentReadyToSend,
+      attachmentSelection.removeAttachment,
+      attachmentSelection.resetAttachments,
+      attachmentSelection.uploadingFiles,
+      projectChatScopeKey,
+      draftInput,
+      trialTemplates,
+      handleBlockedModelSelect,
+      currentContextUsage,
+      isOptionsLocked,
+      listLocalSkills,
+      listLocalApps,
+      modelSelection.isSelectionReady,
+      conversationModels,
+      activeModel,
+      modelSelection.displaySelectedModel,
+      modelSelection.selectedModelOptions,
+      modelSelection.setSelectedModel,
+      modelSelection.setSelectedModelAndOptions,
+      modelSelection.setSelectedModelOption,
+      modelSelection.getSelectedModel,
+      modelSelection.isSelectedModelUnavailable,
+      modelSelection.getModelSelectionMode,
+      modelSelection.getSelectedModelOptions,
+      setDraftInput,
+      skillSelection.selectedSkills,
+      skillSelection.setSelectedSkills,
+      skillSelection.skills,
+      skillSelection.toggleSkill,
+    ]
+  )
+  const paneProjectChatValue = useMemo(
+    () => ({
+      scopeKey: projectChatScopeKey,
+      models: conversationModels,
+      skills: skillSelection.skills,
+      selectedModel: modelSelection.displaySelectedModel,
+      activeModel,
+      selectedModelOptions: modelSelection.selectedModelOptions,
+      isModelSelectionReady: modelSelection.isSelectionReady,
+      input: draftInput,
+      trialTemplates,
+      selectedSkills: skillSelection.selectedSkills,
+      attachments: attachmentSelection.attachments,
+      uploadingFiles: attachmentSelection.uploadingFiles,
+      errors: attachmentSelection.errors,
+      contextUsage: currentContextUsage,
+      isOptionsLocked: false,
+      isAttachmentReadyToSend: attachmentSelection.isAttachmentReadyToSend,
+      setSelectedModel: modelSelection.setSelectedModel,
+      setSelectedModelAndOptions: modelSelection.setSelectedModelAndOptions,
+      setSelectedModelOption: modelSelection.setSelectedModelOption,
+      getSelectedModel: modelSelection.getSelectedModel,
+      isSelectedModelUnavailable: modelSelection.isSelectedModelUnavailable,
+      getModelSelectionMode: modelSelection.getModelSelectionMode,
+      getSelectedModelOptions: modelSelection.getSelectedModelOptions,
+      onBlockedModelSelect: handleBlockedModelSelect,
+      setInput: setDraftInput,
+      setSelectedSkills: skillSelection.setSelectedSkills,
+      toggleSkill: skillSelection.toggleSkill,
+      handleFileSelect: attachmentSelection.handleFileSelect,
+      cancelUpload: attachmentSelection.cancelUpload,
+      addExistingAttachment: attachmentSelection.addExistingAttachment,
+      removeAttachment: attachmentSelection.removeAttachment,
+      resetAttachments: attachmentSelection.resetAttachments,
+      listLocalSkills,
+      listLocalApps,
+    }),
+    [
+      attachmentSelection.addExistingAttachment,
+      attachmentSelection.attachments,
+      attachmentSelection.errors,
+      attachmentSelection.handleFileSelect,
+      attachmentSelection.cancelUpload,
+      attachmentSelection.isAttachmentReadyToSend,
+      attachmentSelection.removeAttachment,
+      attachmentSelection.resetAttachments,
+      attachmentSelection.uploadingFiles,
+      projectChatScopeKey,
+      draftInput,
+      trialTemplates,
+      handleBlockedModelSelect,
+      currentContextUsage,
+      listLocalSkills,
+      listLocalApps,
+      modelSelection.isSelectionReady,
+      conversationModels,
+      activeModel,
+      modelSelection.displaySelectedModel,
+      modelSelection.selectedModelOptions,
+      modelSelection.setSelectedModel,
+      modelSelection.setSelectedModelAndOptions,
+      modelSelection.setSelectedModelOption,
+      modelSelection.getSelectedModel,
+      modelSelection.isSelectedModelUnavailable,
+      modelSelection.getModelSelectionMode,
+      modelSelection.getSelectedModelOptions,
+      setDraftInput,
+      skillSelection.selectedSkills,
+      skillSelection.setSelectedSkills,
+      skillSelection.skills,
+      skillSelection.toggleSkill,
+    ]
+  )
+
+  const value: WorkbenchContextValue = {
+    services: resolvedServices,
+    state,
+    isStartupReady,
+    workspaceFileApi,
+    runtimeTaskReminders,
+    cloudWorkStatus,
+    upgradingDevices,
+    projectExecutionMode,
+    setProjectExecutionMode: selectProjectExecutionMode,
+    setWorkbenchError,
+    projectWorktreeBranch,
+    setProjectWorktreeBranch,
+    projectChat: projectChatValue,
+    selectProject,
+    selectProjectWorkspace,
+    selectStandaloneDevice,
+    openStandaloneWorkspace,
+    startNewChat,
+    startNewSkillChat,
+    startStandaloneChat,
+    startNewProjectChat,
+    openRuntimeTask: runtimeTasks.openRuntimeTask,
+    searchRuntimeWork: runtimeTasks.searchRuntimeWork,
+    loadRuntimeTranscriptForPane: runtimeTasks.loadRuntimeTranscriptForPane,
+    subscribeRuntimeTaskStream: stableSubscribeRuntimeTaskStream,
+    renameRuntimeTask: runtimeTasks.renameRuntimeTask,
+    archiveRuntimeTask: runtimeTasks.archiveRuntimeTask,
+    archiveProjectConversations: runtimeTasks.archiveProjectConversations,
+    archiveProjectsConversations: runtimeTasks.archiveProjectsConversations,
+    archiveChatConversations: runtimeTasks.archiveChatConversations,
+    forkCurrentRuntimeTask: runtimeTasks.forkCurrentRuntimeTask,
+    getRuntimeGoal: runtimeTasks.getRuntimeGoal,
+    getRuntimeSessionModes: runtimeTasks.getRuntimeSessionModes,
+    setRuntimeGoal: runtimeTasks.setRuntimeGoal,
+    clearRuntimeGoal: runtimeTasks.clearRuntimeGoal,
+    listImPrivateSessions,
+    bindRuntimeTaskToImSessions,
+    getImNotificationSettings,
+    updateGlobalImNotification,
+    subscribeRuntimeTaskNotifications,
+    unsubscribeRuntimeTaskNotifications,
+    rememberExecutionDevice,
+    refreshWorkLists,
+    refreshDevices,
+    getRemoteDeviceStartupCommand,
+    upgradeDevice,
+    createProject: projectActions.createProject,
+    createGitWorkspaceProject: projectActions.createGitWorkspaceProject,
+    prepareDeviceWorkspace: projectActions.prepareDeviceWorkspace,
+    deleteDeviceWorkspace: projectActions.deleteDeviceWorkspace,
+    listGitRepositories: projectActions.listGitRepositories,
+    listGitBranches: projectActions.listGitBranches,
+    updateProjectName: projectActions.updateProjectName,
+    updateLocalRuntimeProject: projectActions.updateLocalRuntimeProject,
+    removeProject: projectActions.removeProject,
+    reorderRuntimeProjects: projectActions.reorderRuntimeProjects,
+    setRuntimeProjectPinned: projectActions.setRuntimeProjectPinned,
+    setRuntimeProjectAppearance: projectActions.setRuntimeProjectAppearance,
+    reorderRuntimeProjectTasks: projectActions.reorderRuntimeProjectTasks,
+    setRuntimeTaskPinned: projectActions.setRuntimeTaskPinned,
+    getDeviceHomeDirectory: projectActions.getDeviceHomeDirectory,
+    getProjectWorkspaceRoot: projectActions.getProjectWorkspaceRoot,
+    listDeviceDirectories: projectActions.listDeviceDirectories,
+    createDeviceDirectory: projectActions.createDeviceDirectory,
+    loadEnvironmentInfo: projectActions.loadEnvironmentInfo,
+    loadEnvironmentDiff: projectActions.loadEnvironmentDiff,
+    commitEnvironmentChanges: projectActions.commitEnvironmentChanges,
+    commitAndPushEnvironmentChanges: projectActions.commitAndPushEnvironmentChanges,
+    pushEnvironmentChanges: projectActions.pushEnvironmentChanges,
+    listEnvironmentBranches: projectActions.listEnvironmentBranches,
+    checkoutEnvironmentBranch: projectActions.checkoutEnvironmentBranch,
+    createEnvironmentBranch: projectActions.createEnvironmentBranch,
+    sendRuntimePaneMessage: runtimeMessaging.sendRuntimePaneMessage,
+    interruptAndSendRuntimePaneMessage: runtimeMessaging.interruptAndSendRuntimePaneMessage,
+    sendRuntimePaneGuidance: runtimeMessaging.sendRuntimePaneGuidance,
+    steerRuntimePaneSubagent: runtimeMessaging.steerRuntimePaneSubagent,
+    readRuntimePaneSubagentArtifact: runtimeMessaging.readRuntimePaneSubagentArtifact,
+    compactRuntimePaneTask: runtimeMessaging.compactRuntimePaneTask,
+    editLastUserMessage: runtimeMessaging.editLastUserMessage,
+    cancelRuntimePaneTask: runtimeMessaging.cancelRuntimePaneTask,
+    sendCurrentInput: runtimeMessaging.sendCurrentInput,
+    createTemporaryRuntimeTask: runtimeMessaging.createTemporaryRuntimeTask,
+    createProjectRuntimeTask: runtimeMessaging.createProjectRuntimeTask,
+    retryFailedMessage: runtimeMessaging.retryFailedMessage,
+    pauseCurrentResponse: runtimeMessaging.pauseCurrentResponse,
+    shortenCurrentWait: runtimeMessaging.shortenCurrentWait,
+    loadTurnFileChangesDiff: runtimeMessaging.loadTurnFileChangesDiff,
+    revertTurnFileChanges: runtimeMessaging.revertTurnFileChanges,
+  }
+  const paneValue: WorkbenchPaneContextValue = useMemo(
+    () => ({
+      services: resolvedServices,
+      state: paneState,
+      isStartupReady,
+      workspaceFileApi,
+      runtimeTaskReminders,
+      projectChat: paneProjectChatValue,
+      upgradingDevices,
+      projectExecutionMode,
+      setProjectExecutionMode: stableSetProjectExecutionMode,
+      setWorkbenchError: stableSetWorkbenchError,
+      projectWorktreeBranch,
+      setProjectWorktreeBranch: stableSetProjectWorktreeBranch,
+      selectProject: stableSelectProject,
+      selectProjectWorkspace: stableSelectProjectWorkspace,
+      selectStandaloneDevice: stableSelectStandaloneDevice,
+      openStandaloneWorkspace: stableOpenStandaloneWorkspace,
+      startNewChat: stableStartNewChat,
+      startNewSkillChat: stableStartNewSkillChat,
+      startStandaloneChat: stableStartStandaloneChat,
+      startNewProjectChat: stableStartNewProjectChat,
+      openRuntimeTask: stableOpenRuntimeTask,
+      searchRuntimeWork: stableSearchRuntimeWork,
+      loadRuntimeTranscriptForPane: stableLoadRuntimeTranscriptForPane,
+      subscribeRuntimeTaskStream: stableSubscribeRuntimeTaskStream,
+      renameRuntimeTask: stableRenameRuntimeTask,
+      archiveRuntimeTask: stableArchiveRuntimeTask,
+      archiveProjectConversations: stableArchiveProjectConversations,
+      archiveProjectsConversations: stableArchiveProjectsConversations,
+      archiveChatConversations: stableArchiveChatConversations,
+      forkCurrentRuntimeTask: stableForkCurrentRuntimeTask,
+      getRuntimeGoal: stableGetRuntimeGoal,
+      getRuntimeSessionModes: stableGetRuntimeSessionModes,
+      setRuntimeGoal: stableSetRuntimeGoal,
+      clearRuntimeGoal: stableClearRuntimeGoal,
+      listImPrivateSessions: stableListImPrivateSessions,
+      bindRuntimeTaskToImSessions: stableBindRuntimeTaskToImSessions,
+      getImNotificationSettings: stableGetImNotificationSettings,
+      updateGlobalImNotification: stableUpdateGlobalImNotification,
+      subscribeRuntimeTaskNotifications: stableSubscribeRuntimeTaskNotifications,
+      unsubscribeRuntimeTaskNotifications: stableUnsubscribeRuntimeTaskNotifications,
+      rememberExecutionDevice: stableRememberExecutionDevice,
+      refreshWorkLists: stableRefreshWorkLists,
+      refreshDevices: stableRefreshDevices,
+      getRemoteDeviceStartupCommand: stableGetRemoteDeviceStartupCommand,
+      upgradeDevice: stableUpgradeDevice,
+      createProject: stableCreateProject,
+      createGitWorkspaceProject: stableCreateGitWorkspaceProject,
+      prepareDeviceWorkspace: stablePrepareDeviceWorkspace,
+      deleteDeviceWorkspace: stableDeleteDeviceWorkspace,
+      listGitRepositories: stableListGitRepositories,
+      listGitBranches: stableListGitBranches,
+      updateProjectName: stableUpdateProjectName,
+      updateLocalRuntimeProject: stableUpdateLocalRuntimeProject,
+      removeProject: stableRemoveProject,
+      reorderRuntimeProjects: stableReorderRuntimeProjects,
+      setRuntimeProjectPinned: stableSetRuntimeProjectPinned,
+      setRuntimeProjectAppearance: stableSetRuntimeProjectAppearance,
+      reorderRuntimeProjectTasks: stableReorderRuntimeProjectTasks,
+      setRuntimeTaskPinned: stableSetRuntimeTaskPinned,
+      getDeviceHomeDirectory: stableGetDeviceHomeDirectory,
+      getProjectWorkspaceRoot: stableGetProjectWorkspaceRoot,
+      listDeviceDirectories: stableListDeviceDirectories,
+      createDeviceDirectory: stableCreateDeviceDirectory,
+      loadEnvironmentInfo: stableLoadEnvironmentInfo,
+      loadEnvironmentDiff: stableLoadEnvironmentDiff,
+      commitEnvironmentChanges: stableCommitEnvironmentChanges,
+      commitAndPushEnvironmentChanges: stableCommitAndPushEnvironmentChanges,
+      pushEnvironmentChanges: stablePushEnvironmentChanges,
+      listEnvironmentBranches: stableListEnvironmentBranches,
+      checkoutEnvironmentBranch: stableCheckoutEnvironmentBranch,
+      createEnvironmentBranch: stableCreateEnvironmentBranch,
+      sendRuntimePaneMessage: stableSendRuntimePaneMessage,
+      interruptAndSendRuntimePaneMessage: stableInterruptAndSendRuntimePaneMessage,
+      sendRuntimePaneGuidance: stableSendRuntimePaneGuidance,
+      steerRuntimePaneSubagent: stableSteerRuntimePaneSubagent,
+      readRuntimePaneSubagentArtifact: stableReadRuntimePaneSubagentArtifact,
+      compactRuntimePaneTask: stableCompactRuntimePaneTask,
+      editLastUserMessage: stableEditLastUserMessage,
+      cancelRuntimePaneTask: stableCancelRuntimePaneTask,
+      sendCurrentInput: stableSendCurrentInput,
+      createTemporaryRuntimeTask: stableCreateTemporaryRuntimeTask,
+      createProjectRuntimeTask: stableCreateProjectRuntimeTask,
+      retryFailedMessage: stableRetryFailedMessage,
+      pauseCurrentResponse: stablePauseCurrentResponse,
+      shortenCurrentWait: stableShortenCurrentWait,
+      loadTurnFileChangesDiff: stableLoadTurnFileChangesDiff,
+      revertTurnFileChanges: stableRevertTurnFileChanges,
+    }),
+    [
+      isStartupReady,
+      paneProjectChatValue,
+      paneState,
+      projectExecutionMode,
+      projectWorktreeBranch,
+      runtimeTaskReminders,
+      resolvedServices,
+      stableArchiveChatConversations,
+      stableArchiveProjectConversations,
+      stableArchiveProjectsConversations,
+      stableArchiveRuntimeTask,
+      stableBindRuntimeTaskToImSessions,
+      stableCancelRuntimePaneTask,
+      stableCompactRuntimePaneTask,
+      stableClearRuntimeGoal,
+      stableCheckoutEnvironmentBranch,
+      stableCommitAndPushEnvironmentChanges,
+      stableCommitEnvironmentChanges,
+      stableCreateDeviceDirectory,
+      stableCreateEnvironmentBranch,
+      stableEditLastUserMessage,
+      stableCreateGitWorkspaceProject,
+      stableCreateProject,
+      stableCreateTemporaryRuntimeTask,
+      stableCreateProjectRuntimeTask,
+      stableDeleteDeviceWorkspace,
+      stableForkCurrentRuntimeTask,
+      stableGetDeviceHomeDirectory,
+      stableGetRuntimeGoal,
+      stableGetRuntimeSessionModes,
+      stableGetImNotificationSettings,
+      stableGetProjectWorkspaceRoot,
+      stableGetRemoteDeviceStartupCommand,
+      stableListDeviceDirectories,
+      stableListEnvironmentBranches,
+      stableListGitBranches,
+      stableListGitRepositories,
+      stableListImPrivateSessions,
+      stableLoadEnvironmentDiff,
+      stableLoadEnvironmentInfo,
+      stableLoadRuntimeTranscriptForPane,
+      stableLoadTurnFileChangesDiff,
+      stableOpenRuntimeTask,
+      stableOpenStandaloneWorkspace,
+      stablePauseCurrentResponse,
+      stablePushEnvironmentChanges,
+      stablePrepareDeviceWorkspace,
+      stableRefreshDevices,
+      stableRefreshWorkLists,
+      stableRememberExecutionDevice,
+      stableRemoveProject,
+      stableReorderRuntimeProjects,
+      stableReorderRuntimeProjectTasks,
+      stableRenameRuntimeTask,
+      stableRetryFailedMessage,
+      stableRevertTurnFileChanges,
+      stableSearchRuntimeWork,
+      stableSelectProject,
+      stableSelectProjectWorkspace,
+      stableSelectStandaloneDevice,
+      stableSendCurrentInput,
+      stableSendRuntimePaneGuidance,
+      stableReadRuntimePaneSubagentArtifact,
+      stableSteerRuntimePaneSubagent,
+      stableSendRuntimePaneMessage,
+      stableInterruptAndSendRuntimePaneMessage,
+      stableSetRuntimeGoal,
+      stableSetRuntimeProjectAppearance,
+      stableSetRuntimeProjectPinned,
+      stableSetRuntimeTaskPinned,
+      stableSetProjectExecutionMode,
+      stableSetWorkbenchError,
+      stableSetProjectWorktreeBranch,
+      stableStartNewChat,
+      stableStartNewSkillChat,
+      stableStartNewProjectChat,
+      stableStartStandaloneChat,
+      stableSubscribeRuntimeTaskNotifications,
+      stableSubscribeRuntimeTaskStream,
+      stableUnsubscribeRuntimeTaskNotifications,
+      stableUpdateGlobalImNotification,
+      stableUpdateLocalRuntimeProject,
+      stableUpdateProjectName,
+      stableUpgradeDevice,
+      upgradingDevices,
+      workspaceFileApi,
+    ]
+  )
+
+  return (
+    <RuntimeTaskLifecycleProvider store={lifecycleStore}>
+      <WorkbenchContext.Provider value={value}>
+        <WorkbenchPaneContext.Provider value={paneValue}>
+          <RuntimeTaskCloseGuard />
+          <LocalExecutorCloudBridge
+            apiBaseUrl={cloudConnection.apiBaseUrl}
+            backendUrl={cloudConnection.backendUrl}
+            isConnected={cloudConnection.isConnected}
+            token={cloudConnection.token}
+          />
+          {children}
+        </WorkbenchPaneContext.Provider>
+      </WorkbenchContext.Provider>
+    </RuntimeTaskLifecycleProvider>
+  )
+}
+
+function getProjectChatScopeKey({
+  currentRuntimeTask,
+  standaloneChatKey,
+}: {
+  currentRuntimeTask: RuntimeTaskAddress | null
+  standaloneChatKey: number
+}): string {
+  if (currentRuntimeTask) {
+    return getRuntimeTaskChatScopeKey(currentRuntimeTask)
+  }
+  return `blank:${standaloneChatKey}`
+}
+
+function getBackgroundRunningRuntimeTasks(
+  runtimeWork: RuntimeWorkListResponse | null | undefined,
+  currentRuntimeTask: RuntimeTaskAddress | null,
+  lifecycleSnapshot: ReturnType<RuntimeTaskLifecycleStore['getSnapshot']>
+): RuntimeTaskAddress[] {
+  if (!runtimeWork) return []
+
+  const tasks = new Map<string, RuntimeTaskAddress>()
+  const workspaces = [
+    ...runtimeWork.chats,
+    ...runtimeWork.projects.flatMap(project =>
+      normalizeRuntimeWorkspacePaths(project.deviceWorkspaces)
+    ),
+  ]
+  for (const workspace of workspaces) {
+    for (const task of workspace.tasks) {
+      const key = `${workspace.deviceId}\0${task.taskId}`
+      if (!lifecycleSnapshot.runningTaskKeys.has(key)) continue
+      if (
+        currentRuntimeTask?.deviceId === workspace.deviceId &&
+        currentRuntimeTask.taskId === task.taskId
+      ) {
+        continue
+      }
+      const address = {
+        deviceId: workspace.deviceId,
+        taskId: task.taskId,
+        threadId: task.threadId,
+        workspacePath: workspace.workspacePath,
+        runtimeHandle: task.runtimeHandle,
+      }
+      tasks.set(`${address.deviceId}:${address.taskId}`, address)
+    }
+  }
+  return [...tasks.values()]
+}

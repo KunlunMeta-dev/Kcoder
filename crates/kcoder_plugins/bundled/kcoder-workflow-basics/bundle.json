@@ -1,0 +1,7 @@
+{
+  "bundle": "kcoder-workflow-basics",
+  "source": "KCoder repository",
+  "version": "1.0.0",
+  "license": "MIT",
+  "build": "embedded with Rust include_bytes! and materialized through PluginStore"
+}

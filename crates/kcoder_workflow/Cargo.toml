@@ -1,0 +1,17 @@
+[package]
+name = "kcoder_workflow"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+async-trait = { workspace = true }
+rquickjs = { version = "0.11", features = ["futures", "parallel"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }

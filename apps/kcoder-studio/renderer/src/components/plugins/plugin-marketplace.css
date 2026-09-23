@@ -1,0 +1,72 @@
+/* Marketplace surfaces share the workbench palette and control sizes. */
+.plugin-marketplace-card {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid rgb(var(--color-border) / 0.75);
+  border-radius: 16px;
+  background: rgb(var(--color-bg-base));
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgb(var(--color-text-primary) / 0.03);
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    box-shadow 150ms ease;
+}
+.plugin-marketplace-card:hover {
+  background: rgb(var(--color-bg-surface) / 0.6);
+  border-color: rgb(var(--color-text-muted) / 0.55);
+  box-shadow: 0 4px 12px rgb(var(--color-text-primary) / 0.05);
+}
+.plugin-card-actions {
+  grid-column: 2;
+  padding-top: 4px;
+  align-self: end;
+}
+.plugin-installed-shortcut {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  max-width: 240px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid rgb(var(--color-border));
+  border-radius: 12px;
+  background: rgb(var(--color-bg-surface) / 0.5);
+  color: rgb(var(--color-text-secondary));
+  transition: background-color 150ms ease;
+}
+.plugin-installed-shortcut:hover {
+  background: rgb(var(--color-bg-surface));
+  color: rgb(var(--color-text-primary));
+}
+.plugin-marketplace-page :is(button, a, [role='button']):focus-visible,
+.plugin-marketplace-search:focus-visible {
+  outline: 2px solid rgb(var(--color-reasoning-standard));
+  outline-offset: 3px;
+}
+.plugin-marketplace-page button:active:not(:disabled) {
+  filter: brightness(0.96);
+}
+@media (max-width: 767px) {
+  .plugin-marketplace-page button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .plugin-marketplace-card {
+    padding: 16px;
+  }
+  .plugin-card-actions {
+    grid-column: 1 / -1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .plugin-marketplace-page *,
+  .plugin-marketplace-page *::before,
+  .plugin-marketplace-page *::after {
+    transition-duration: 0ms !important;
+  }
+}

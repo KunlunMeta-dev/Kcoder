@@ -1,0 +1,39 @@
+schema: spec-driven
+
+context: |
+  Tech stack: Rust, Cargo, ESM/TypeScript frontend where applicable
+  Runtime: Bun for TypeScript tooling; Rust std for core behavior
+
+  Product language:
+  - Write specs in user-facing product behavior language
+  - Requirements should describe the experience, observable behavior, and product contract
+  - Avoid implementation-negative SHALL statements when a positive user outcome can express the same rule
+  - Put internal mechanisms in design.md or tasks.md unless the mechanism is itself part of the user-facing contract
+
+  Cross-platform requirements:
+  - This tool runs on macOS, Linux, AND Windows
+  - Always use std::path::Path / PathBuf or language path helpers — never hardcode slashes
+  - Never assume forward-slash path separators
+  - Tests must use path helpers for expected path values, not hardcoded strings
+  - Consider case sensitivity differences in file systems
+
+# Verification command run before SpecArchive. Override this for non-Rust projects
+# (e.g. "bun run precheck" or "make check").
+precheck: cargo test
+
+rules:
+  specs:
+    - Include scenarios for Windows path handling when dealing with file paths
+    - Requirements involving paths must specify cross-platform behavior
+    - Prefer user-facing product behavior and observable outcomes over internal implementation mechanics
+    - Include HOW details only when the mechanism is part of the product contract
+    - If we generate artifacts, specify deletion/modification by explicit list lookup, not pattern matching
+  tasks:
+    - Add Windows CI verification as a task when changes involve file paths
+    - Include cross-platform testing considerations
+  design:
+    - Document any platform-specific behavior or limitations
+    - Prefer Rust std::path helpers over string manipulation for paths
+    - Use existing constants and lists - don't invent detection mechanisms
+    - Prefer explicit lookups over pattern matching or regex
+    - If we generate it, we track it by name in a constant

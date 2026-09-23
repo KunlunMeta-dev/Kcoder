@@ -1,0 +1,303 @@
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { describe, expect, test, vi } from 'vitest'
+import type { DeviceInfo } from '@/types/api'
+import '@/i18n'
+import { DeviceFolderPicker } from './DeviceFolderPicker'
+
+const device: DeviceInfo = {
+  id: 1,
+  device_id: 'local-device',
+  name: 'Local Device',
+  status: 'online',
+  is_default: true,
+  device_type: 'local',
+  bind_shell: 'claudecode',
+  executor_version: '1.8.5',
+}
+
+describe('DeviceFolderPicker', () => {
+  test('does not let a late home lookup replace a path entered by the user', async () => {
+    let resolveHome!: (path: string) => void
+    const home = new Promise<string>(resolve => {
+      resolveHome = resolve
+    })
+    const onConfirm = vi.fn()
+
+    render(
+      <DeviceFolderPicker
+        device={device}
+        mode="select"
+        onGetDeviceHomeDirectory={vi.fn().mockReturnValue(home)}
+        onListDeviceDirectories={vi.fn().mockResolvedValue([])}
+        onCreateDeviceDirectory={vi.fn()}
+        onConfirm={onConfirm}
+        onCancel={vi.fn()}
+      />
+    )
+
+    const pathInput = screen.getByTestId('device-folder-path-input')
+    await userEvent.type(pathInput, '/workspace/isolated')
+    fireEvent.keyDown(pathInput, { key: 'Enter' })
+    resolveHome('/home/user')
+
+    await waitFor(() => expect(pathInput).toHaveValue('/workspace/isolated'))
+    await userEvent.click(screen.getByTestId('confirm-device-folder-picker-button'))
+
+    expect(onConfirm).toHaveBeenCalledWith({
+      deviceId: 'local-device',
+      path: '/workspace/isolated',
+      action: 'select',
+    })
+  })
+
+  test('claims the path at focus time before a late home lookup can prefix browser input', async () => {
+    let resolveHome!: (path: string) => void
+    const home = new Promise<string>(resolve => {
+      resolveHome = resolve
+    })
+
+    render(
+      <DeviceFolderPicker
+        device={device}
+        mode="select"
+        onGetDeviceHomeDirectory={vi.fn().mockReturnValue(home)}
+        onListDeviceDirectories={vi.fn().mockResolvedValue([])}
+        onCreateDeviceDirectory={vi.fn()}
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    )
+
+    const pathInput = screen.getByTestId('device-folder-path-input')
+    fireEvent.focus(pathInput)
+    resolveHome('/home/user')
+    fireEvent.change(pathInput, { target: { value: '/workspace/isolated' } })
+    fireEvent.keyDown(pathInput, { key: 'Enter' })
+
+    await waitFor(() => expect(pathInput).toHaveValue('/workspace/isolated'))
+  })
+
+  test('does not let a restarted home lookup adopt the post-interaction revision', async () => {
+    let resolveRestartedHome!: (path: string) => void
+    const restartedHome = new Promise<string>(resolve => {
+      resolveRestartedHome = resolve
+    })
+    const stableListDirectories = vi.fn().mockResolvedValue([])
+    const { rerender } = render(
+      <DeviceFolderPicker
+        device={device}
+        mode="select"
+        onGetDeviceHomeDirectory={vi.fn().mockResolvedValue('/home/initial')}
+        onListDeviceDirectories={stableListDirectories}
+        onCreateDeviceDirectory={vi.fn()}
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    )
+
+    const pathInput = await screen.findByTestId('device-folder-path-input')
+    await waitFor(() => expect(pathInput).toHaveValue('/home/initial'))
+    await userEvent.clear(pathInput)
+    await userEvent.type(pathInput, '/workspace/isolated')
+    fireEvent.keyDown(pathInput, { key: 'Enter' })
+
+    rerender(
+      <DeviceFolderPicker
+        device={device}
+        mode="select"
+        onGetDeviceHomeDirectory={vi.fn().mockReturnValue(restartedHome)}
+        onListDeviceDirectories={stableListDirectories}
+        onCreateDeviceDirectory={vi.fn()}
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    )
+    resolveRestartedHome('/home/dev')
+
+    await waitFor(() => expect(pathInput).toHaveValue('/workspace/isolated'))
+  })
+
+  test('keeps the confirm button under the pointer while a path input is focused', async () => {
+    const onConfirm = vi.fn()
+
+    render(
+      <DeviceFolderPicker
+        device={device}
+        mode="select"
+        onGetDeviceHomeDirectory={vi.fn().mockResolvedValue('/home/user')}
+        onListDeviceDirectories={vi.fn().mockResolvedValue(['one', 'two', 'three'])}
+        onCreateDeviceDirectory={vi.fn()}
+        onConfirm={onConfirm}
+        onCancel={vi.fn()}
+      />
+    )
+
+    const pathInput = await screen.findByTestId('device-folder-path-input')
+    await waitFor(() => expect(pathInput).toHaveValue('/home/user'))
+    await userEvent.clear(pathInput)
+    await userEvent.type(pathInput, '/workspace/one')
+    fireEvent.keyDown(pathInput, { key: 'Enter' })
+
+    const confirmButton = screen.getByTestId('confirm-device-folder-picker-button')
+    await userEvent.click(confirmButton)
+
+    expect(pathInput).toHaveFocus()
+    expect(onConfirm).toHaveBeenCalledWith({
+      deviceId: 'local-device',
+      path: '/workspace/one',
+      action: 'select',
+    })
+  })
+
+  test('selects an existing directory', async () => {
+    const onConfirm = vi.fn()
+    const onListDeviceDirectories = vi.fn((_: string, path: string) =>
+      Promise.resolve(path === '/home/user' ? ['repo'] : [])
+    )
+
+    render(
+      <DeviceFolderPicker
+        device={device}
+        mode="select"
+        onGetDeviceHomeDirectory={vi.fn().mockResolvedValue('/home/user')}
+        onListDeviceDirectories={onListDeviceDirectories}
+        onCreateDeviceDirectory={vi.fn()}
+        onConfirm={onConfirm}
+        onCancel={vi.fn()}
+      />
+    )
+
+    const pathInput = await screen.findByTestId('device-folder-path-input')
+    await waitFor(() => expect(pathInput).toHaveValue('/home/user'))
+    await userEvent.click(await screen.findByText('repo'))
+    await userEvent.click(screen.getByTestId('confirm-device-folder-picker-button'))
+
+    expect(onConfirm).toHaveBeenCalledWith({
+      deviceId: 'local-device',
+      path: '/home/user/repo',
+      action: 'select',
+    })
+  })
+
+  test('creates a directory and returns the created path', async () => {
+    const onConfirm = vi.fn()
+    const onCreateDeviceDirectory = vi.fn().mockResolvedValue(undefined)
+
+    render(
+      <DeviceFolderPicker
+        device={device}
+        mode="create"
+        onGetDeviceHomeDirectory={vi.fn().mockResolvedValue('/home/user')}
+        onListDeviceDirectories={vi.fn().mockResolvedValue([])}
+        onCreateDeviceDirectory={onCreateDeviceDirectory}
+        onConfirm={onConfirm}
+        onCancel={vi.fn()}
+      />
+    )
+
+    await screen.findByTestId('device-folder-name-input')
+    await userEvent.type(screen.getByTestId('device-folder-name-input'), 'new-app')
+    await userEvent.click(screen.getByTestId('confirm-device-folder-picker-button'))
+
+    await waitFor(() =>
+      expect(onCreateDeviceDirectory).toHaveBeenCalledWith('local-device', '/home/user/new-app')
+    )
+    expect(onConfirm).toHaveBeenCalledWith({
+      deviceId: 'local-device',
+      path: '/home/user/new-app',
+      action: 'create',
+    })
+  })
+
+  test('opens the only fuzzy path match when Enter is pressed', async () => {
+    const onListDeviceDirectories = vi.fn((_: string, path: string) =>
+      Promise.resolve(path === '/home/user/repo' ? ['src'] : ['repo'])
+    )
+
+    render(
+      <DeviceFolderPicker
+        device={device}
+        mode="select"
+        onGetDeviceHomeDirectory={vi.fn().mockResolvedValue('/home/user')}
+        onListDeviceDirectories={onListDeviceDirectories}
+        onCreateDeviceDirectory={vi.fn()}
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    )
+
+    const pathInput = await screen.findByTestId('device-folder-path-input')
+    await userEvent.clear(pathInput)
+    await userEvent.type(pathInput, '/home/user/re')
+    fireEvent.keyDown(pathInput, { key: 'Enter' })
+
+    await waitFor(() => expect(pathInput).toHaveValue('/home/user/repo'))
+    expect(await screen.findByText('src')).toBeInTheDocument()
+  })
+
+  test('shows directory creation errors without closing', async () => {
+    render(
+      <DeviceFolderPicker
+        device={device}
+        mode="create"
+        onGetDeviceHomeDirectory={vi.fn().mockResolvedValue('/home/user')}
+        onListDeviceDirectories={vi.fn().mockResolvedValue([])}
+        onCreateDeviceDirectory={vi.fn().mockRejectedValue(new Error('mkdir failed'))}
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    )
+
+    await userEvent.type(await screen.findByTestId('device-folder-name-input'), 'new-app')
+    await userEvent.click(screen.getByTestId('confirm-device-folder-picker-button'))
+
+    expect(await screen.findByTestId('device-folder-picker-error')).toHaveTextContent(
+      'mkdir failed'
+    )
+  })
+
+  test('shows a home lookup error instead of silently opening the root directory', async () => {
+    const onListDeviceDirectories = vi.fn()
+
+    render(
+      <DeviceFolderPicker
+        device={{ ...device, device_type: 'remote' }}
+        mode="select"
+        variant="remoteDark"
+        onGetDeviceHomeDirectory={vi.fn().mockRejectedValue(new Error('home unavailable'))}
+        onListDeviceDirectories={onListDeviceDirectories}
+        onCreateDeviceDirectory={vi.fn()}
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    )
+
+    expect(await screen.findByTestId('device-folder-picker-error')).toHaveTextContent(
+      'home unavailable'
+    )
+    expect(screen.getByTestId('device-folder-path-input')).toHaveValue('')
+    expect(onListDeviceDirectories).not.toHaveBeenCalled()
+  })
+
+  test('uses the compact Codex-sized directory list for remote projects', async () => {
+    render(
+      <DeviceFolderPicker
+        device={{ ...device, device_type: 'remote' }}
+        mode="select"
+        variant="remoteDark"
+        onGetDeviceHomeDirectory={vi.fn().mockResolvedValue('/home/user')}
+        onListDeviceDirectories={vi.fn().mockResolvedValue(['repo'])}
+        onCreateDeviceDirectory={vi.fn()}
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    )
+
+    await waitFor(() =>
+      expect(screen.getByTestId('device-folder-path-input')).toHaveValue('/home/user')
+    )
+    expect(screen.getByTestId('device-folder-directory-list')).toHaveClass('h-[280px]', 'p-2')
+    expect(screen.getByTestId('device-folder-path-input')).toHaveClass('h-10', 'text-sm')
+  })
+})
