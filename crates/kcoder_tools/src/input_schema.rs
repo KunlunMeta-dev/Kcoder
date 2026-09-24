@@ -494,53 +494,97 @@ pub fn schema_with_parameter_guidance(tool_name: &str, schema: &Value) -> Value 
 /// targets inside tool schemas. Keep the execution schema unchanged, but send
 /// models a self-contained shape so nested array item objects remain visible.
 pub fn inline_local_schema_refs_for_model(schema: &Value) -> Value {
-    let root = schema.clone();
     let mut inlined = schema.clone();
-    inline_local_refs_in_value(&mut inlined, &root, 0);
-    if !schema_contains_ref(&inlined)
-        && let Some(map) = inlined.as_object_mut()
-    {
+    let mut budget = InlineSchemaBudget {
+        nodes: 4096,
+        added_bytes: 64 * 1024,
+    };
+    inline_local_refs_in_value(&mut inlined, schema, &mut Vec::new(), &mut budget, 0);
+    let has_body_ref = inlined.as_object().is_some_and(|map| {
+        map.iter()
+            .filter(|(key, _)| !matches!(key.as_str(), "definitions" | "$defs"))
+            .any(|(_, value)| schema_contains_ref(value))
+    });
+    if !has_body_ref && let Some(map) = inlined.as_object_mut() {
         map.remove("definitions");
         map.remove("$defs");
     }
     inlined
 }
 
-fn inline_local_refs_in_value(value: &mut Value, root: &Value, depth: usize) {
-    const MAX_REF_DEPTH: usize = 32;
-    if depth > MAX_REF_DEPTH {
+struct InlineSchemaBudget {
+    nodes: usize,
+    added_bytes: usize,
+}
+
+// Approximate serialized size without allocating another serialized schema.
+fn inline_schema_weight(value: &Value) -> usize {
+    match value {
+        Value::Object(map) => map.iter().fold(2usize, |n, (key, value)| {
+            n.saturating_add(key.len())
+                .saturating_add(4)
+                .saturating_add(inline_schema_weight(value))
+        }),
+        Value::Array(values) => values.iter().fold(2usize, |n, value| {
+            n.saturating_add(1)
+                .saturating_add(inline_schema_weight(value))
+        }),
+        Value::String(value) => value.len().saturating_mul(6).saturating_add(2),
+        _ => 24,
+    }
+}
+
+fn inline_local_refs_in_value(
+    value: &mut Value,
+    root: &Value,
+    refs: &mut Vec<String>,
+    budget: &mut InlineSchemaBudget,
+    depth: usize,
+) {
+    if depth > 32 || budget.nodes == 0 {
         return;
     }
-
-    match value {
-        Value::Object(map) => {
-            if let Some(reference) = map.get("$ref").and_then(Value::as_str).map(str::to_owned)
-                && let Some(target) = resolve_local_schema_ref(root, &reference)
-            {
-                let mut replacement = target.clone();
-                inline_local_refs_in_value(&mut replacement, root, depth + 1);
-
-                let siblings = std::mem::take(map);
-                *value = merge_schema_ref_siblings(replacement, siblings);
-                inline_local_refs_in_value(value, root, depth + 1);
+    budget.nodes -= 1;
+    if let Value::Object(map) = value {
+        if let Some(reference) = map.get("$ref").and_then(Value::as_str).map(str::to_owned) {
+            if refs.contains(&reference) {
                 return;
             }
-
-            let keys: Vec<String> = map.keys().cloned().collect();
-            for key in keys {
-                if let Some(child) = map.get_mut(&key) {
-                    inline_local_refs_in_value(child, root, depth + 1);
+            if let Some(target) = resolve_local_schema_ref(root, &reference) {
+                let weight = inline_schema_weight(target);
+                if weight > budget.added_bytes {
+                    return;
                 }
+                budget.added_bytes -= weight;
+                let replacement = target.clone();
+                let siblings = std::mem::take(map);
+                *value = merge_schema_ref_siblings(replacement, siblings);
+                refs.push(reference);
+                // Visit the merged replacement once. Revisiting it after popping the
+                // reference would expand recursive branches again.
+                inline_local_refs_in_value(value, root, refs, budget, depth + 1);
+                refs.pop();
+                return;
             }
-
+        }
+    }
+    match value {
+        Value::Object(map) => {
+            for (key, child) in map.iter_mut() {
+                // Keep the original reference targets intact. They remain necessary
+                // whenever cycles or the expansion budget leave a reference behind.
+                if depth == 0 && matches!(key.as_str(), "definitions" | "$defs") {
+                    continue;
+                }
+                inline_local_refs_in_value(child, root, refs, budget, depth + 1);
+            }
             if let Some(flattened) = flatten_single_all_of(map) {
                 *value = flattened;
-                inline_local_refs_in_value(value, root, depth + 1);
             }
         }
         Value::Array(values) => {
             for child in values {
-                inline_local_refs_in_value(child, root, depth + 1);
+                inline_local_refs_in_value(child, root, refs, budget, depth + 1);
             }
         }
         _ => {}
@@ -2125,5 +2169,42 @@ mod tests {
             }
         }
         assert!(missing.is_empty(), "tools missing properties: {missing:?}");
+    }
+}
+
+#[cfg(test)]
+mod bounded_reference_expansion_tests {
+    use super::*;
+    use serde_json::json;
+    #[test]
+    fn recursive_three_branch_schema_keeps_its_reference_target() {
+        let schema = json!({"type":"object","properties":{"root":{"$ref":"#/definitions/Node"}},"definitions":{"Node":{"anyOf":[{"type":"object","properties":{"all":{"type":"array","items":{"$ref":"#/definitions/Node"}}}},{"type":"object","properties":{"any":{"type":"array","items":{"$ref":"#/definitions/Node"}}}},{"type":"object","properties":{"not":{"$ref":"#/definitions/Node"}}}]}}});
+        let rendered = inline_local_schema_refs_for_model(&schema);
+        assert!(serde_json::to_vec(&rendered).unwrap().len() < 8192);
+        assert_eq!(rendered["definitions"], schema["definitions"]);
+        assert!(schema_contains_ref(&rendered["properties"]));
+    }
+    #[test]
+    fn repeated_nonrecursive_subgraphs_share_one_expansion_budget() {
+        let mut properties = serde_json::Map::new();
+        for index in 0..512 {
+            properties.insert(format!("field{index}"), json!({"$ref":"#/$defs/Large"}));
+        }
+        let schema = json!({"type":"object","properties":properties,"$defs":{"Large":{"type":"string","description":"x".repeat(2048)}}});
+        let rendered = inline_local_schema_refs_for_model(&schema);
+        assert!(serde_json::to_vec(&rendered).unwrap().len() < 100_000);
+        assert_eq!(rendered["$defs"], schema["$defs"]);
+    }
+    #[test]
+    fn actual_rich_workflow_tool_schema_stays_small_for_the_model() {
+        let raw = <crate::workflow_draft::WorkflowDraftTool as crate::Tool>::input_schema(
+            &crate::workflow_draft::WorkflowDraftTool,
+        );
+        let rendered = inline_local_schema_refs_for_model(&raw);
+        let raw_bytes = serde_json::to_vec(&raw).unwrap().len();
+        let model_bytes = serde_json::to_vec(&rendered).unwrap().len();
+        eprintln!("WorkflowDraft schema bytes raw={raw_bytes} model={model_bytes}");
+        assert!(model_bytes < 100_000, "{model_bytes}");
+        assert!(rendered["properties"]["node"].is_object());
     }
 }

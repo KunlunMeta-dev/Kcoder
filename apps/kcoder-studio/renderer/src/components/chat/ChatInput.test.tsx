@@ -3711,3 +3711,14 @@ test.each(['desktop', 'compact'] as const)(
     await waitFor(() => expect(onSubmit).toHaveBeenCalled())
   }
 )
+
+test('workflow creation uses the ordinary composer text and scoped session option', async () => {
+  const onSubmit = vi.fn()
+  render(<ControlledChatInput onSubmit={onSubmit} variant="desktop" />)
+  await userEvent.click(screen.getByTestId('composer-workflow-mode'))
+  expect(screen.getByTestId('composer-workflow-mode')).toHaveAttribute('aria-pressed', 'true')
+  const editor = screen.getByTestId('chat-message-input') as HTMLElement & { value: string }
+  act(() => { editor.value = '生成 PPT 的工作流'; editor.focus() })
+  fireEvent.keyDown(editor, { key: 'Enter', code: 'Enter' })
+  await waitFor(() => expect(onSubmit).toHaveBeenCalledWith('生成 PPT 的工作流', expect.objectContaining({ sessionMode: 'workflow_draft' })))
+})

@@ -28,6 +28,7 @@ pub struct CommittedListProjection {
     first_prompt: Option<String>,
     base_cwd: Option<PathBuf>,
     session_mode: crate::SessionMode,
+    workflow_definition_id: Option<String>,
     timestamps: (u64, u64),
     bytes_read: u64,
 }
@@ -73,6 +74,8 @@ impl CommittedListProjection {
     pub fn base_cwd(&self) -> Option<&Path> {
         self.base_cwd.as_deref()
     }
+
+    pub fn workflow_definition_id(&self) -> Option<&str> { self.workflow_definition_id.as_deref() }
 
     pub fn session_mode(&self) -> crate::SessionMode {
         self.session_mode
@@ -132,6 +135,7 @@ impl CommittedListProjection {
             first_prompt: None,
             base_cwd: metadata.base_cwd().map(Path::to_path_buf),
             session_mode: metadata.session_mode(),
+            workflow_definition_id: metadata.workflow_definition_id().map(str::to_owned),
             timestamps: (0, 0),
             bytes_read: 0,
         };

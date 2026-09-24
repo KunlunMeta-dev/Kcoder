@@ -171,7 +171,7 @@ async fn try_indexed(
             .context("transcript projection unavailable")?;
         drop(source);
         let (created, updated) = projection.timestamps_ms(&metadata);
-        let mut thread = json!({"id":params.thread_id,"cwd":workspace,"sessionMode":metadata.session_mode(),"status":"idle",
+        let mut thread = json!({"id":params.thread_id,"cwd":workspace,"sessionMode":metadata.session_mode(),"workflowDefinitionId":metadata.workflow_definition_id(),"status":"idle",
             "title":projection.first_prompt().map(|text| text.chars().take(80).collect::<String>()),"createdAt":created.to_string(),"updatedAt":updated.to_string()});
         decorate_thread_snapshot(engine, &mut thread, true)?;
         let artifacts = load_artifacts(engine, &params.thread_id).await?;

@@ -427,7 +427,7 @@ fn project(
         return Ok(Projection::Deferred);
     }
     meter.body_left -= charge;
-    let (title, created, updated, mode, cwd) =
+    let (title, created, updated, mode, workflow_id, cwd) =
         if HistorySourceObservation::has_commit_boundary_hint(path)? {
             let projection =
                 CommittedListProjection::read(path, file.len(), meter.limits.line_bytes)?;
@@ -444,6 +444,7 @@ fn project(
                 created,
                 updated,
                 projection.session_mode(),
+                projection.workflow_definition_id().map(str::to_owned),
                 cwd.to_path_buf(),
             )
         } else {
@@ -461,12 +462,13 @@ fn project(
                 created,
                 updated,
                 metadata.session_mode(),
+                metadata.workflow_definition_id().map(str::to_owned),
                 owner.to_path_buf(),
             )
         };
     let cwd = dunce::simplified(&cwd).to_string_lossy().into_owned();
     let snapshot = serde_json::json!({
-        "id": id, "cwd": cwd, "sessionMode": mode, "title": title,
+        "id": id, "cwd": cwd, "sessionMode": mode, "workflowDefinitionId": workflow_id, "title": title,
         "status": "idle", "createdAt": created.to_string(), "updatedAt": updated.to_string(),
     });
     project_row(engine, id, snapshot, meter)
@@ -640,7 +642,7 @@ impl BuildSource {
         let (created, updated) = projection.timestamps_ms(&self.metadata);
         let cwd = dunce::simplified(owner).to_string_lossy().into_owned();
         let snapshot = serde_json::json!({
-            "id": self.id, "cwd": cwd, "sessionMode": self.metadata.session_mode(),
+            "id": self.id, "cwd": cwd, "sessionMode": self.metadata.session_mode(), "workflowDefinitionId": self.metadata.workflow_definition_id(),
             "title": projection.first_prompt(), "status": "idle",
             "createdAt": created.to_string(), "updatedAt": updated.to_string(),
         });

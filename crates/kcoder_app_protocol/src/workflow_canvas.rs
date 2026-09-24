@@ -61,12 +61,79 @@ mod tests {
         assert!(
             serde_json::from_value::<WorkflowSaveParams>(serde_json::json!({"id":"test"})).is_err()
         );
-        assert!(serde_json::from_value::<WorkflowReadParams>(
-            serde_json::json!({"id":"test","path":"/other"})
-        )
-        .is_err());
+        assert!(
+            serde_json::from_value::<WorkflowReadParams>(
+                serde_json::json!({"id":"test","path":"/other"})
+            )
+            .is_err()
+        );
         let params: WorkflowSaveParams =
             serde_json::from_value(serde_json::json!({"id":"test","expectedRevision":3})).unwrap();
         assert_eq!(params.expected_revision, 3);
     }
 }
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct WorkflowRunsListParams {
+    #[serde(default)]
+    pub definition_id: Option<String>,
+    #[serde(default)]
+    pub offset: usize,
+    #[serde(default = "default_list_limit")]
+    pub limit: usize,
+}
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct WorkflowRunReadParams {
+    pub run_id: String,
+}
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct WorkflowRunOutputParams {
+    pub run_id: String,
+    pub node_id: String,
+    #[serde(default)]
+    pub offset: usize,
+    #[serde(default = "default_output_limit")]
+    pub limit: usize,
+}
+fn default_output_limit() -> usize {
+    16384
+}
+
+pub const CAPABILITY_WORKFLOW_RUNS_V1: &str = "workflowRunsV1";
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct WorkflowUpdateParams {
+    pub id: String,
+    pub expected_revision: u64,
+    pub title: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub input_schema: Option<serde_json::Value>,
+}
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct WorkflowVersionParams {
+    pub id: String,
+    #[serde(default)]
+    pub version: Option<u64>,
+}
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct WorkflowCloneParams {
+    pub id: String,
+    #[serde(default)]
+    pub version: Option<u64>,
+    #[serde(default)]
+    pub title: Option<String>,
+}
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct WorkflowImportParams {
+    pub definition: kcoder_types::workflow::WorkflowDefinition,
+}
+
+pub const CAPABILITY_WORKFLOW_GRAPH_V2: &str = "workflowGraphV2";

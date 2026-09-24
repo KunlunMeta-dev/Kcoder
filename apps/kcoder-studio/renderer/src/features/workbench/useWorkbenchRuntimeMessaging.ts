@@ -1,3 +1,5 @@
+import { captureAccountContextRevision } from '@/kcoder/accountContextEvents'
+import { workflowApi } from '@/features/workflows/workflowApi'
 import { safeErrorDiagnostic } from '@/lib/error-diagnostics'
 import { useCallback } from 'react'
 import type { Dispatch } from 'react'
@@ -531,6 +533,7 @@ export function useWorkbenchRuntimeMessaging({
         | 'clientMessageId'
         | 'initialGoal'
         | 'sessionMode'
+        | 'workflowDefinitionId'
         | 'turnMode'
         | 'settingsTemplate'
         | 'onError'
@@ -701,6 +704,7 @@ export function useWorkbenchRuntimeMessaging({
         ...(options?.ephemeral ? { ephemeral: true } : {}),
         ...(options?.sideSource ? { sideSource: options.sideSource } : {}),
         ...(options?.initialGoal ? { initialGoal: options.initialGoal } : {}),
+        ...(options?.workflowDefinitionId ? { workflowDefinitionId: options.workflowDefinitionId } : {}),
         ...(options?.sessionMode ? { sessionMode: options.sessionMode } : {}),
         ...(options?.settingsTemplate ? { settingsTemplate: options.settingsTemplate } : {}),
         ...(options?.turnMode ? { turnMode: options.turnMode } : {}),
@@ -780,6 +784,12 @@ export function useWorkbenchRuntimeMessaging({
         })
       }
       try {
+        if (createRequest.sessionMode === 'workflow_draft' && !createRequest.workflowDefinitionId) {
+          const accountValid = captureAccountContextRevision()
+          const definition = await workflowApi.create(optimisticDeviceId, displayMessage.trim().slice(0, 120), '')
+          if (!accountValid(optimisticDeviceId)) throw new Error(i18n.t('workflowCanvas.scopeChanged'))
+          createRequest.workflowDefinitionId = definition.id
+        }
         const response = await executorClient.runtime.createRuntimeTask(createRequest)
         if (!response.accepted) {
           throw new Error(response.error || i18n.t('workbench.runtime_send_failed'))
@@ -1066,6 +1076,7 @@ export function useWorkbenchRuntimeMessaging({
         {
           initialGoal: options?.initialGoal,
           sessionMode: options?.sessionMode,
+          workflowDefinitionId: options?.workflowDefinitionId,
           turnMode: options?.turnMode,
           onError: options?.onError,
           onRuntimeTaskOptimisticOpen: options?.onRuntimeTaskOptimisticOpen,

@@ -30,25 +30,28 @@ pub(crate) fn library_root(ctx: &ToolContext) -> Result<PathBuf, ToolError> {
         })
 }
 
-use crate::{parse_input, Tool, ToolOutput};
+use crate::{Tool, ToolOutput, parse_input};
 use async_trait::async_trait;
 use kcoder_types::workflow::WorkflowNode;
 use kcoder_workflow::store::WorkflowStore;
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 #[derive(Debug, Default)]
 pub struct WorkflowDraftTool;
-#[derive(Deserialize)]
+#[derive(Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 enum Action {
     List,
+    Update,
+    Clone,
+    Versions,
     Create,
     UpsertNode,
     RemoveNode,
     Read,
     Save,
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct Input {
     action: Action,
@@ -56,11 +59,16 @@ struct Input {
     title: Option<String>,
     #[serde(default)]
     description: String,
+    #[schemars(range(min = 1))]
     expected_revision: Option<u64>,
     node: Option<WorkflowNode>,
     node_id: Option<String>,
     offset: Option<usize>,
+    #[schemars(range(min = 1, max = 32))]
     limit: Option<usize>,
+    input_schema: Option<Value>,
+    #[schemars(range(min = 1))]
+    version: Option<u64>,
 }
 #[async_trait]
 impl Tool for WorkflowDraftTool {
@@ -68,7 +76,7 @@ impl Tool for WorkflowDraftTool {
         "WorkflowDraft".into()
     }
     fn description(&self) -> String {
-        "Author a persistent workflow without executing it. list discovers saved definitions across conversations (offset/limit pagination, at most 32 items). Create a draft, then upsert each node in a separate call so progress is visible. Use returned revision as expected_revision on each mutation. Read to recover from revision conflicts. upsert_node replaces the whole node; preserve unchanged fields when editing an existing node. save validates and publishes an immutable version; it never runs agents. Node dependencies reference IDs in the same draft.".into()
+        "Author a persistent workflow without executing it. list discovers saved definitions across conversations (offset/limit pagination, at most 32 items). Create a draft, then upsert each node in a separate call so progress is visible. Use returned revision as expected_revision on each mutation. Read to recover from revision conflicts. upsert_node replaces the whole node; preserve unchanged fields when editing an existing node. save validates and publishes an immutable version; it never runs agents. Rich nodes use typed kind/config/runIf fields; condition and loop predicates are declarative, never code. update fully replaces title, description and input_schema (omit schema to clear it). versions lists immutable releases; clone creates a new draft from an existing id and optional version. Node dependencies reference IDs in the same draft.".into()
     }
     async fn description_for_model(
         &self,
@@ -86,21 +94,7 @@ impl Tool for WorkflowDraftTool {
         true
     }
     fn input_schema(&self) -> Value {
-        json!({"type":"object","additionalProperties":false,"required":["action"],"properties":{
-            "action":{"type":"string","enum":["list","create","upsert_node","remove_node","read","save"]},
-            "id":{"type":"string"},"title":{"type":"string"},"description":{"type":"string"},
-            "offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":32},
-            "expected_revision":{"type":"integer","minimum":1},"node_id":{"type":"string"},
-            "node":{"type":"object","additionalProperties":false,"required":["id","title","prompt"],"properties":{
-                "id":{"type":"string"},"title":{"type":"string"},"prompt":{"type":"string"},
-                "agentType":{"type":"string"},"maxTurns":{"type":"integer","minimum":1,"maximum":100},
-                "dependsOn":{"type":"array","items":{"type":"string"}},
-                "position":{"type":"object","required":["x","y"],"properties":{"x":{"type":"number"},"y":{"type":"number"}}},
-                "allowedWritePaths":{"type":"array","items":{"type":"string"}},
-                "acceptanceCriteria":{"type":"array","items":{"type":"string"}},
-                "expectedArtifacts":{"type":"array","items":{"type":"string"}}
-            }}
-        }})
+        crate::clean_schema(schemars::schema_for!(Input))
     }
     fn is_concurrency_safe(&self, _: &Value) -> bool {
         false
@@ -110,6 +104,19 @@ impl Tool for WorkflowDraftTool {
             return Err(ToolError::Aborted);
         }
         let input: Input = parse_input(&input)?;
+        if let Some(bound) = ctx.state.workflow_definition_id() {
+            if matches!(input.action, Action::Create | Action::Clone) {
+                return Err(ToolError::InvalidInput(format!(
+                    "This conversation is bound to draft {bound}; read and update it instead of creating another"
+                )));
+            }
+            if !matches!(input.action, Action::List) && input.id.as_deref() != Some(bound.as_str())
+            {
+                return Err(ToolError::InvalidInput(
+                    "This design conversation can only access its bound workflow".into(),
+                ));
+            }
+        }
         let store = WorkflowStore::new(library_root(ctx)?);
         let missing = |name| ToolError::InvalidInput(format!("{name} is required for this action"));
         let id = || input.id.as_deref().ok_or_else(|| missing("id"));
@@ -129,6 +136,12 @@ impl Tool for WorkflowDraftTool {
                 let end = offset.saturating_add(items.len());
                 return Ok(ToolOutput::text(json!({"items":items,"total":total,"truncated":end<total,"nextOffset":(end<total).then_some(end)}).to_string()));
             }
+            Action::Versions => {
+                let versions=store.versions(id()?).map_err(|error|ToolError::Execution(error.to_string()))?;
+                return Ok(ToolOutput::text(serde_json::to_string(&versions).map_err(|error|ToolError::Execution(error.to_string()))?));
+            },
+            Action::Update => store.update_metadata(id()?,revision()?,input.title.as_deref().ok_or_else(||missing("title"))?,&input.description,input.input_schema.clone()),
+            Action::Clone => store.clone_workflow(id()?,input.version,input.title.as_deref()),
             Action::Create => store.create(
                 input.title.as_deref().ok_or_else(|| missing("title"))?,
                 &input.description,
@@ -184,13 +197,14 @@ mod tests {
         let edited = tool.call(json!({"action":"upsert_node","id":created["id"],"expected_revision":created["revision"],"node":{"id":"review","title":"Review","prompt":"Inspect only"}}), &ctx).await.unwrap();
         let edited: Value = payload(&edited);
         assert!(edited["revision"].as_u64().unwrap() > created["revision"].as_u64().unwrap());
-        assert!(tool
-            .call(
+        assert!(
+            tool.call(
                 json!({"action":"save","id":created["id"],"expected_revision":created["revision"]}),
                 &ctx
             )
             .await
-            .is_err());
+            .is_err()
+        );
         let saved = tool
             .call(
                 json!({"action":"save","id":created["id"],"expected_revision":edited["revision"]}),
@@ -200,10 +214,19 @@ mod tests {
             .unwrap();
         let saved: Value = payload(&saved);
         assert_eq!(saved["savedVersion"], 1);
-        let listed = payload(&tool.call(json!({"action":"list","limit":1}), &ctx).await.unwrap());
+        let listed = payload(
+            &tool
+                .call(json!({"action":"list","limit":1}), &ctx)
+                .await
+                .unwrap(),
+        );
         assert_eq!(listed["items"][0]["id"], created["id"]);
         assert_eq!(listed["items"][0]["savedVersion"], 1);
-        assert!(tool.call(json!({"action":"list","limit":0}), &ctx).await.is_err());
+        assert!(
+            tool.call(json!({"action":"list","limit":0}), &ctx)
+                .await
+                .is_err()
+        );
         let invalid = tool.call(json!({"action":"upsert_node","id":created["id"],"expected_revision":saved["revision"],"node":{"id":"invalid-role","title":"Invalid","prompt":"No execution","agentType":"does_not_exist"}}), &ctx).await.unwrap();
         let invalid = payload(&invalid);
         let error = tool
@@ -225,17 +248,22 @@ mod tests {
 
         let other = ToolContext::new(kcoder_state::AppState::new(temp.path()))
             .with_settings_persistence_path(Some(temp.path().join("other/settings.json")));
-        assert!(tool
-            .call(json!({"action":"read","id":created["id"]}), &other)
-            .await
-            .is_err());
+        assert!(
+            tool.call(json!({"action":"read","id":created["id"]}), &other)
+                .await
+                .is_err()
+        );
         assert!(!tool.is_concurrency_safe(&json!({"action":"read"})));
-        assert!(!crate::core_registry()
-            .names()
-            .contains(&"WorkflowDraft".into()));
-        assert!(crate::default_registry()
-            .names()
-            .contains(&"WorkflowDraft".into()));
+        assert!(
+            !crate::core_registry()
+                .names()
+                .contains(&"WorkflowDraft".into())
+        );
+        assert!(
+            crate::default_registry()
+                .names()
+                .contains(&"WorkflowDraft".into())
+        );
     }
     #[tokio::test]
     async fn execution_guidance_requires_the_execution_tool() {
@@ -245,24 +273,63 @@ mod tests {
             active_skills: vec![],
             available_tools: Default::default(),
         };
-        assert!(!WorkflowDraftTool
-            .description_for_model(None, &ctx)
-            .await
-            .contains("definition_id"));
+        assert!(
+            !WorkflowDraftTool
+                .description_for_model(None, &ctx)
+                .await
+                .contains("definition_id")
+        );
         ctx.available_tools.insert("Workflow".into());
-        assert!(WorkflowDraftTool
-            .description_for_model(None, &ctx)
-            .await
-            .contains("definition_id"));
+        assert!(
+            WorkflowDraftTool
+                .description_for_model(None, &ctx)
+                .await
+                .contains("definition_id")
+        );
+    }
+
+    #[tokio::test]
+    async fn bound_design_cannot_create_clone_or_access_other_drafts() {
+        let temp = tempfile::tempdir().unwrap();
+        let state = kcoder_state::AppState::new(temp.path());
+        let ctx = ToolContext::new(state)
+            .with_settings_persistence_path(Some(temp.path().join("owner/settings.json")));
+        let created = payload(
+            &WorkflowDraftTool
+                .call(json!({"action":"create","title":"Bound"}), &ctx)
+                .await
+                .unwrap(),
+        );
+        ctx.state
+            .enter_session_mode_before_first_message(kcoder_state::SessionMode::WorkflowDraft)
+            .unwrap();
+        ctx.state
+            .bind_workflow_definition_before_first_message(created["id"].as_str().unwrap())
+            .unwrap();
+        for input in [
+            json!({"action":"create","title":"Other"}),
+            json!({"action":"clone","id":created["id"]}),
+            json!({"action":"read","id":"other"}),
+        ] {
+            assert!(WorkflowDraftTool.call(input, &ctx).await.is_err());
+        }
+        assert!(
+            WorkflowDraftTool
+                .call(json!({"action":"read","id":created["id"]}), &ctx)
+                .await
+                .is_ok()
+        );
     }
 
     #[tokio::test]
     async fn missing_authorized_profile_is_not_replaced_by_home() {
         let temp = tempfile::tempdir().unwrap();
         let ctx = ToolContext::new(kcoder_state::AppState::new(temp.path()));
-        assert!(WorkflowDraftTool
-            .call(json!({"action":"create","title":"No"}), &ctx)
-            .await
-            .is_err());
+        assert!(
+            WorkflowDraftTool
+                .call(json!({"action":"create","title":"No"}), &ctx)
+                .await
+                .is_err()
+        );
     }
 }

@@ -1,3 +1,4 @@
+pub mod workflow_runs;
 pub mod workflow;
 mod cron_schedule;
 pub use cron_schedule::CronSchedule;

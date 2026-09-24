@@ -1,6 +1,7 @@
-import { Layers } from 'lucide-react'
+import type { WorkflowComposerIntent } from '@/features/workflows/useWorkflowComposerIntent'
+import { Layers, GitBranch } from 'lucide-react'
 import { SettingsSelect } from '@/components/settings/SettingsSelect'
-import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { useTranslation } from '@/hooks/useTranslation'
 import { visibleRuntimeGoal } from '@/lib/runtime-goal'
@@ -110,6 +111,8 @@ export interface ProjectWorkControls {
 }
 
 export interface ChatInputProps {
+  workflowNavigationActive?: boolean
+  workflowIntent?: WorkflowComposerIntent & { onChange: (value: WorkflowComposerIntent) => void }
   sessionMode?: RuntimeSessionMode
   /** Read-only template badge for a running session; the choice stays frozen. */
   settingsTemplateBadge?: {
@@ -295,6 +298,8 @@ export function ChatInput({
   goalDraftMode = 'standard',
   onSetGoal,
   sessionMode,
+  workflowIntent,
+  workflowNavigationActive = true,
   settingsTemplatePicker,
   settingsTemplateBadge,
   onInspectExecutionModes,
@@ -409,8 +414,27 @@ export function ChatInput({
     executionScopeRef.current = executionScope
   }, [executionScope])
   const [modeInfo, setModeInfo] = useState<{ scope: string; text: string } | null>(null)
+  const [localWorkflowIntent, setLocalWorkflowIntent] = useState<WorkflowComposerIntent>({ active: false })
+  const workflowDraftIntent = workflowIntent ?? localWorkflowIntent
+  const setWorkflowIntent = workflowIntent?.onChange ?? setLocalWorkflowIntent
+  const workflowDefinitionId = workflowDraftIntent.definitionId
+  useEffect(() => {
+    if (!workflowNavigationActive) return
+    const select = () => {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get('workflow') === 'new' && !workflowIntent) {
+        const draft = params.get('workflowDraft')
+        setWorkflowIntent({ active: true, definitionId: draft && /^[a-zA-Z0-9_-]{1,128}$/.test(draft) ? draft : undefined })
+      }
+    }
+    select()
+    window.addEventListener('popstate', select)
+    return () => window.removeEventListener('popstate', select)
+  }, [executionScope, onChange, projectWork?.currentRuntimeTask, t, workflowIntent, setWorkflowIntent, workflowNavigationActive])
+  const workflowSelected = workflowDraftIntent.active && !projectWork?.currentRuntimeTask
   const canSelectOrchestrate = !projectWork?.currentRuntimeTask && !isStreaming
   const selectExecutionMode = (mode: ComposerExecutionMode) => {
+    setWorkflowIntent({active:false})
     if (mode === 'orchestrate' && !canSelectOrchestrate) {
       setSlashSubmitError(t('workbench.orchestrate_before_first_message'))
       return
@@ -446,6 +470,7 @@ export function ChatInput({
     : undefined
   const selectGoal = onSetGoal
     ? (mode?: RuntimeGoal['mode']) => {
+        setWorkflowIntent({active:false})
         modeQueryRef.current += 1
         setModeInfo(null)
         setExecutionDraft(null)
@@ -453,6 +478,7 @@ export function ChatInput({
       }
     : undefined
   const selectPlanMode = () => {
+    setWorkflowIntent({active:false})
     modeQueryRef.current += 1
     setModeInfo(null)
     setExecutionDraft(null)
@@ -525,7 +551,10 @@ export function ChatInput({
     if (settingsTemplatePicker?.value) {
       options = { ...options, settingsTemplate: settingsTemplatePicker.value }
     }
-    if (executionMode) {
+    if (workflowSelected) {
+      options = { ...options, sessionMode: 'workflow_draft', workflowDefinitionId, guideWhenBusy: false }
+    }
+    if (executionMode && !workflowSelected) {
       if (!submittedValue) {
         setSlashSubmitError(t('workbench.execution_mode_prompt_required'))
         return
@@ -636,6 +665,19 @@ export function ChatInput({
       <span className="max-w-[10rem] truncate">{settingsTemplateBadge.name}</span>
       {settingsTemplateBadge.status !== 'current' && <span aria-hidden>!</span>}
     </div>
+  ) : null
+  const workflowModeControl = !projectWork?.currentRuntimeTask && !isStreaming && sessionMode !== 'workflow_draft' ? (
+    <Button type="button" size="sm" variant={workflowSelected ? 'secondary' : 'ghost'}
+      data-testid="composer-workflow-mode" aria-pressed={workflowSelected}
+      title={t('workflowCanvas.composerHint')}
+      onClick={() => {
+        setWorkflowIntent({active:!workflowSelected})
+        setExecutionDraft(null)
+        setModeInfo(null)
+        if (goalDraftActive) onCancelGoalDraft?.()
+        controls.setSelectedModelOption('collaborationMode', 'default')
+        if (window.location.search.includes('workflow=')) window.history.replaceState(null, '', window.location.pathname)
+      }}><GitBranch />{t('workflowCanvas.composerMode')}</Button>
   ) : null
   const executionModePill =
     executionMode || sessionMode === 'orchestrate' || sessionMode === 'workflow_draft' ? (
@@ -792,7 +834,8 @@ export function ChatInput({
             <>
               {settingsTemplateSelect}
               {settingsTemplateBadgeChip}
-              {executionModePill}
+              {workflowModeControl}
+            {executionModePill}
             </>
           }
         />
@@ -856,6 +899,7 @@ export function ChatInput({
           <>
             {settingsTemplateSelect}
             {settingsTemplateBadgeChip}
+            {workflowModeControl}
             {executionModePill}
           </>
         }

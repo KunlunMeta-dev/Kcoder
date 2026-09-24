@@ -1,6 +1,11 @@
 import { requestLocalExecutor } from '@/tauri/localExecutor'
 
+export type WorkflowNodeKind =
+  'agent' | 'input' | 'template' | 'condition' | 'merge' | 'loop' | 'output'
 export interface WorkflowNode {
+  kind?: WorkflowNodeKind
+  config?: Record<string, unknown>
+  runIf?: { nodeId: string; equals: boolean }
   id: string
   title: string
   prompt: string
@@ -13,6 +18,7 @@ export interface WorkflowNode {
   expectedArtifacts: string[]
 }
 export interface WorkflowDefinition {
+  inputSchema?: unknown
   id: string
   title: string
   description: string
@@ -33,7 +39,77 @@ export interface WorkflowList {
 function request<T>(serverId: string, method: string, params: object) {
   return requestLocalExecutor<T>('runtime.workflows.request', { serverId, method, params })
 }
+export interface WorkflowRun {
+  revision: number
+  error?: string | null
+  runId: string
+  definitionId: string | null
+  version: number | null
+  threadId: string
+  workspace: string
+  status: string
+  startedAtMs: number
+  updatedAtMs: number
+  resumeCount: number
+  nodeStates: Array<{
+    nodeId: string
+    status: string
+    iteration: number | null
+    attempt: number
+    startedAtMs: number | null
+    finishedAtMs: number | null
+    reused: boolean
+    outputPreview: string | null
+    error: string | null
+  }>
+}
 export const workflowApi = {
+  versions: (serverId: string, id: string) =>
+    request<
+      Array<{
+        version: number
+        revision: number
+        title: string
+        nodeCount: number
+        savedAtMs: number
+      }>
+    >(serverId, 'workflow/versions', { id }),
+  exportDefinition: (serverId: string, id: string, version?: number) =>
+    request<WorkflowDefinition>(serverId, 'workflow/export', {
+      id,
+      ...(version ? { version } : {}),
+    }),
+  clone: (serverId: string, id: string, version?: number) =>
+    request<WorkflowDefinition>(serverId, 'workflow/clone', {
+      id,
+      ...(version ? { version } : {}),
+    }),
+  importDefinition: (serverId: string, definition: unknown) =>
+    request<WorkflowDefinition>(serverId, 'workflow/import', { definition }),
+
+  runs: (serverId: string, definitionId: string, offset = 0) =>
+    request<{ items: WorkflowRun[]; total: number; nextOffset?: number | null }>(
+      serverId,
+      'workflow/runs/list',
+      { definitionId, offset, limit: 20 }
+    ),
+  run: (serverId: string, runId: string) =>
+    request<WorkflowRun>(serverId, 'workflow/runs/read', { runId }),
+  output: (serverId: string, runId: string, nodeId: string, offset = 0) =>
+    request<{ text: string; nextOffset?: number | null; truncated: boolean }>(
+      serverId,
+      'workflow/runs/output',
+      { runId, nodeId, offset, limit: 16384 }
+    ),
+  update: (serverId: string, definition: WorkflowDefinition, inputSchema: unknown) =>
+    request<WorkflowDefinition>(serverId, 'workflow/update', {
+      id: definition.id,
+      expectedRevision: definition.revision,
+      title: definition.title,
+      description: definition.description,
+      inputSchema,
+    }),
+
   list: (serverId: string, offset = 0) =>
     request<WorkflowList>(serverId, 'workflow/list', { offset, limit: 32 }),
   read: (serverId: string, id: string) =>
@@ -51,29 +127,4 @@ export const workflowApi = {
 /** Never apply a late polling response over a newer mutation result. */
 export function newerDefinition(current: WorkflowDefinition | null, next: WorkflowDefinition) {
   return !current || current.id !== next.id || next.revision > current.revision ? next : current
-}
-export async function launchWorkflowConversation(args: {
-  serverId: string
-  workspacePath: string
-  definition: WorkflowDefinition
-  generate: boolean
-  request?: string
-  conversationTitle?: string
-}) {
-  const { definition, generate, serverId, workspacePath } = args
-  if (!generate && !definition.savedVersion)
-    throw new Error('A published workflow version is required')
-  const prompt = generate
-    ? `Use WorkflowDraft to build draft ${JSON.stringify(definition.id)}. Read its current revision first. Add exactly one node per upsert_node call so the canvas updates incrementally. Do not execute Workflow, shell commands, or agents. Do not publish automatically; the user reviews and saves the DAG. User request:\n${args.request || definition.description}`
-    : `Run the saved workflow using Workflow with exactly ${JSON.stringify({ definition_id: definition.id, version: definition.savedVersion })}. Use this immutable published version, not its editable draft. Report progress and the result in this conversation.`
-  return requestLocalExecutor<{ accepted: boolean; taskId: string; deviceId: string }>(
-    'runtime.tasks.create',
-    {
-      deviceId: serverId,
-      workspacePath,
-      title: args.conversationTitle || definition.title,
-      sessionMode: generate ? 'workflow_draft' : 'default',
-      executionRequest: { prompt },
-    }
-  )
 }

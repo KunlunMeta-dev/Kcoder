@@ -2133,7 +2133,7 @@ export class KCoderGatewayRuntime {
     }
     if (method === 'runtime.workflows.request') {
       const operation = text(params.method)
-      if (!['workflow/list', 'workflow/read', 'workflow/create', 'workflow/upsertNode', 'workflow/removeNode', 'workflow/save'].includes(operation ?? ''))
+      if (!['workflow/list', 'workflow/read', 'workflow/create', 'workflow/upsertNode', 'workflow/removeNode', 'workflow/save', 'workflow/update', 'workflow/versions', 'workflow/clone', 'workflow/export', 'workflow/import', 'workflow/runs/list', 'workflow/runs/read', 'workflow/runs/output'].includes(operation ?? ''))
         throw new Error('Unsupported workflow operation')
       if (!text(params.serverId)) throw new Error('A workflow target is required')
       const target = await this.serverForParams({ deviceId: params.serverId })
@@ -2149,6 +2149,13 @@ export class KCoderGatewayRuntime {
         throw new Error(i18n.t('common:workflowCanvas.scopeChanged'))
       assertScope()
       if (client.supportsExperimental?.('workflowCanvasV1') !== true)
+        throw new Error(i18n.t('common:workflowCanvas.unsupported'))
+      const node = record(record(params.params).node)
+      const richOperation = ['workflow/update', 'workflow/versions', 'workflow/clone', 'workflow/export', 'workflow/import'].includes(operation ?? '') ||
+        (operation === 'workflow/upsertNode' && ((node.kind != null && node.kind !== 'agent') || node.runIf != null || Object.keys(record(node.config)).length > 0))
+      if (richOperation && client.supportsExperimental?.('workflowGraphV2') !== true)
+        throw new Error(i18n.t('common:workflowCanvas.unsupported'))
+      if (operation?.startsWith('workflow/runs/') && client.supportsExperimental?.('workflowRunsV1') !== true)
         throw new Error(i18n.t('common:workflowCanvas.unsupported'))
       const result = await client.request(operation!, record(params.params))
       assertScope()

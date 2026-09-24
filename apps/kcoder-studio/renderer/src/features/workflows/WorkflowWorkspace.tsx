@@ -1,23 +1,25 @@
+import { requestWorkflowComposerIntent } from './useWorkflowComposerIntent'
+import { WorkflowLibraryActions, WorkflowImportButton } from './WorkflowLibraryActions'
+import { WorkflowRunPanel } from './WorkflowRunPanel'
+import { captureAccountContextRevision } from '@/kcoder/accountContextEvents'
 import { usePluginTargetScope } from '@/kcoder/usePluginTargetScope'
-import { requestLocalExecutor, subscribeLocalExecutorEvents } from '@/tauri/localExecutor'
 import { useCallback, useEffect, useState } from 'react'
 import { ArrowLeft, GitBranch, Plus, RefreshCw, Save, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { SettingsSelect } from '@/components/settings/SettingsSelect'
 import { useWorkbench } from '@/features/workbench/useWorkbench'
 import { workbenchModelTarget } from '@/features/workbench/workbenchModelTarget'
-import { findRuntimeTask } from '@/features/workbench/workbenchRuntimeHelpers'
 import { useTranslation } from '@/hooks/useTranslation'
-import { buildRuntimeTaskRoute, navigateTo } from '@/lib/navigation'
+import { navigateTo } from '@/lib/navigation'
 import { WorkflowCanvas } from './WorkflowCanvas'
 import { WorkflowNodeEditor } from './WorkflowNodeEditor'
 import {
   workflowApi,
   newerDefinition,
-  launchWorkflowConversation,
   type WorkflowDefinition,
   type WorkflowNode,
   type WorkflowSummary,
+  type WorkflowRun,
 } from './workflowApi'
 
 const pageVisible = () => document.visibilityState !== 'hidden'
@@ -100,7 +102,7 @@ function WorkflowLibrary({
   isCurrent: () => boolean
 }) {
   const { t } = useTranslation('common')
-  const { state, refreshWorkLists } = useWorkbench()
+  const { startNewChat, openStandaloneWorkspace } = useWorkbench()
   const [items, setItems] = useState<WorkflowSummary[]>([])
   const [truncated, setTruncated] = useState(false)
   const [offset, setOffset] = useState(0)
@@ -108,6 +110,7 @@ function WorkflowLibrary({
   const [total, setTotal] = useState(0)
   const [selected, setSelected] = useState<string | null>(null)
   const [definition, setDefinition] = useState<WorkflowDefinition | null>(null)
+  const [viewVersion, setViewVersion] = useState<number | null>(null)
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
   const [dirty, setDirty] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -115,56 +118,12 @@ function WorkflowLibrary({
   const [error, setError] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [revisionTick, setRevisionTick] = useState(0)
-  const [title, setTitle] = useState('')
-  const [requirement, setRequirement] = useState('')
   const [workspacePath, setWorkspacePath] = useState(initialWorkspace)
-  const [generation, setGeneration] = useState<{ draftId: string; taskId: string } | null>(null)
-  const [terminalReceipts, setTerminalReceipts] = useState<
-    Record<string, 'completed' | 'cancelled' | 'failed'>
-  >({})
-  useEffect(() => {
-    let stopped = false
-    let unlisten: (() => void) | undefined
-    void subscribeLocalExecutorEvents(event => {
-      if (stopped || !isCurrent() || event.payload.deviceId !== serverId) return
-      if (event.event !== 'response.completed' && event.event !== 'response.failed') return
-      const taskId = event.payload.taskId
-      if (typeof taskId !== 'string') return
-      const data = event.payload.data as { terminalStatus?: string } | undefined
-      const phase =
-        event.event === 'response.completed'
-          ? 'completed'
-          : data?.terminalStatus === 'interrupted' || data?.terminalStatus === 'cancelled'
-            ? 'cancelled'
-            : 'failed'
-      setTerminalReceipts(previous =>
-        Object.fromEntries([
-          ...Object.entries(previous)
-            .filter(([id]) => id !== taskId)
-            .slice(-31),
-          [taskId, phase],
-        ])
-      )
-    })
-      .then(stop => {
-        if (stopped) stop()
-        else unlisten = stop
-      })
-      .catch(() => {})
-    return () => {
-      stopped = true
-      unlisten?.()
-    }
-  }, [serverId, isCurrent])
-  const generationTask = findRuntimeTask(
-    state.runtimeWork,
-    generation ? { deviceId: serverId, taskId: generation.taskId } : null
-  )
-  const terminalPhase = generation ? terminalReceipts[generation.taskId] : undefined
-  const generationActive =
-    generation?.draftId === selected &&
-    !terminalPhase &&
-    (!generationTask || generationTask.running)
+  const [runHistoryOpen, setRunHistoryOpen] = useState(false)
+  const [observedRun, setObservedRun] = useState<WorkflowRun | null>(null)
+  const [runArguments, setRunArguments] = useState('{}')
+  const [schemaText, setSchemaText] = useState('')
+  const [schemaRevision, setSchemaRevision] = useState<number | null>(null)
   const apply = useCallback((next: WorkflowDefinition) => {
     setDefinition(current => (current?.id === next.id ? newerDefinition(current, next) : current))
     setItems(current => {
@@ -203,7 +162,10 @@ function WorkflowLibrary({
           )
         }
         if (selected) {
-          const next = await workflowApi.read(serverId, selected)
+          const next =
+            viewVersion == null
+              ? await workflowApi.read(serverId, selected)
+              : await workflowApi.exportDefinition(serverId, selected, viewVersion)
           if (!stopped && isCurrent()) setDefinition(current => newerDefinition(current, next))
         }
         failed = false
@@ -216,15 +178,11 @@ function WorkflowLibrary({
         if (!stopped && isCurrent()) {
           setDefinition(null)
           setWorkspacePath('')
-          setRequirement('')
-          setTitle('')
-          setTerminalReceipts({})
           setSelected(null)
           setSelectedNode(null)
           setItems([])
           setDirty(false)
           onDirty(false)
-          setGeneration(null)
           setLoadError(failure instanceof Error ? failure.message : t('workflowCanvas.loadFailed'))
           setLoading(false)
         }
@@ -244,7 +202,7 @@ function WorkflowLibrary({
       clearTimeout(timer)
       document.removeEventListener('visibilitychange', visibility)
     }
-  }, [serverId, selected, revisionTick, offset, t, isCurrent, onDirty])
+  }, [serverId, selected, revisionTick, offset, t, isCurrent, onDirty, viewVersion])
 
   const mutate = async (operation: () => Promise<WorkflowDefinition>) => {
     setBusy(true)
@@ -266,36 +224,19 @@ function WorkflowLibrary({
       setError(t('workflowCanvas.finishNodeEdit'))
       return
     }
+    setRunArguments('{}')
+    setSchemaText('')
+    setSchemaRevision(null)
+    setViewVersion(null)
+    setObservedRun(null)
     setSelected(id)
     setDefinition(null)
     setSelectedNode(null)
-    setGeneration(current => (current?.draftId === id ? current : null))
-  }
-  const create = async () => {
-    if (!title.trim()) return
-    setBusy(true)
-    setError(null)
-    try {
-      const next = await workflowApi.create(serverId, title.trim(), requirement)
-      if (!isCurrent()) return
-      setSelected(next.id)
-      setDefinition(next)
-      setSelectedNode(null)
-      setDirty(false)
-      setGeneration(null)
-      apply(next)
-      setOffset(0)
-      setRevisionTick(value => value + 1)
-      setTitle('')
-    } catch (failure) {
-      setError(failure instanceof Error ? failure.message : t('workflowCanvas.saveFailed'))
-    } finally {
-      setBusy(false)
-    }
   }
   const addNode = async () => {
     if (!definition) return
     const id = `node-${crypto.randomUUID().slice(0, 8)}`
+    if (viewVersion != null) return
     const count = definition.nodes.length
     const node: WorkflowNode = {
       id,
@@ -312,30 +253,28 @@ function WorkflowLibrary({
     if (await mutate(() => workflowApi.upsert(serverId, definition.id, definition.revision, node)))
       setSelectedNode(id)
   }
-  const launch = async (generate: boolean) => {
+  const launch = async () => {
     if (!definition || !workspacePath.trim()) return
     setBusy(true)
     setError(null)
     try {
-      const receipt = await launchWorkflowConversation({
-        serverId,
-        workspacePath: workspacePath.trim(),
-        definition,
-        generate,
-        request: requirement,
-        conversationTitle: t(
-          generate ? 'workflowCanvas.generationTitle' : 'workflowCanvas.runTitle',
-          { title: definition.title }
-        ),
+      if (!definition.savedVersion) return
+      const accountValid = captureAccountContextRevision()
+      const args: unknown = JSON.parse(runArguments)
+      startNewChat()
+      await openStandaloneWorkspace(serverId, workspacePath.trim(), definition.title)
+      if (!accountValid(serverId)) return
+      requestWorkflowComposerIntent({
+        active: false,
+        run: {
+          id: definition.id,
+          version: viewVersion ?? definition.savedVersion,
+          args,
+          deviceId: serverId,
+          workspacePath: workspacePath.trim(),
+        },
       })
-      if (!isCurrent()) return
-      if (!receipt.accepted || !receipt.taskId) throw new Error(t('workflowCanvas.launchFailed'))
-      await refreshWorkLists()
-      if (!isCurrent()) return
-      if (generate) {
-        setGeneration({ draftId: definition.id, taskId: receipt.taskId })
-        setRevisionTick(value => value + 1)
-      } else navigateTo(buildRuntimeTaskRoute({ deviceId: serverId, taskId: receipt.taskId }))
+      navigateTo('/')
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : t('workflowCanvas.launchFailed'))
     } finally {
@@ -347,24 +286,34 @@ function WorkflowLibrary({
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto lg:flex-row">
       <aside className="w-full shrink-0 space-y-3 overflow-y-auto rounded-xl border border-border p-3 lg:w-60">
         <h2 className="text-sm font-medium">{t('workflowCanvas.library')}</h2>
-        <input
-          className={field}
-          aria-label={t('workflowCanvas.title')}
-          data-testid="workflow-new-title"
-          value={title}
-          onChange={event => setTitle(event.target.value)}
-          placeholder={t('workflowCanvas.title')}
-          maxLength={512}
-        />
         <Button
           className="w-full"
           data-testid="workflow-create"
-          disabled={busy || dirty || loading || !!loadError || !title.trim()}
-          onClick={() => void create()}
+          disabled={busy || dirty}
+          onClick={() => {
+            requestWorkflowComposerIntent({ active: true })
+            startNewChat()
+            navigateTo('/?workflow=new')
+          }}
         >
           <Plus />
-          {t('workflowCanvas.create')}
+          {t('workflowCanvas.createInChat')}
         </Button>
+        <WorkflowImportButton
+          disabled={busy || dirty}
+          serverId={serverId}
+          isCurrent={isCurrent}
+          onError={setError}
+          onCreated={next => {
+            setViewVersion(null)
+            setSelected(next.id)
+            setDefinition(next)
+            setSelectedNode(null)
+            setItems([])
+            setOffset(0)
+            setRevisionTick(value => value + 1)
+          }}
+        />
         {loading && (
           <p role="status" className="text-sm">
             {t('workflowCanvas.loading')}
@@ -456,7 +405,7 @@ function WorkflowLibrary({
                 size="sm"
                 variant="secondary"
                 data-testid="workflow-add-node"
-                disabled={busy || dirty || definition.nodes.length >= 64}
+                disabled={busy || dirty || viewVersion != null || definition.nodes.length >= 64}
                 onClick={() => void addNode()}
               >
                 <Plus />
@@ -466,7 +415,11 @@ function WorkflowLibrary({
                 size="sm"
                 data-testid="workflow-publish"
                 disabled={
-                  busy || dirty || !definition.nodes.length || definition.status === 'saved'
+                  busy ||
+                  dirty ||
+                  viewVersion != null ||
+                  !definition.nodes.length ||
+                  definition.status === 'saved'
                 }
                 onClick={() =>
                   void mutate(() => workflowApi.save(serverId, definition.id, definition.revision))
@@ -477,18 +430,129 @@ function WorkflowLibrary({
               </Button>
             </div>
             <p className="text-xs text-text-muted">{t('workflowCanvas.saveDoesNotRun')}</p>
-            <div className="grid gap-3 rounded-xl border border-border p-3 md:grid-cols-2">
-              <label className="space-y-1 text-sm">
-                {t('workflowCanvas.requirement')}
-                <textarea
-                  data-testid="workflow-requirement"
-                  className={field}
-                  rows={2}
-                  value={requirement}
-                  onChange={event => setRequirement(event.target.value)}
-                  maxLength={4096}
-                />
-              </label>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={busy || dirty || viewVersion != null || !workspacePath.trim()}
+              onClick={() => {
+                const id = definition.id
+                const accountValid = captureAccountContextRevision()
+                startNewChat()
+                void openStandaloneWorkspace(serverId, workspacePath.trim(), definition.title)
+                  .then(() => {
+                    if (accountValid(serverId)) {
+                      requestWorkflowComposerIntent({ active: true, definitionId: id })
+                      navigateTo(`/?workflow=new&workflowDraft=${encodeURIComponent(id)}`)
+                    }
+                  })
+                  .catch(failure => {
+                    if (isCurrent()) setError(String(failure))
+                  })
+              }}
+            >
+              {t('workflowCanvas.continueDesign')}
+            </Button>
+            <WorkflowLibraryActions
+              serverId={serverId}
+              definition={definition}
+              version={viewVersion}
+              disabled={busy || dirty}
+              isCurrent={isCurrent}
+              onError={setError}
+              onVersion={version => {
+                setViewVersion(version)
+                setDefinition(null)
+                setSelectedNode(null)
+                setObservedRun(null)
+              }}
+              onCreated={next => {
+                setViewVersion(null)
+                setSelected(next.id)
+                setDefinition(next)
+                setSelectedNode(null)
+                setItems([])
+                setOffset(0)
+                setRevisionTick(value => value + 1)
+              }}
+            />
+            <details className="rounded-xl border border-border p-3">
+              <summary className="cursor-pointer text-sm">
+                {t('workflowCanvas.inputSchema')}
+              </summary>
+              <textarea
+                aria-label={t('workflowCanvas.inputSchema')}
+                className={`${field} mt-2 font-mono`}
+                rows={6}
+                value={schemaText || JSON.stringify(definition.inputSchema ?? {}, null, 2)}
+                onChange={event => {
+                  if (schemaRevision == null) setSchemaRevision(definition.revision)
+                  setSchemaText(event.target.value)
+                }}
+              />
+              {schemaText && schemaRevision !== definition.revision && (
+                <p role="alert" className="text-xs text-destructive">
+                  {t('workflowCanvas.editorStale')}
+                </p>
+              )}
+              {schemaText && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setSchemaText('')
+                    setSchemaRevision(null)
+                  }}
+                >
+                  {t('workflowCanvas.discardEdits')}
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={
+                  busy ||
+                  dirty ||
+                  viewVersion != null ||
+                  !schemaText ||
+                  schemaRevision !== definition.revision
+                }
+                onClick={() => {
+                  try {
+                    const schema: unknown = JSON.parse(schemaText)
+                    void mutate(() => workflowApi.update(serverId, definition, schema)).then(ok => {
+                      if (ok) {
+                        setSchemaText('')
+                        setSchemaRevision(null)
+                      }
+                    })
+                  } catch {
+                    setError(t('workflowCanvas.invalidJsonObject'))
+                  }
+                }}
+              >
+                {t('workflowCanvas.saveInputSchema')}
+              </Button>
+            </details>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                data-testid="workflow-run"
+                disabled={busy || !definition.savedVersion || !workspacePath.trim()}
+                onClick={() => void launch()}
+              >
+                <Play />
+                {t('workflowCanvas.runSaved', {
+                  version: viewVersion ?? definition.savedVersion ?? '—',
+                })}
+              </Button>
+            </div>
+            <details className="rounded-xl border border-border p-3">
+              <summary
+                data-testid="workflow-run-settings-toggle"
+                className="cursor-pointer text-sm"
+              >
+                {t('workflowCanvas.runSettings')}
+              </summary>
               <div className="space-y-2">
                 <label className="block space-y-1 text-sm">
                   {t('workflowCanvas.workspace')}
@@ -500,108 +564,55 @@ function WorkflowLibrary({
                     placeholder={t('workflowCanvas.workspaceRequired')}
                   />
                 </label>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    data-testid="workflow-generate"
-                    disabled={
-                      busy ||
-                      dirty ||
-                      generationActive ||
-                      !workspacePath.trim() ||
-                      !requirement.trim()
-                    }
-                    onClick={() => void launch(true)}
-                  >
-                    {t('workflowCanvas.generate')}
-                  </Button>
-                  <Button
-                    size="sm"
-                    data-testid="workflow-run"
-                    disabled={busy || !definition.savedVersion || !workspacePath.trim()}
-                    onClick={() => void launch(false)}
-                  >
-                    <Play />
-                    {t('workflowCanvas.runSaved', { version: definition.savedVersion ?? '—' })}
-                  </Button>
-                </div>
-              </div>
-            </div>
-            {generation?.draftId === definition.id && (
-              <div className="flex flex-wrap items-center gap-2 text-sm" role="status">
-                <span data-testid="workflow-generation-status">
-                  {t(
-                    terminalPhase === 'cancelled' || generationTask?.turnStatus === 'interrupted'
-                      ? 'workflowCanvas.generationCancelled'
-                      : terminalPhase === 'completed' || generationTask?.turnStatus === 'completed'
-                        ? 'workflowCanvas.generationCompleted'
-                        : terminalPhase === 'failed' || generationTask?.turnStatus === 'failed'
-                          ? 'workflowCanvas.generationFailed'
-                          : generationTask?.running
-                            ? 'workflowCanvas.generating'
-                            : 'workflowCanvas.generationSubmitted'
+                <label className="block space-y-1 text-sm">
+                  {t('workflowCanvas.runArguments')}
+                  {definition.inputSchema != null && (
+                    <pre className="max-h-32 overflow-auto whitespace-pre-wrap text-xs text-text-muted">
+                      {JSON.stringify(definition.inputSchema, null, 2)}
+                    </pre>
                   )}
-                </span>
-                <Button
-                  size="sm"
-                  variant="link"
-                  data-testid="workflow-generation-conversation"
-                  onClick={() =>
-                    navigateTo(
-                      buildRuntimeTaskRoute({ deviceId: serverId, taskId: generation.taskId })
-                    )
-                  }
-                >
-                  {t('workflowCanvas.openConversation')}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  data-testid="workflow-generation-recheck"
-                  onClick={() => void refreshWorkLists()}
-                >
-                  {t('workflowCanvas.recheck')}
-                </Button>
-                {generationActive && (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    data-testid="workflow-generation-stop"
-                    disabled={busy}
-                    onClick={() => {
-                      setBusy(true)
-                      void requestLocalExecutor('runtime.tasks.cancel', {
-                        deviceId: serverId,
-                        taskId: generation.taskId,
-                      })
-                        .then(async () => {
-                          setGeneration(null)
-                          await refreshWorkLists()
-                        })
-                        .catch(failure =>
-                          setError(
-                            failure instanceof Error
-                              ? failure.message
-                              : t('workflowCanvas.launchFailed')
-                          )
-                        )
-                        .finally(() => setBusy(false))
-                    }}
-                  >
-                    {t('workflowCanvas.stopGeneration')}
-                  </Button>
-                )}
+                  <textarea
+                    data-testid="workflow-run-arguments"
+                    className={`${field} font-mono`}
+                    rows={3}
+                    value={runArguments}
+                    onChange={event => setRunArguments(event.target.value)}
+                  />
+                </label>
               </div>
-            )}
+            </details>
+            <details
+              onToggle={event => {
+                setRunHistoryOpen(event.currentTarget.open)
+                if (!event.currentTarget.open) setObservedRun(null)
+              }}
+            >
+              <summary data-testid="workflow-run-history-toggle" className="cursor-pointer text-sm">
+                {t('workflowCanvas.runHistory')}
+              </summary>
+              {runHistoryOpen && (
+                <WorkflowRunPanel
+                  serverId={serverId}
+                  definitionId={definition.id}
+                  onSnapshot={setObservedRun}
+                />
+              )}
+            </details>
             <p className="sr-only" aria-live="polite">
               {t('workflowCanvas.nodeCount', { count: definition.nodes.length })}
             </p>
             <div className="flex min-h-96 min-w-0 flex-1 flex-col gap-3 md:flex-row">
               <WorkflowCanvas
                 definition={definition}
+                nodeStates={
+                  definition.status === 'saved' &&
+                  observedRun?.definitionId === definition.id &&
+                  observedRun.version === definition.savedVersion
+                    ? observedRun.nodeStates
+                    : []
+                }
                 selectedId={selectedNode}
-                disabled={busy || dirty}
+                disabled={busy || dirty || viewVersion != null}
                 onSelect={id => {
                   if (dirty && id !== selectedNode) {
                     setError(t('workflowCanvas.finishNodeEdit'))
@@ -613,7 +624,21 @@ function WorkflowLibrary({
                   void mutate(() => workflowApi.upsert(serverId, definition.id, revision, value))
                 }
               />
-              {node && (
+              {node && viewVersion != null && (
+                <aside className="w-full overflow-auto rounded-xl border border-border p-4 md:w-72">
+                  <h3 className="text-sm font-medium">{node.title}</h3>
+                  <p className="my-2 text-xs text-text-muted">
+                    {t('workflowCanvas.readOnlyVersion')}
+                  </p>
+                  <p className="whitespace-pre-wrap break-words text-sm">{node.prompt}</p>
+                  {node.config && (
+                    <pre className="mt-3 whitespace-pre-wrap break-words text-code">
+                      {JSON.stringify(node.config, null, 2)}
+                    </pre>
+                  )}
+                </aside>
+              )}
+              {node && viewVersion == null && (
                 <WorkflowNodeEditor
                   key={`${definition.id}:${node.id}`}
                   definition={definition}

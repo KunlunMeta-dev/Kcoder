@@ -3416,6 +3416,9 @@ impl QueryEngine {
                         );
                         system_prompt.push_str(&engine.skill_catalog_prompt(&available_tool_names));
                         if engine.state.session_mode() == kcoder_state::SessionMode::WorkflowDraft {
+                            if let Some(id) = engine.state.workflow_definition_id() {
+                                system_prompt.push_str(&format!("\n\nWorkflow draft binding: {}\nRead and update this existing draft only. The user's conversation message is the design requirement; do not create another draft.", serde_json::json!({"id": id})));
+                            }
                             system_prompt.push_str("\n\nThis is a workflow design session. Only WorkflowDraft is available. Build the requested graph incrementally, one node per call; generation does not run nodes. Do not claim code or agents were executed. Preserve the requested draft ID and use the latest revision returned by each edit. The user saves and runs the workflow separately.");
                         }
                         if let Some(role_prompt) = engine.subagent_system_prompt.as_deref() {

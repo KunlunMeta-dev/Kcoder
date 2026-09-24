@@ -30,7 +30,6 @@ const DEFAULT_TIMEOUT_SECONDS: u64 = 30 * 60;
 const MAX_TIMEOUT_SECONDS: u64 = 24 * 60 * 60;
 const JOURNAL_EVENT_BATCH: usize = 32;
 
-static NEXT_WORKFLOW_ID: AtomicU64 = AtomicU64::new(1);
 static NEXT_ARTIFACT_WRITE_ID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Default)]
@@ -79,6 +78,8 @@ struct WorkflowRunState {
     name: String,
     status: String,
     source: String,
+    #[serde(default)]
+    definition_sha256: Option<String>,
     script_path: PathBuf,
     args_path: PathBuf,
     journal_path: PathBuf,
@@ -107,6 +108,7 @@ struct WorkflowRunStore {
     events: Mutex<()>,
     io: Mutex<()>,
     journal_buffer: Mutex<Vec<u8>>,
+    observation: Mutex<Option<crate::workflow_runs::RunObservation>>,
 }
 
 struct ResumeRollback {
@@ -175,6 +177,7 @@ impl WorkflowRunStore {
                 name,
                 status: "running".to_string(),
                 source,
+                definition_sha256: None,
                 script_path,
                 args_path,
                 journal_path,
@@ -194,6 +197,7 @@ impl WorkflowRunStore {
             events: Mutex::new(()),
             io: Mutex::new(()),
             journal_buffer: Mutex::new(Vec::new()),
+            observation: Mutex::new(None),
         });
         store.persist_state()?;
         store.append_json(&json!({
@@ -247,6 +251,7 @@ impl WorkflowRunStore {
             events: Mutex::new(()),
             io: Mutex::new(()),
             journal_buffer: Mutex::new(Vec::new()),
+            observation: Mutex::new(None),
         }))
     }
 
@@ -329,7 +334,19 @@ impl WorkflowRunStore {
         })?;
         atomic_write_file(&self.state_path, bytes).map_err(|error| {
             ToolError::Execution(format!("failed to write workflow state: {error}"))
-        })
+        })?;
+        if let Some(observation)=self.observation.lock().unwrap().as_ref() {
+            observation.update(|run| {
+                run.status=state.status.clone();run.error=state.error.as_deref().map(|e|preview(e,1024));run.updated_at_ms=state.updated_at_ms;run.resume_count=state.resume_count as u32;
+                if state.status!="running" {for node in &mut run.node_states {
+                    if node.status=="running" || node.status=="retrying" || node.status=="pending" {
+                        node.status=if state.status=="cancelled" {"cancelled".into()} else if node.status=="pending" {"skipped".into()} else {"interrupted".into()};
+                        node.finished_at_ms=Some(state.updated_at_ms);
+                    }
+                }}
+            }).map_err(|e|ToolError::Execution(e.to_string()))?;
+        }
+        Ok(())
     }
 
     fn append_json(&self, value: &Value) -> Result<(), ToolError> {
@@ -469,6 +486,188 @@ impl EventSink for WorkflowRunStore {
                     request
                 )
         );
+        if self.state.lock().unwrap().status == "running"
+            && let Some(observation) = self.observation.lock().unwrap().as_ref()
+        {
+            use kcoder_types::workflow_runs::WorkflowNodeRun;
+            let identity = match &event {
+                WorkflowEvent::NodeStarted {
+                    node_id,
+                    iteration,
+                    attempt,
+                    agent_id,
+                }
+                | WorkflowEvent::NodeCompleted {
+                    node_id,
+                    iteration,
+                    attempt,
+                    agent_id,
+                    ..
+                }
+                | WorkflowEvent::NodeFailed {
+                    node_id,
+                    iteration,
+                    attempt,
+                    agent_id,
+                    ..
+                } => Some((node_id, *iteration, *attempt, agent_id.clone())),
+                WorkflowEvent::NodeSkipped {
+                    node_id, iteration, ..
+                } => Some((node_id, *iteration, 0, None)),
+                _ => None,
+            };
+            if let Some((node_id, iteration, attempt, agent_id)) = identity {
+                if matches!(&event, WorkflowEvent::NodeStarted { .. }) {
+                    if let Err(error) = observation.clear_output(node_id) {
+                        tracing::warn!(%error,"cannot clear previous node output");
+                    }
+                }
+                if let WorkflowEvent::NodeCompleted { output, .. } = &event {
+                    if let Ok(text) = output
+                        .as_str()
+                        .map(str::to_owned)
+                        .map(Ok)
+                        .unwrap_or_else(|| serde_json::to_string(output))
+                    {
+                        if let Err(error) = observation.output(node_id, &text) {
+                            tracing::warn!(%error,"failed to persist node output projection");
+                        }
+                    }
+                }
+                if let Err(error) = observation.update(|run| {
+                    run.updated_at_ms = now;
+                    let index = run
+                        .node_states
+                        .iter()
+                        .position(|n| &n.node_id == node_id)
+                        .unwrap_or_else(|| {
+                            run.node_states.push(WorkflowNodeRun {
+                                node_id: node_id.to_string(),
+                                status: "pending".into(),
+                                iteration,
+                                iteration_status: None,
+                                attempt,
+                                started_at_ms: None,
+                                finished_at_ms: None,
+                                agent_id: None,
+                                reused: false,
+                                output_preview: None,
+                                error: None,
+                            });
+                            run.node_states.len() - 1
+                        });
+                    let node = &mut run.node_states[index];
+                    if iteration.is_some() {
+                        node.iteration = iteration;
+                    }
+                    node.attempt = attempt;
+                    node.agent_id = agent_id;
+                    match &event {
+                        WorkflowEvent::NodeStarted { .. } => {
+                            node.status = "running".into();
+                            if iteration.is_none() {
+                                node.started_at_ms = Some(now);
+                                node.iteration = None;
+                                node.iteration_status = None;
+                            } else {
+                                node.iteration_status = Some("running".into());
+                            }
+                            node.finished_at_ms = None;
+                            node.error = None;
+                            node.reused = false;
+                            node.output_preview = None;
+                        }
+                        WorkflowEvent::NodeCompleted { output, .. } => {
+                            if iteration.is_some() {
+                                node.status = "running".into();
+                                node.iteration_status = Some("completed".into());
+                            } else {
+                                node.status = "completed".into();
+                                node.finished_at_ms = Some(now);
+                            }
+                            node.error = None;
+                            node.output_preview = serde_json::to_string(output)
+                                .ok()
+                                .map(|text| preview(&text, 512));
+                        }
+                        WorkflowEvent::NodeFailed {
+                            error, will_retry, ..
+                        } => {
+                            let status = if *will_retry { "retrying" } else { "failed" };
+                            if iteration.is_some() {
+                                node.status = "running".into();
+                                node.iteration_status = Some(status.into());
+                            } else {
+                                node.status = status.into();
+                                node.finished_at_ms = Some(now);
+                            }
+                            node.error = Some(preview(error, 1024));
+                        }
+                        WorkflowEvent::NodeSkipped { reason, .. } => {
+                            if iteration.is_some() {
+                                node.status = "running".into();
+                                node.iteration_status = Some("skipped".into());
+                            } else {
+                                node.status = "skipped".into();
+                                node.finished_at_ms = Some(now);
+                            }
+                            node.error = Some(preview(reason, 1024));
+                        }
+                        _ => {}
+                    }
+                }) {
+                    tracing::warn!(%error,"failed to persist node observation");
+                }
+            } else if let WorkflowEvent::AgentStarted { agent_id, .. } = &event {
+                let _ = observation.update(|run| {
+                    if let Some(node) = run
+                        .node_states
+                        .iter_mut()
+                        .find(|n| n.agent_id.as_ref() == Some(agent_id))
+                    {
+                        node.reused = reused_agent;
+                    }
+                });
+            } else if let WorkflowEvent::AgentCompleted { agent_id, output } = &event {
+                let mut node_id = None;
+                let _ = observation.update(|run| {
+                    if let Some(node) = run
+                        .node_states
+                        .iter_mut()
+                        .find(|n| n.agent_id.as_ref() == Some(agent_id))
+                    {
+                        node_id = Some(node.node_id.clone());
+                        node.output_preview = Some(preview(output, 512));
+                    }
+                });
+                if let Some(node_id) = node_id {
+                    if let Err(error) = observation.output(&node_id, output) {
+                        tracing::warn!(%error,"cannot mirror actual agent output");
+                    }
+                }
+            }
+        }
+        if let WorkflowEvent::NodeFailed {
+            agent_id: Some(agent_id),
+            ..
+        } = &event
+        {
+            if valid_agent_artifact_id(agent_id) {
+                let directory = self
+                    .run_dir
+                    .join("agents")
+                    .join(kcoder_state::artifact_id_path_component(agent_id));
+                let repair = secure_read_file(&directory.join("request.json"), MAX_SCRIPT_BYTES)
+                    .ok()
+                    .and_then(|bytes| serde_json::from_slice::<AgentRequest>(&bytes).ok())
+                    .is_some_and(|request| request.output_repair_only);
+                if repair {
+                    if let Err(error) = secure_remove_file(&directory.join("completed")) {
+                        tracing::warn!(%error,"cannot invalidate rejected repair output");
+                    }
+                }
+            }
+        }
         let persisted = match &event {
             WorkflowEvent::AgentStarted { agent_id, request } => {
                 if !valid_agent_artifact_id(agent_id) {
@@ -563,7 +762,11 @@ impl EventSink for WorkflowRunStore {
                 }
                 WorkflowEvent::AgentCompleted { .. } => state.agent_completed += 1,
                 WorkflowEvent::AgentFailed { .. } => state.agent_failed += 1,
-                WorkflowEvent::Log { .. } => {}
+                WorkflowEvent::Log { .. }
+                | WorkflowEvent::NodeStarted { .. }
+                | WorkflowEvent::NodeCompleted { .. }
+                | WorkflowEvent::NodeFailed { .. }
+                | WorkflowEvent::NodeSkipped { .. } => {}
             }
             !matches!(event, WorkflowEvent::Log { .. })
                 || state.event_count.is_multiple_of(JOURNAL_EVENT_BATCH)
@@ -628,6 +831,9 @@ struct ToolAgentExecutor {
 #[async_trait]
 impl AgentExecutor for ToolAgentExecutor {
     async fn execute(&self, agent_id: &str, request: AgentRequest) -> Result<String, String> {
+        if !valid_agent_artifact_id(agent_id) {
+            return Err("workflow_invalid: unsafe agent identity".into());
+        }
         if let Some(run_dir) = &self.resume_run_dir {
             let agent_dir = run_dir
                 .join("agents")
@@ -681,13 +887,16 @@ impl AgentExecutor for ToolAgentExecutor {
             verification: request.verification,
         };
         let prompt = kind.build_prompt_with_contract(&request.prompt, Some(&contract));
-        let options = AgentRunOptions::with_allowed_write_paths(request.allowed_write_paths)
+        let mut options = AgentRunOptions::with_allowed_write_paths(request.allowed_write_paths)
             .with_block_shell_file_mutation(crate::agent::agent_kind_blocks_shell_file_mutation(
                 kind,
                 self.arrangement_mode,
             ))
             .with_arrangement_mode(self.arrangement_mode)
             .with_abort_token(self.cancellation.clone());
+        if request.output_repair_only {
+            options.tool_allowlist = Some(Vec::new());
+        }
         self.runner
             .run_agent_session_with_options(
                 agent_id.to_string(),
@@ -746,9 +955,15 @@ impl Tool for WorkflowTool {
             .as_deref()
             .map(str::trim)
             .filter(|value| !value.is_empty());
+        let mut pinned_definition = None;
         let (run_id, script, name, workflow_args, store, max_concurrency, is_resume, resume_lease) =
             if let Some(run_id) = resume_id {
-                if input.script.is_some() || input.name.is_some() || input.script_path.is_some() || input.definition_id.is_some() || input.version.is_some() {
+                if input.script.is_some()
+                    || input.name.is_some()
+                    || input.script_path.is_some()
+                    || input.definition_id.is_some()
+                    || input.version.is_some()
+                {
                     return Err(ToolError::InvalidInput(
                         "resume cannot be combined with script, name, script_path, definition_id, or version".to_string(),
                     ));
@@ -763,6 +978,42 @@ impl Tool for WorkflowTool {
                 let resume_lease = acquire_resume_lease(&run_dir).await?;
                 let args_override = (!input.args.is_null()).then_some(&input.args);
                 let store = WorkflowRunStore::open_for_resume(run_dir)?;
+                let definition_path = store.run_dir.join("definition.json");
+                match secure_read_file(&definition_path, 128 * 1024) {
+                    Ok(bytes) => {
+                        use sha2::Digest;
+                        let expected = store
+                            .state
+                            .lock()
+                            .unwrap()
+                            .definition_sha256
+                            .clone()
+                            .ok_or_else(|| {
+                                ToolError::Execution(
+                                    "workflow_corrupt: unbound graph snapshot".into(),
+                                )
+                            })?;
+                        if format!("{:x}", sha2::Sha256::digest(&bytes)) != expected {
+                            return Err(ToolError::Execution(
+                                "workflow_corrupt: pinned graph checksum changed".into(),
+                            ));
+                        }
+                        pinned_definition = Some(
+                            serde_json::from_slice::<kcoder_types::workflow::WorkflowDefinition>(
+                                &bytes,
+                            )
+                            .map_err(|e| ToolError::Execution(e.to_string()))?,
+                        );
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                        if store.state.lock().unwrap().definition_sha256.is_some() {
+                            return Err(ToolError::Execution(
+                                "workflow_corrupt: pinned graph missing".into(),
+                            ));
+                        }
+                    }
+                    Err(error) => return Err(ToolError::Execution(error.to_string())),
+                }
                 let state = store.state.lock().unwrap().clone();
                 if ctx.state.task(run_id).is_none() {
                     let mut task = Task::new(run_id, format!("Workflow: {}", state.name));
@@ -813,17 +1064,41 @@ impl Tool for WorkflowTool {
                 )
             } else {
                 let (script, name, source) = if let Some(id) = &input.definition_id {
-                    if input.script.is_some() || input.name.is_some() || input.script_path.is_some() {
-                        return Err(ToolError::InvalidInput("definition_id cannot be combined with JavaScript sources".into()));
+                    if input.script.is_some() || input.name.is_some() || input.script_path.is_some()
+                    {
+                        return Err(ToolError::InvalidInput(
+                            "definition_id cannot be combined with JavaScript sources".into(),
+                        ));
                     }
-                    let version = input.version.ok_or_else(|| ToolError::InvalidInput("definition_id requires an explicit published version".into()))?;
-                    let library = kcoder_workflow::store::WorkflowStore::new(crate::workflow_draft::library_root(ctx)?);
-                    let definition = library.read_saved(id, Some(version)).map_err(|error| ToolError::Execution(error.to_string()))?;
+                    let version = input.version.ok_or_else(|| {
+                        ToolError::InvalidInput(
+                            "definition_id requires an explicit published version".into(),
+                        )
+                    })?;
+                    let library = kcoder_workflow::store::WorkflowStore::new(
+                        crate::workflow_draft::library_root(ctx)?,
+                    );
+                    let definition = library
+                        .read_saved(id, Some(version))
+                        .map_err(|error| ToolError::Execution(error.to_string()))?;
                     crate::workflow_draft::validate_workflow_agent_types(&definition)?;
-                    let script = kcoder_workflow::graph::compile(&definition, input.args.clone()).map_err(|error| ToolError::InvalidInput(error.to_string()))?;
-                    (script, definition.title, format!("definition:{id}@{version}"))
+                    kcoder_workflow::graph::validate(&definition, true)
+                        .map_err(|e| ToolError::InvalidInput(e.to_string()))?;
+                    pinned_definition = Some(definition.clone());
+                    let script =
+                        "// Executed by the pinned declarative graph runtime; see definition.json"
+                            .to_string();
+                    (
+                        script,
+                        definition.title,
+                        format!("definition:{id}@{version}"),
+                    )
                 } else {
-                    if input.version.is_some() { return Err(ToolError::InvalidInput("version requires definition_id".into())); }
+                    if input.version.is_some() {
+                        return Err(ToolError::InvalidInput(
+                            "version requires definition_id".into(),
+                        ));
+                    }
                     resolve_script(&input, &ctx.state.cwd()).await?
                 };
                 let run_id = generate_workflow_id();
@@ -841,6 +1116,16 @@ impl Tool for WorkflowTool {
                     &input.args,
                     max_concurrency,
                 )?;
+                if let Some(definition) = &pinned_definition {
+                    use sha2::Digest;
+                    let bytes = serde_json::to_vec(definition)
+                        .map_err(|e| ToolError::Execution(e.to_string()))?;
+                    atomic_write_file(&store.run_dir.join("definition.json"), &bytes)
+                        .map_err(|e| ToolError::Execution(e.to_string()))?;
+                    store.state.lock().unwrap().definition_sha256 =
+                        Some(format!("{:x}", sha2::Sha256::digest(&bytes)));
+                    store.persist_state()?;
+                }
                 // Hold the same lease the resume path takes. On supported
                 // platforms a conflict must abort the initial caller: ignoring
                 // it would allow a process that won the resume race and this
@@ -870,6 +1155,67 @@ impl Tool for WorkflowTool {
             .cloned()
             .ok_or_else(|| ToolError::Execution("agent runner not available".to_string()))?;
 
+        if let Some(definition) = &pinned_definition {
+            let version = definition.saved_version.ok_or_else(|| {
+                ToolError::Execution("workflow_corrupt: pinned definition is not published".into())
+            })?;
+            if store.state.lock().unwrap().source
+                != format!("definition:{}@{}", definition.id, version)
+            {
+                return Err(ToolError::Execution(
+                    "workflow_corrupt: pinned definition identity changed".into(),
+                ));
+            }
+        }
+        if let Some(profile) = ctx
+            .settings_persistence_path
+            .as_deref()
+            .and_then(Path::parent)
+        {
+            let current = store.state.lock().unwrap().clone();
+            let observation = crate::workflow_runs::RunObservation::start(
+                profile.join("workflow-runs"),
+                kcoder_types::workflow_runs::WorkflowRunSnapshot {
+                    revision: 1,
+                    run_id: run_id.clone(),
+                    definition_id: pinned_definition.as_ref().map(|d| d.id.clone()),
+                    version: pinned_definition.as_ref().and_then(|d| d.saved_version),
+                    thread_id: ctx.state.session_id(),
+                    workspace: ctx.state.cwd().to_string_lossy().into(),
+                    status: "running".into(),
+                    error: None,
+                    started_at_ms: current.started_at_ms,
+                    updated_at_ms: now_millis(),
+                    resume_count: current
+                        .resume_count
+                        .saturating_add(usize::from(is_resume))
+                        .min(u32::MAX as usize) as u32,
+                    node_states: pinned_definition
+                        .as_ref()
+                        .map(|d| {
+                            d.nodes
+                                .iter()
+                                .map(|node| kcoder_types::workflow_runs::WorkflowNodeRun {
+                                    node_id: node.id.clone(),
+                                    status: "pending".into(),
+                                    iteration: None,
+                                    iteration_status: None,
+                                    attempt: 0,
+                                    started_at_ms: None,
+                                    finished_at_ms: None,
+                                    agent_id: None,
+                                    reused: false,
+                                    output_preview: None,
+                                    error: None,
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default(),
+                },
+            )
+            .map_err(|e| ToolError::Execution(e.to_string()))?;
+            *store.observation.lock().unwrap() = Some(observation);
+        }
         let resume_rollback = if is_resume {
             Some(store.begin_resume(&workflow_args, max_concurrency)?)
         } else {
@@ -912,23 +1258,28 @@ impl Tool for WorkflowTool {
             // resume state and publishing the background handle. It remains
             // held for the complete resumed attempt.
             let _resume_lease = resume_lease;
-            let result = WorkflowRuntime::execute(
-                &script,
-                workflow_args,
-                executor,
-                sink,
-                WorkflowRuntimeConfig {
-                    agent_id_prefix: workflow_id_for_result.clone(),
-                    max_concurrency,
-                    default_agent_max_turns: max_agent_turns,
-                    max_agent_max_turns: MAX_AGENT_MAX_TURNS,
-                    max_script_bytes: MAX_SCRIPT_BYTES,
-                    max_runtime_millis: timeout_seconds.saturating_mul(1000),
-                    cancellation_token: workflow_cancel,
-                    ..WorkflowRuntimeConfig::default()
-                },
-            )
-            .await;
+            let config = WorkflowRuntimeConfig {
+                agent_id_prefix: workflow_id_for_result.clone(),
+                max_concurrency,
+                default_agent_max_turns: max_agent_turns,
+                max_agent_max_turns: MAX_AGENT_MAX_TURNS,
+                max_script_bytes: MAX_SCRIPT_BYTES,
+                max_runtime_millis: timeout_seconds.saturating_mul(1000),
+                cancellation_token: workflow_cancel,
+                ..WorkflowRuntimeConfig::default()
+            };
+            let result = if let Some(definition) = pinned_definition {
+                WorkflowRuntime::execute_definition(
+                    &definition,
+                    workflow_args,
+                    executor,
+                    sink,
+                    config,
+                )
+                .await
+            } else {
+                WorkflowRuntime::execute(&script, workflow_args, executor, sink, config).await
+            };
             finish_workflow_result(
                 &run_store,
                 &workflow_task_state,
@@ -952,6 +1303,9 @@ impl Tool for WorkflowTool {
             )
         };
         if let Err(error) = spawn_result {
+            if !is_resume {
+                let _ = store.finish(Err(format!("workflow_not_started: {error}")));
+            }
             if let Some(rollback) = resume_rollback
                 && let Err(rollback_error) = store.rollback_resume(rollback)
             {
@@ -1176,13 +1530,7 @@ fn workflow_run_dir(ctx: &ToolContext, run_id: &str) -> PathBuf {
         .join(kcoder_state::artifact_id_path_component(run_id))
 }
 
-fn generate_workflow_id() -> String {
-    format!(
-        "workflow-{}-{}",
-        now_millis(),
-        NEXT_WORKFLOW_ID.fetch_add(1, Ordering::Relaxed)
-    )
-}
+fn generate_workflow_id() -> String { format!("workflow-{}", uuid::Uuid::new_v4()) }
 
 fn now_millis() -> u64 {
     SystemTime::now()
@@ -1698,6 +2046,7 @@ mod tests {
         let agent_dir = temp.path().join("agent");
         secure_create_dir(&agent_dir).unwrap();
         let request = AgentRequest {
+            output_repair_only: false,
             prompt: "review".to_string(),
             agent_type: "review".to_string(),
             max_turns: 4,
@@ -1771,6 +2120,36 @@ mod tests {
             .expect("完成中的 workflow 应在有界等待后释放 lease");
         release.await.unwrap();
         drop(next);
+    }
+
+    #[test]
+    fn loop_iteration_completion_does_not_complete_the_outer_node() {
+        let temp=tempfile::tempdir().unwrap();let root=temp.path().join("observations");
+        let store=WorkflowRunStore::create(temp.path().join("workflow-loop"),"workflow-loop".into(),"loop".into(),"inline".into(),"return null;",&Value::Null,1).unwrap();
+        *store.observation.lock().unwrap()=Some(crate::workflow_runs::RunObservation::start(root.clone(),kcoder_types::workflow_runs::WorkflowRunSnapshot{
+            revision:1,run_id:"workflow-loop".into(),definition_id:None,version:None,thread_id:"thread".into(),workspace:"owned".into(),status:"running".into(),error:None,started_at_ms:1,updated_at_ms:1,resume_count:0,node_states:vec![],
+        }).unwrap());
+        store.record(WorkflowEvent::NodeStarted{node_id:"loop".into(),iteration:None,attempt:0,agent_id:None});
+        store.record(WorkflowEvent::NodeStarted{node_id:"loop".into(),iteration:Some(0),attempt:0,agent_id:Some("agent".into())});
+        store.record(WorkflowEvent::NodeCompleted{node_id:"loop".into(),iteration:Some(0),attempt:0,agent_id:Some("agent".into()),output:json!("iteration done")});
+        let active=crate::workflow_runs::read(root.clone(),"workflow-loop").unwrap();
+        assert_eq!(active.node_states[0].status,"running");assert_eq!(active.node_states[0].iteration_status.as_deref(),Some("completed"));assert!(active.node_states[0].finished_at_ms.is_none());
+        store.record(WorkflowEvent::NodeCompleted{node_id:"loop".into(),iteration:None,attempt:0,agent_id:None,output:json!(["iteration done"])});
+        assert_eq!(crate::workflow_runs::read(root,"workflow-loop").unwrap().node_states[0].status,"completed");
+    }
+
+    #[test]
+    fn rejected_repair_outputs_are_not_reused_but_original_outputs_are() {
+        let temp=tempfile::tempdir().unwrap();let run_dir=temp.path().join("workflow-repair");
+        let store=WorkflowRunStore::create(run_dir.clone(),"workflow-repair".into(),"repair".into(),"inline".into(),"return null;",&Value::Null,1).unwrap();
+        for (id,repair) in [("original",false),("repair",true)] {
+            let request:AgentRequest=serde_json::from_value(json!({"prompt":"output","agent_type":"general","max_turns":1,"output_repair_only":repair})).unwrap();
+            store.record(WorkflowEvent::AgentStarted{agent_id:id.into(),request:request.clone()});
+            store.record(WorkflowEvent::AgentCompleted{agent_id:id.into(),output:"invalid json".into()});
+            let dir=run_dir.join("agents").join(id);assert!(cached_agent_request_matches(&dir,&request));
+            store.record(WorkflowEvent::NodeFailed{node_id:"n".into(),iteration:None,attempt:1,agent_id:Some(id.into()),error:"schema invalid".into(),will_retry:true});
+            assert_eq!(cached_agent_request_matches(&dir,&request),!repair);
+        }
     }
 
     #[test]
@@ -1859,7 +2238,7 @@ mod tests {
     }
 
     #[derive(Default)]
-    struct RecordingRunner(Mutex<Vec<String>>, Mutex<Vec<String>>);
+    struct RecordingRunner(Mutex<Vec<String>>, Mutex<Vec<String>>, Mutex<Vec<Option<Vec<String>>>>);
 
     #[async_trait]
     impl AgentRunner for RecordingRunner {
@@ -1873,10 +2252,11 @@ mod tests {
             prompt: String,
             _max_turns: usize,
             _agent_kind: crate::AgentKind,
-            _options: AgentRunOptions,
+            options: AgentRunOptions,
         ) -> Result<String, AgentError> {
             self.0.lock().unwrap().push(agent_id);
             self.1.lock().unwrap().push(prompt);
+            self.2.lock().unwrap().push(options.tool_allowlist);
             Ok("agent result".to_string())
         }
     }
@@ -2047,6 +2427,60 @@ mod tests {
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         }
         panic!("workflow did not reach status {expected}");
+    }
+
+    #[tokio::test]
+    async fn graph_output_repair_forces_empty_agent_tool_allowlist() {
+        let runner=Arc::new(RecordingRunner::default());
+        let executor=ToolAgentExecutor{runner:runner.clone(),arrangement_mode:false,resume_run_dir:None,cancellation:CancellationToken::new()};
+        let request:AgentRequest=serde_json::from_value(json!({"prompt":"format only","agent_type":"general","max_turns":1,"output_repair_only":true})).unwrap();
+        executor.execute("repair-agent",request).await.unwrap();
+        assert_eq!(runner.2.lock().unwrap().as_slice(), &[Some(Vec::<String>::new())]);
+    }
+
+    #[tokio::test]
+    async fn graph_parallel_nodes_have_durable_independent_run_observations() {
+        struct BlockingRunner { entered:AtomicU64, release:Arc<tokio::sync::Semaphore>, outputs:Mutex<HashMap<String,String>> }
+        #[async_trait]
+        impl AgentRunner for BlockingRunner {
+            async fn run_agent(&self, prompt:String, _:usize)->Result<String,AgentError>{Ok(prompt)}
+            async fn run_agent_session_with_options(&self,id:String,prompt:String,_turns:usize,_kind:crate::AgentKind,_options:AgentRunOptions)->Result<String,AgentError>{
+                self.entered.fetch_add(1,Ordering::SeqCst);
+                let permit=self.release.acquire().await.unwrap();permit.forget();let output=format!("actual-output:{prompt}");self.outputs.lock().unwrap().insert(id,output.clone());Ok(output)
+            }
+        }
+        let temp=tempfile::tempdir().unwrap();let profile=temp.path().join("profile");
+        let library=kcoder_workflow::store::WorkflowStore::new(profile.join("workflow-library"));
+        let mut def=library.create("parallel", "").unwrap();
+        for id in ["left","right"] {def=library.upsert_node(&def.id,def.revision,serde_json::from_value(json!({"id":id,"title":id,"prompt":id})).unwrap()).unwrap();}
+        let def=library.save(&def.id,def.revision).unwrap();
+        let state=AppState::new(temp.path());let project=profile.join("projects/p");fs::create_dir_all(&project).unwrap();state.with_history_path(project.join("s.jsonl"));
+        let runner=Arc::new(BlockingRunner{entered:AtomicU64::new(0),release:Arc::new(tokio::sync::Semaphore::new(0)),outputs:Mutex::new(HashMap::new())});
+        let manager=Arc::new(ExecutingWorkflowManager::new(state.clone()));
+        let abort=CancellationToken::new();
+        let ctx=ToolContext::new(state).with_abort_token(abort.clone()).with_settings_persistence_path(Some(profile.join("settings.json"))).with_agent_runner(runner.clone()).with_background_job_manager(manager.clone());
+        let out=WorkflowTool.call(json!({"definition_id":def.id,"version":1}),&ctx).await.unwrap();
+        let kcoder_types::ContentBlock::Text{text}=&out.content[0] else{panic!("text")};let reply:Value=serde_json::from_str(text).unwrap();let id=reply["run_id"].as_str().unwrap();
+        tokio::time::timeout(Duration::from_secs(5),async {while runner.entered.load(Ordering::SeqCst)!=2{tokio::time::sleep(Duration::from_millis(5)).await;}}).await.unwrap();
+        let root=profile.join("workflow-runs");let active=crate::workflow_runs::read(root.clone(),id).unwrap();
+        assert_eq!(active.node_states.len(),2);assert!(active.node_states.iter().all(|n|n.status=="running"));assert_ne!(active.node_states[0].agent_id,active.node_states[1].agent_id);
+        runner.release.add_permits(2);manager.wait_for_completion(id).await;
+        let done=crate::workflow_runs::read(root.clone(),id).unwrap();assert_eq!(done.status,"completed");assert!(done.node_states.iter().all(|n|n.status=="completed"));
+        let left=done.node_states.iter().find(|n|n.node_id=="left").unwrap();
+        let expected=runner.outputs.lock().unwrap().get(left.agent_id.as_ref().unwrap()).unwrap().clone();
+        assert_eq!(crate::workflow_runs::output(root.clone(),id,"left",0,65536).unwrap()["text"],expected);
+        let updated=library.update_metadata(&def.id,def.revision,"parallel","",Some(json!({"type":"object","required":["required_field"]}))).unwrap();
+        library.save(&updated.id,updated.revision).unwrap();
+        let failed=WorkflowTool.call(json!({"definition_id":def.id,"version":2,"args":{}}),&ctx).await.unwrap();
+        let kcoder_types::ContentBlock::Text{text}=&failed.content[0] else{panic!("text")};let failed:Value=serde_json::from_str(text).unwrap();let failed_id=failed["run_id"].as_str().unwrap();
+        manager.wait_for_completion(failed_id).await;
+        let failed=crate::workflow_runs::read(root.clone(),failed_id).unwrap();assert_eq!(failed.status,"failed");assert!(failed.error.is_some());assert_eq!(runner.entered.load(Ordering::SeqCst),2);
+        let cancelled=WorkflowTool.call(json!({"definition_id":def.id,"version":1}),&ctx).await.unwrap();
+        let kcoder_types::ContentBlock::Text{text}=&cancelled.content[0] else{panic!("text")};let cancelled:Value=serde_json::from_str(text).unwrap();let cancelled_id=cancelled["run_id"].as_str().unwrap();
+        tokio::time::timeout(Duration::from_secs(5),async {while runner.entered.load(Ordering::SeqCst)!=4{tokio::time::sleep(Duration::from_millis(5)).await;}}).await.unwrap();
+        abort.cancel();manager.wait_for_completion(cancelled_id).await;
+        let cancelled=crate::workflow_runs::read(root,cancelled_id).unwrap();assert_eq!(cancelled.status,"cancelled");assert!(cancelled.node_states.iter().all(|n|n.status=="cancelled"));
+
     }
 
     #[tokio::test]

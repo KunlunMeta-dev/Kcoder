@@ -81,13 +81,24 @@ fn workflow_generation_forks_keep_the_restricted_mode() {
         .without_scenario()
         .spawn();
     server.initialize(1);
-    server.send(json!({"id":2,"method":"thread/start","params":{"sessionMode":"workflow_draft"}}));
+    server.send(json!({"id":90,"method":"workflow/create","params":{"title":"Bound generation"}}));
+    let definition=server.response(90)["result"]["id"].as_str().unwrap().to_owned();
+    for (request_id, mode, id) in [(91,"default",definition.as_str()),(92,"workflow_draft","missing-definition")] {
+        server.send(json!({"id":request_id,"method":"thread/start","params":{"sessionMode":mode,"workflowDefinitionId":id}}));
+        assert!(server.response(request_id).get("error").is_some());
+    }
+    server.send(json!({"id":2,"method":"thread/start","params":{"sessionMode":"workflow_draft","workflowDefinitionId":definition}}));
     let created = server.response(2);
     assert!(created.get("error").is_none(), "{created}");
     let thread = created["result"]["thread"]["id"]
         .as_str()
         .unwrap()
         .to_owned();
+    assert_eq!(created["result"]["thread"]["workflowDefinitionId"], definition);
+    server.send(json!({"id":93,"method":"session/modes","params":{"threadId":thread}}));
+    assert_eq!(server.response(93)["result"]["workflowDefinitionId"], definition);
+    server.send(json!({"id":94,"method":"thread/read","params":{"threadId":thread}}));
+    assert_eq!(server.response(94)["result"]["thread"]["workflowDefinitionId"], definition);
     server.send(json!({"id":3,"method":"turn/start","params":{"threadId":thread,"input":[{"type":"text","text":"Record a design note without executing anything"}]}}));
     assert!(server.response(3).get("error").is_none());
     server.wait_for_method("turn/completed");
@@ -98,6 +109,7 @@ fn workflow_generation_forks_keep_the_restricted_mode() {
         let fork = server.response(id);
         assert!(fork.get("error").is_none(), "{fork}");
         assert_eq!(fork["result"]["thread"]["sessionMode"], "workflow_draft");
+        assert_eq!(fork["result"]["thread"]["workflowDefinitionId"], definition);
         let fork_id = fork["result"]["thread"]["id"].as_str().unwrap().to_owned();
         if !ephemeral {
             server.send(json!({"id":id+1,"method":"thread/resume","params":{"threadId":fork_id}}));
@@ -126,10 +138,13 @@ fn workflow_generation_forks_keep_the_restricted_mode() {
         .without_scenario()
         .spawn();
     restored.initialize(1);
-    restored.send(json!({"id":2,"method":"thread/resume","params":{"threadId":durable.unwrap()}}));
-    assert_eq!(
-        restored.response(2)["result"]["thread"]["sessionMode"],
-        "workflow_draft"
-    );
+    let durable=durable.unwrap();
+    restored.send(json!({"id":95,"method":"thread/list","params":{}}));
+    let listed=restored.response(95);
+    assert!(listed["result"]["threads"].as_array().unwrap().iter().any(|row|row["id"]==durable && row["workflowDefinitionId"]==definition),"{listed}");
+    restored.send(json!({"id":2,"method":"thread/resume","params":{"threadId":durable}}));
+    let resumed=restored.response(2);
+    assert_eq!(resumed["result"]["thread"]["sessionMode"],"workflow_draft");
+    assert_eq!(resumed["result"]["thread"]["workflowDefinitionId"],definition);
     restored.shutdown_successfully();
 }

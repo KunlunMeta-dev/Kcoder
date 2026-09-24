@@ -4043,6 +4043,9 @@ fn server_capabilities(thread_resume: bool) -> ServerCapabilities {
         experimental: BTreeMap::from([
             ("toolPathPreviewV1".to_string(), true),
             (kcoder_app_protocol::CAPABILITY_WORKFLOW_CANVAS_V1.to_string(), true),
+            (kcoder_app_protocol::CAPABILITY_WORKFLOW_CONVERSATION_V1.to_string(), true),
+            (kcoder_app_protocol::CAPABILITY_WORKFLOW_RUNS_V1.to_string(), true),
+            (kcoder_app_protocol::CAPABILITY_WORKFLOW_GRAPH_V2.to_string(), true),
             (kcoder_app_protocol::CAPABILITY_GOAL_CANCELLATION_V1.to_string(), true),
             (
                 kcoder_app_protocol::CAPABILITY_THREAD_RUN_SUMMARY_V1.to_string(),
@@ -5041,7 +5044,7 @@ pub async fn run(
                     }
                 }
             }
-            method::WORKFLOW_LIST | method::WORKFLOW_READ | method::WORKFLOW_CREATE | method::WORKFLOW_SAVE | method::WORKFLOW_UPSERT_NODE | method::WORKFLOW_REMOVE_NODE => {
+            method::WORKFLOW_UPDATE | method::WORKFLOW_VERSIONS | method::WORKFLOW_CLONE | method::WORKFLOW_EXPORT | method::WORKFLOW_IMPORT | method::WORKFLOW_RUNS_LIST | method::WORKFLOW_RUNS_READ | method::WORKFLOW_RUNS_OUTPUT | method::WORKFLOW_LIST | method::WORKFLOW_READ | method::WORKFLOW_CREATE | method::WORKFLOW_SAVE | method::WORKFLOW_UPSERT_NODE | method::WORKFLOW_REMOVE_NODE => {
                 let result = workflow_canvas::request(&workspace_engine, method, params.clone());
                 match result {
                     Ok(value) => send(&outbound_tx, success_response(id, value)).await?,
@@ -6086,6 +6089,18 @@ pub async fn run(
                     send(&outbound_tx, error_response(id, -32602, &error.to_string())).await?;
                     continue;
                 }
+                if let Some(definition_id) = start_params.workflow_definition_id.as_deref() {
+                    let binding = (|| -> Result<()> {
+                        anyhow::ensure!(start_params.session_mode == Some(kcoder_app_protocol::ThreadSessionMode::WorkflowDraft), "Workflow binding requires workflow_draft mode");
+                        workflow_canvas::request(&engine, method::WORKFLOW_READ, json!({"id":definition_id}))?;
+                        engine.state.bind_workflow_definition_before_first_message(definition_id)
+                    })();
+                    if let Err(error) = binding {
+                        if let Ok(Some(runtime)) = thread_manager.remove_if_idle(&engine.session_id()) { runtime.shutdown().await; }
+                        send(&outbound_tx, error_response(id, -32602, &error.to_string())).await?;
+                        continue;
+                    }
+                }
                 let _ = engine.run_startup_hooks().await;
                 if let Some(fire) = automation_fire.as_ref() {
                     let title: String = fire
@@ -6676,6 +6691,9 @@ pub async fn run(
                                         let _ =
                                             kcoder_state::delete_session_history_files(&fork_path);
                                         return Err(error);
+                                    }
+                                    if let Some(definition_id) = target_engine.state.workflow_definition_id() {
+                                        fork_state.bind_workflow_definition_before_first_message(&definition_id)?;
                                     }
                                     fork_state.set_messages(messages);
                                     if let Err(error) = fork_state.save_history() {
@@ -12073,6 +12091,7 @@ fn thread_snapshot_with_metadata_policy(
         "modelSelectionMode": engine.state.model_selection_mode(),
         "selectedModel": engine.state.selected_model(),
         "sessionMode": turn_execution::mode(engine),
+        "workflowDefinitionId": engine.state.workflow_definition_id(),
         "status": if running { "running" } else { "idle" },
         "messageCount": engine.state.message_count(),
         "createdAt": created_at.to_string(),
@@ -12641,6 +12660,7 @@ fn decorate_thread_snapshot_with_metadata(
         }
     }
     let authoritative = ThreadMetadata {
+        workflow_definition_id: object.get("workflowDefinitionId").and_then(Value::as_str).map(str::to_owned),
         schema: THREAD_METADATA_SCHEMA.into(),
         version: 1,
         revision: stored.as_ref().map_or(0, |metadata| metadata.revision),
@@ -14183,6 +14203,7 @@ fn persisted_thread_value_with_metadata(
         "id": session_id,
         "cwd": cwd,
         "sessionMode": metadata.session_mode(),
+        "workflowDefinitionId": metadata.workflow_definition_id(),
         "title": metadata.first_prompt(80),
         "status": if running { "running" } else { "idle" },
         "createdAt": created_at.to_string(),

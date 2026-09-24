@@ -3,12 +3,7 @@ vi.mock('@/tauri/localExecutor', () => ({
   requestLocalExecutor: vi.fn(async () => ({ accepted: true, taskId: 'task' })),
 }))
 import { requestLocalExecutor } from '@/tauri/localExecutor'
-import {
-  launchWorkflowConversation,
-  newerDefinition,
-  workflowApi,
-  type WorkflowDefinition,
-} from './workflowApi'
+import { newerDefinition, workflowApi, type WorkflowDefinition } from './workflowApi'
 const call = vi.mocked(requestLocalExecutor)
 const draft: WorkflowDefinition = {
   id: 'owned',
@@ -41,43 +36,24 @@ test('edits and publishing require explicit revision; reads are target-scoped an
   })
   expect(call.mock.calls.every(([method]) => method !== 'runtime.tasks.create')).toBe(true)
 })
-test('generation uses a restricted real conversation; reuse pins the published version and workspace', async () => {
-  await launchWorkflowConversation({
+test('historical viewing and cloning pin an explicit version without executing a conversation', async () => {
+  await workflowApi.exportDefinition('remote', 'owned', 1)
+  expect(call).toHaveBeenLastCalledWith('runtime.workflows.request', {
     serverId: 'remote',
-    workspacePath: '/chosen',
-    definition: draft,
-    generate: true,
-    request: 'Prepare a plan',
+    method: 'workflow/export',
+    params: { id: 'owned', version: 1 },
   })
-  expect(call).toHaveBeenLastCalledWith(
-    'runtime.tasks.create',
-    expect.objectContaining({
-      deviceId: 'remote',
-      workspacePath: '/chosen',
-      sessionMode: 'workflow_draft',
-      executionRequest: { prompt: expect.stringContaining('build draft "owned"') },
-    })
-  )
-  await launchWorkflowConversation({
+  await workflowApi.clone('remote', 'owned', 1)
+  expect(call).toHaveBeenLastCalledWith('runtime.workflows.request', {
     serverId: 'remote',
-    workspacePath: '/other-project',
-    definition: draft,
-    generate: false,
+    method: 'workflow/clone',
+    params: { id: 'owned', version: 1 },
   })
-  expect(call).toHaveBeenLastCalledWith(
-    'runtime.tasks.create',
-    expect.objectContaining({
-      workspacePath: '/other-project',
-      sessionMode: 'default',
-      executionRequest: { prompt: expect.stringContaining('"definition_id":"owned","version":1') },
-    })
-  )
-  await expect(
-    launchWorkflowConversation({
-      serverId: 'remote',
-      workspacePath: '/chosen',
-      definition: { ...draft, savedVersion: null },
-      generate: false,
-    })
-  ).rejects.toThrow()
+  await workflowApi.importDefinition('remote', draft)
+  expect(call).toHaveBeenLastCalledWith('runtime.workflows.request', {
+    serverId: 'remote',
+    method: 'workflow/import',
+    params: { definition: draft },
+  })
+  expect(call.mock.calls.every(([method]) => method !== 'runtime.tasks.create')).toBe(true)
 })

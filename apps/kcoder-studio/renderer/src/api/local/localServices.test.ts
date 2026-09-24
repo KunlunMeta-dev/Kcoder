@@ -1508,6 +1508,25 @@ describe('createLocalAppServices', () => {
     expect(prompt).toContain('do not use list_mcp_resources to discover tools')
   })
 
+  test('workflow creation preserves the ordinary selected model, reasoning and proxy payload', async () => {
+    saveLocalProxyUrl('http://127.0.0.1:7890')
+    const request = vi.fn().mockResolvedValue({ accepted: true })
+    const services = createLocalAppServices({
+      ensure: vi.fn().mockResolvedValue({ running: true, ready: true, deviceId: 'device-uuid' }), request, subscribe: vi.fn(),
+    })
+    const base = { teamId: 0, deviceId: 'local-device', workspacePath: 'D:\\dist', runtime: 'codex' as const,
+      message: '生成 PPT 的工作流', modelId: 'gpt-5.4', modelOptions: { reasoning: 'high' } }
+    await services.runtimeWorkApi?.createRuntimeTask({ ...base, taskId: 'ordinary' })
+    await services.runtimeWorkApi?.createRuntimeTask({ ...base, taskId: 'workflow', sessionMode: 'workflow_draft', workflowDefinitionId: 'draft-id' })
+    const payloads = request.mock.calls.filter(([method]) => method === 'runtime.tasks.create').map(([, value]) => value)
+    expect(payloads).toHaveLength(2)
+    expect(payloads[1]).toEqual(expect.objectContaining({ sessionMode: 'workflow_draft', workflowDefinitionId: 'draft-id', message: base.message }))
+    expect(payloads[1].executionRequest.model_config).toEqual(payloads[0].executionRequest.model_config)
+    expect(payloads[1].executionRequest.model_config.proxy).toEqual({ url: 'http://127.0.0.1:7890' })
+    expect(payloads[1].modelOptions.reasoning).toBe('high')
+    expect(payloads[1].modelId).toBe('gpt-5.4')
+  })
+
   test('adds configured local proxy to local runtime execution requests', async () => {
     saveLocalProxyUrl('http://127.0.0.1:7890')
     const request = vi.fn().mockResolvedValue({ accepted: true })

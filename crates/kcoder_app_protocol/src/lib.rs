@@ -50,6 +50,7 @@ pub use usage::*;
 
 pub const JSONRPC_VERSION: &str = "2.0";
 pub const PROTOCOL_VERSION: &str = "2026-07-27";
+pub const CAPABILITY_WORKFLOW_CONVERSATION_V1: &str = "workflowConversationV1";
 pub const THREAD_METADATA_SCHEMA: &str = "kcoder.thread-metadata";
 
 mod recent_error;
@@ -149,6 +150,14 @@ pub mod method {
     pub const MARKETPLACE_REMOVE: &str = "marketplace/remove";
     pub const MARKETPLACE_REFRESH: &str = "marketplace/refresh";
     /// Session-level settings templates: list/read/save/delete/default.
+    pub const WORKFLOW_UPDATE: &str = "workflow/update";
+    pub const WORKFLOW_VERSIONS: &str = "workflow/versions";
+    pub const WORKFLOW_CLONE: &str = "workflow/clone";
+    pub const WORKFLOW_EXPORT: &str = "workflow/export";
+    pub const WORKFLOW_IMPORT: &str = "workflow/import";
+    pub const WORKFLOW_RUNS_LIST: &str = "workflow/runs/list";
+    pub const WORKFLOW_RUNS_READ: &str = "workflow/runs/read";
+    pub const WORKFLOW_RUNS_OUTPUT: &str = "workflow/runs/output";
     pub const WORKFLOW_LIST: &str = "workflow/list";
     pub const WORKFLOW_READ: &str = "workflow/read";
     pub const WORKFLOW_CREATE: &str = "workflow/create";
@@ -714,6 +723,8 @@ pub struct TerminalExitParams {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ThreadStartParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_definition_id: Option<String>,
     /// Stable creation operation identity; requires threadCreationReceiptsV1.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub client_request_id: Option<String>,
@@ -1130,6 +1141,8 @@ pub struct ThreadDeleteResult {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ThreadMetadata {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_definition_id: Option<String>,
     pub schema: String,
     pub version: u32,
     pub revision: u64,
@@ -1142,6 +1155,7 @@ pub struct ThreadMetadata {
 impl Default for ThreadMetadata {
     fn default() -> Self {
         Self {
+            workflow_definition_id: None,
             schema: THREAD_METADATA_SCHEMA.into(),
             version: 1,
             revision: 0,
@@ -1318,6 +1332,8 @@ impl ThreadRunFacts {
 #[serde(rename_all = "camelCase")]
 pub struct Thread {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_definition_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_mode: Option<ThreadSessionMode>,
     pub id: String,
     pub status: ThreadStatus,
@@ -1471,6 +1487,8 @@ pub struct SessionModesParams {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionModesResult {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_definition_id: Option<String>,
     pub session_mode: ThreadSessionMode,
     pub moa_summary: String,
     pub moa_plan_planners: Vec<String>,
@@ -2240,6 +2258,7 @@ mod tests {
             model_selection_mode: None,
             selected_model: None,
             session_mode: None,
+            workflow_definition_id: None,
             id: "thread-1".into(),
             status: ThreadStatus::Idle,
             run_summary: None,
@@ -2249,6 +2268,7 @@ mod tests {
             archived_at: None,
             parent: None,
             metadata: ThreadMetadata {
+                workflow_definition_id: None,
                 schema: "kcoder.thread-metadata".into(),
                 version: 1,
                 revision: 0,
@@ -2782,6 +2802,7 @@ mod tests {
     #[test]
     fn thread_metadata_serializes_cleared_fields_as_explicit_nulls() {
         let metadata = ThreadMetadata {
+            workflow_definition_id: None,
             schema: "kcoder.thread-metadata".into(),
             version: 1,
             revision: 7,

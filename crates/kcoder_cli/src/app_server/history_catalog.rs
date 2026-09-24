@@ -197,7 +197,7 @@ fn base_snapshot(
         .base_cwd()
         .map(|base| dunce::simplified(base).to_string_lossy().into_owned());
     json!({
-        "id": id, "cwd": cwd, "sessionMode": prepared.session_mode(),
+        "id": id, "cwd": cwd, "sessionMode": prepared.session_mode(), "workflowDefinitionId": prepared.workflow_definition_id(),
         "title": title, "status": "idle", "createdAt": created.to_string(),
         "updatedAt": updated.to_string(),
     })
@@ -244,7 +244,8 @@ fn validated_snapshot(
     );
     ensure!(
         payload.snapshot["cwd"] == json!(prepared.base_cwd())
-            && payload.snapshot["sessionMode"] == json!(prepared.session_mode()),
+            && payload.snapshot["sessionMode"] == json!(prepared.session_mode())
+            && payload.snapshot["workflowDefinitionId"] == json!(prepared.workflow_definition_id()),
         "list catalog input mismatch"
     );
     ensure!(

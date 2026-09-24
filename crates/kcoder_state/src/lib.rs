@@ -137,6 +137,7 @@ struct AppStateInner {
     pub cwd: PathBuf,
     /// Sole source of truth for session-level mode; the goal lifecycle cannot clear it.
     pub session_mode: SessionMode,
+    pub workflow_definition_id: Option<String>,
     pub model_selection_mode: kcoder_types::ModelSelectionMode,
     pub selected_model: Option<String>,
     /// The original working directory used to start the session. Restored by
@@ -257,6 +258,7 @@ impl AppState {
                 conversation_started: false,
                 cwd: cwd.clone(),
                 session_mode: SessionMode::Default,
+                workflow_definition_id: None,
                 model_selection_mode: Default::default(),
                 selected_model: None,
                 base_cwd: cwd,
@@ -311,6 +313,7 @@ impl AppState {
                 conversation_started: message_count > 0,
                 cwd: cwd.clone(),
                 session_mode: SessionMode::Default,
+                workflow_definition_id: None,
                 model_selection_mode: Default::default(),
                 selected_model: None,
                 base_cwd: cwd,
@@ -2402,6 +2405,30 @@ mod tests {
         assert_eq!(task.status, TaskStatus::Completed);
         assert_eq!(task.output.as_deref(), Some("finished"));
         assert_eq!(task.allowed_write_paths, ["src"]);
+    }
+
+    #[test]
+    fn workflow_binding_is_immutable_and_survives_snapshot_and_resume() {
+        let temp = TempDir::new().unwrap();
+        let history = temp.path().join("bound-workflow.jsonl");
+        let state = AppState::new(temp.path());
+        state.with_history_path(&history);
+        assert!(state.bind_workflow_definition_before_first_message("draft-a").is_err());
+        state.enter_workflow_draft_before_first_message().unwrap();
+        state.bind_workflow_definition_before_first_message("draft-a").unwrap();
+        assert!(state.bind_workflow_definition_before_first_message("draft-b").is_err());
+        state.add_message(Message::user_text("Build my slides"));
+        state.save_history().unwrap();
+        let resumed = AppState::new(temp.path());
+        resumed.resume_from_history(&history).unwrap();
+        assert_eq!(resumed.workflow_definition_id().as_deref(), Some("draft-a"));
+        assert_eq!(resumed.snapshot().workflow_definition_id.as_deref(), Some("draft-a"));
+        assert_eq!(prepare_session_metadata(&history).unwrap().workflow_definition_id(), Some("draft-a"));
+        let snapshot = temp.path().join("snapshot.json");
+        state.export_snapshot(&snapshot).unwrap();
+        let imported = AppState::new(temp.path());
+        imported.import_snapshot(&snapshot).unwrap();
+        assert_eq!(imported.workflow_definition_id().as_deref(), Some("draft-a"));
     }
 
     #[test]

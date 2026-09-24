@@ -1,14 +1,16 @@
+import { WorkflowNodeConfigFields } from './WorkflowNodeConfigFields'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useTranslation } from '@/hooks/useTranslation'
-import type { WorkflowDefinition, WorkflowNode } from './workflowApi'
+import type { WorkflowDefinition, WorkflowNode, WorkflowNodeKind } from './workflowApi'
 const inputClass =
   'w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-focus/30'
 const textFields = (node: WorkflowNode) => ({
   allowedWritePaths: node.allowedWritePaths.join('\n'),
   acceptanceCriteria: node.acceptanceCriteria.join('\n'),
   expectedArtifacts: node.expectedArtifacts.join('\n'),
+  config: JSON.stringify(node.config ?? {}, null, 2),
 })
 const lines = (value: string) =>
   value
@@ -45,6 +47,17 @@ export function WorkflowNodeEditor({
     setDraft(node)
     setAdvanced(textFields(node))
     setBaseRevision(definition.revision)
+  }
+  const kind = draft.kind ?? 'agent'
+  let parsedConfig: Record<string, unknown> = {}
+  let configError = false
+  try {
+    const parsed: unknown = JSON.parse(advanced.config)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+      throw new Error('object required')
+    parsedConfig = parsed as Record<string, unknown>
+  } catch {
+    configError = true
   }
   const stale = baseRevision !== definition.revision
   return (
@@ -84,53 +97,170 @@ export function WorkflowNodeEditor({
         />
       </label>
       <label className="block space-y-1 text-sm">
-        {t('workflowCanvas.prompt')}
-        <textarea
-          data-testid="workflow-node-prompt"
-          className={inputClass}
-          rows={5}
-          value={draft.prompt}
-          onChange={event => update({ prompt: event.target.value })}
-          maxLength={16384}
-        />
-      </label>
-      <label className="block space-y-1 text-sm">
-        {t('workflowCanvas.role')}
+        {t('workflowCanvas.nodeType')}
         <select
-          data-testid="workflow-node-role"
+          data-testid="workflow-node-kind"
           className={inputClass}
-          value={draft.agentType}
-          onChange={event => update({ agentType: event.target.value })}
+          value={kind}
+          onChange={event => {
+            const next = event.target.value as WorkflowNodeKind
+            const defaults: Record<WorkflowNodeKind, Record<string, unknown>> = {
+              agent: {},
+              input: { pointer: '/input' },
+              output: { pointer: '/input' },
+              template: { template: '{{/input}}' },
+              condition: { condition: { op: 'exists', pointer: '/input' } },
+              merge: { mergePolicy: 'all' },
+              loop: { loop: { mode: 'repeat', maxIterations: 3 } },
+            }
+            update({ kind: next, config: defaults[next] })
+            setAdvanced(current => ({
+              ...current,
+              config: JSON.stringify(defaults[next], null, 2),
+            }))
+          }}
         >
-          {['general', 'explore', 'plan', 'review', 'implementer', 'verifier', 'tool_agent'].map(
-            role => (
-              <option key={role} value={role}>
-                {role}
+          {(['agent', 'input', 'template', 'condition', 'merge', 'loop', 'output'] as const).map(
+            value => (
+              <option key={value} value={value}>
+                {t(`workflowCanvas.kind_${value}`)}
               </option>
             )
           )}
-          {![
-            'general',
-            'explore',
-            'plan',
-            'review',
-            'implementer',
-            'verifier',
-            'tool_agent',
-          ].includes(draft.agentType) && <option value={draft.agentType}>{draft.agentType}</option>}
         </select>
       </label>
-      <label className="block space-y-1 text-sm">
-        {t('workflowCanvas.maxTurns')}
-        <input
-          className={inputClass}
-          type="number"
-          min={1}
-          max={100}
-          value={draft.maxTurns}
-          onChange={event => update({ maxTurns: Number(event.target.value) })}
+      {(kind === 'agent' || kind === 'loop') && (
+        <>
+          <label className="block space-y-1 text-sm">
+            {t('workflowCanvas.prompt')}
+            <textarea
+              data-testid="workflow-node-prompt"
+              className={inputClass}
+              rows={5}
+              value={draft.prompt}
+              onChange={event => update({ prompt: event.target.value })}
+              maxLength={16384}
+            />
+          </label>
+          <label className="block space-y-1 text-sm">
+            {t('workflowCanvas.role')}
+            <select
+              data-testid="workflow-node-role"
+              className={inputClass}
+              value={draft.agentType}
+              onChange={event => update({ agentType: event.target.value })}
+            >
+              {[
+                'general',
+                'explore',
+                'plan',
+                'review',
+                'implementer',
+                'verifier',
+                'tool_agent',
+              ].map(role => (
+                <option key={role} value={role}>
+                  {role}
+                </option>
+              ))}
+              {![
+                'general',
+                'explore',
+                'plan',
+                'review',
+                'implementer',
+                'verifier',
+                'tool_agent',
+              ].includes(draft.agentType) && (
+                <option value={draft.agentType}>{draft.agentType}</option>
+              )}
+            </select>
+          </label>
+          <label className="block space-y-1 text-sm">
+            {t('workflowCanvas.maxTurns')}
+            <input
+              className={inputClass}
+              type="number"
+              min={1}
+              max={100}
+              value={draft.maxTurns}
+              onChange={event => update({ maxTurns: Number(event.target.value) })}
+            />
+          </label>
+        </>
+      )}
+      {!configError && (
+        <WorkflowNodeConfigFields
+          kind={kind}
+          config={parsedConfig}
+          node={draft}
+          definition={definition}
+          onChange={config => {
+            update({ config })
+            setAdvanced(current => ({ ...current, config: JSON.stringify(config, null, 2) }))
+          }}
         />
+      )}
+      <details>
+        <summary className="cursor-pointer text-sm">{t('workflowCanvas.nodeConfig')}</summary>
+        <p className="my-2 text-xs text-text-muted">{t('workflowCanvas.nodeConfigHint')}</p>
+        <textarea
+          data-testid="workflow-node-config"
+          aria-label={t('workflowCanvas.nodeConfig')}
+          className={`${inputClass} font-mono`}
+          rows={7}
+          value={advanced.config}
+          onChange={event => {
+            setAdvanced(current => ({ ...current, config: event.target.value }))
+            setDirty(true)
+            onDirty(true)
+          }}
+        />
+        {configError && (
+          <p role="alert" className="text-xs text-destructive">
+            {t('workflowCanvas.invalidJsonObject')}
+          </p>
+        )}
+      </details>
+      <label className="block space-y-1 text-sm">
+        {t('workflowCanvas.runIf')}
+        <select
+          className={inputClass}
+          value={draft.runIf?.nodeId ?? ''}
+          onChange={event => {
+            const nodeId = event.target.value
+            update({
+              runIf: nodeId ? { nodeId, equals: true } : undefined,
+              dependsOn:
+                nodeId && !draft.dependsOn.includes(nodeId)
+                  ? [...draft.dependsOn, nodeId]
+                  : draft.dependsOn,
+            })
+          }}
+        >
+          <option value="">{t('workflowCanvas.always')}</option>
+          {definition.nodes
+            .filter(candidate => candidate.id !== node.id && candidate.kind === 'condition')
+            .map(candidate => (
+              <option key={candidate.id} value={candidate.id}>
+                {candidate.title || candidate.id}
+              </option>
+            ))}
+        </select>
       </label>
+      {draft.runIf && (
+        <select
+          aria-label={t('workflowCanvas.branchValue')}
+          className={inputClass}
+          value={String(draft.runIf.equals)}
+          onChange={event =>
+            update({ runIf: { ...draft.runIf!, equals: event.target.value === 'true' } })
+          }
+        >
+          <option value="true">{t('workflowCanvas.trueBranch')}</option>
+          <option value="false">{t('workflowCanvas.falseBranch')}</option>
+        </select>
+      )}
       <fieldset className="space-y-2">
         <legend className="mb-2 text-sm">{t('workflowCanvas.dependencies')}</legend>
         {definition.nodes
@@ -205,11 +335,12 @@ export function WorkflowNodeEditor({
       <Button
         className="w-full"
         data-testid="workflow-node-save"
-        disabled={busy || !dirty || stale}
+        disabled={busy || !dirty || stale || configError}
         onClick={() =>
           void onSave(
             {
               ...draft,
+              config: parsedConfig,
               allowedWritePaths: lines(advanced.allowedWritePaths),
               acceptanceCriteria: lines(advanced.acceptanceCriteria),
               expectedArtifacts: lines(advanced.expectedArtifacts),
@@ -220,7 +351,6 @@ export function WorkflowNodeEditor({
               setDirty(false)
               onDirty(false)
             }
-            onDirty(false)
           })
         }
       >

@@ -1,3 +1,6 @@
+import { sameWorkspacePath } from '@/lib/workspace-path-identity'
+import { useWorkflowComposerIntent } from '@/features/workflows/useWorkflowComposerIntent'
+import { WorkflowConversationCanvas } from '@/features/workflows/WorkflowConversationCanvas'
 import { safeErrorDiagnostic } from '@/lib/error-diagnostics'
 import { listenAccountContextChanges } from '@/kcoder/accountContextEvents'
 import { runtimeProjectLabel } from '@/kcoder/gatewayServerLabel'
@@ -436,6 +439,7 @@ const MemoizedBottomWorkspacePanel = memo(function MemoizedBottomWorkspacePanel(
 })
 
 export function DesktopWorkbenchMain(props: DesktopWorkbenchMainProps) {
+  const workflowComposerIntent = useWorkflowComposerIntent(props.activePane.currentRuntimeTask?.taskId)
   const { state } = useWorkbenchPaneContext()
   const { services } = useWorkbench()
   const appearanceContext = useOptionalAppearance()
@@ -537,6 +541,7 @@ export function DesktopWorkbenchMain(props: DesktopWorkbenchMainProps) {
       renderPane={pane => (
         <DesktopWorkbenchPane
           pane={pane}
+          workflowComposerIntent={workflowComposerIntent}
           workbenchVisible={props.visible ?? true}
           sidebarCollapsed={props.sidebarCollapsed}
           sidebarResizing={props.sidebarResizing ?? false}
@@ -574,6 +579,7 @@ export function DesktopWorkbenchMain(props: DesktopWorkbenchMainProps) {
 
 const DesktopWorkbenchPane = memo(function DesktopWorkbenchPane({
   pane,
+  workflowComposerIntent,
   workbenchVisible,
   sidebarCollapsed,
   sidebarResizing = false,
@@ -586,6 +592,7 @@ const DesktopWorkbenchPane = memo(function DesktopWorkbenchPane({
   onWorkspaceStateChange,
 }: {
   pane: WorkbenchPaneIdentity
+  workflowComposerIntent: ReturnType<typeof useWorkflowComposerIntent>
   workbenchVisible: boolean
   sidebarCollapsed: boolean
   sidebarResizing?: boolean
@@ -1213,7 +1220,8 @@ const DesktopWorkbenchPane = memo(function DesktopWorkbenchPane({
     onCollapse: closeRightPanel,
     defaultPanelWidth: onlyTemporaryChatOpen ? TEMPORARY_CHAT_PANEL_DEFAULT_WIDTH : undefined,
   })
-  const chatColumnWidth = rightPanelOpen ? rightSplitChatWidth : '100%'
+  const workflowCanvasVisible = Boolean(paneSession.workflowDefinitionId && currentRuntimeTask?.deviceId && !rightPanelOpen)
+  const chatColumnWidth = rightPanelOpen ? rightSplitChatWidth : workflowCanvasVisible ? '50%' : '100%'
   const availableChatColumnWidth = rightPanelOpen ? rightSplitChatWidth : workbenchContentWidth
   const environmentInfoDocked =
     Boolean(currentRuntimeTask) &&
@@ -1389,6 +1397,16 @@ const DesktopWorkbenchPane = memo(function DesktopWorkbenchPane({
           source: 'runtime' as const,
         }
       : null)
+  const pendingWorkflowRun = workflowComposerIntent.run
+  useEffect(() => {
+    if (!paneActive || currentRuntimeTask || !pendingWorkflowRun || !composerWorkspaceTarget) return
+    if (pendingWorkflowRun.deviceId && pendingWorkflowRun.deviceId !== composerWorkspaceTarget.deviceId) return
+    if (pendingWorkflowRun.workspacePath && !sameWorkspacePath(pendingWorkflowRun.workspacePath, composerWorkspaceTarget.path)) return
+    paneSession.setInput(t('workflowCanvas.runInstruction', {params: JSON.stringify({definition_id:pendingWorkflowRun.id,version:pendingWorkflowRun.version,...(pendingWorkflowRun.args !== undefined ? {args:pendingWorkflowRun.args} : {})})}))
+    workflowComposerIntent.onChange({active:false})
+    const url = new URL(window.location.href)
+    if(url.searchParams.has('workflowRun')) {url.searchParams.delete('workflowRun');window.history.replaceState(null,'',`${url.pathname}${url.search}${url.hash}`)}
+  }, [paneActive,currentRuntimeTask,pendingWorkflowRun,composerWorkspaceTarget,paneSession.setInput,workflowComposerIntent.onChange,t])
   const selectedFileWorkspaceTarget =
     fileWorkspaceTargets.find(
       target => `${target.deviceId}:${target.path}` === selectedFileWorkspaceTargetKey
@@ -2635,6 +2653,8 @@ const DesktopWorkbenchPane = memo(function DesktopWorkbenchPane({
                               onCompactContext={compactCurrentContext}
                               goal={paneSession.goal}
                               sessionMode={paneSession.sessionMode}
+                    workflowIntent={workflowComposerIntent}
+                    workflowNavigationActive={paneActive}
                               settingsTemplatePicker={settingsTemplatePicker}
                               settingsTemplateBadge={settingsTemplateBadge}
                               onInspectExecutionModes={() =>
@@ -2788,6 +2808,8 @@ const DesktopWorkbenchPane = memo(function DesktopWorkbenchPane({
                     onCompactContext={compactCurrentContext}
                     goal={paneSession.goal}
                     sessionMode={paneSession.sessionMode}
+                    workflowIntent={workflowComposerIntent}
+                    workflowNavigationActive={paneActive}
                     settingsTemplatePicker={settingsTemplatePicker}
                     settingsTemplateBadge={settingsTemplateBadge}
                     onInspectExecutionModes={() =>
@@ -2854,6 +2876,9 @@ const DesktopWorkbenchPane = memo(function DesktopWorkbenchPane({
             )}
           </aside>
         </div>
+        {workflowCanvasVisible && paneSession.workflowDefinitionId && currentRuntimeTask?.deviceId && (
+          <WorkflowConversationCanvas serverId={currentRuntimeTask.deviceId} definitionId={paneSession.workflowDefinitionId} />
+        )}
         {rightPanelOpen && (
           <div
             data-testid="right-workspace-resize-handle"

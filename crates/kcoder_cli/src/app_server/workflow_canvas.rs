@@ -13,7 +13,80 @@ pub(super) fn request(engine: &QueryEngine, method: &str, params: Value) -> Resu
         .context("Workflow profile storage is invalid")?
         .join("workflow-library");
     let store = WorkflowStore::new(root);
+    let runs_root = path
+        .parent()
+        .context("Invalid profile root")?
+        .join("workflow-runs");
     Ok(match method {
+        method::WORKFLOW_UPDATE => {
+            let p: WorkflowUpdateParams = serde_json::from_value(params)?;
+            serde_json::to_value(store.update_metadata(
+                &p.id,
+                p.expected_revision,
+                &p.title,
+                &p.description,
+                p.input_schema,
+            )?)?
+        }
+        method::WORKFLOW_VERSIONS => {
+            let p: WorkflowReadParams = serde_json::from_value(params)?;
+            serde_json::to_value(store.versions(&p.id)?)?
+        }
+        method::WORKFLOW_CLONE => {
+            let p: WorkflowCloneParams = serde_json::from_value(params)?;
+            serde_json::to_value(store.clone_workflow(&p.id, p.version, p.title.as_deref())?)?
+        }
+        method::WORKFLOW_EXPORT => {
+            let p: WorkflowVersionParams = serde_json::from_value(params)?;
+            serde_json::to_value(store.export(&p.id, p.version)?)?
+        }
+        method::WORKFLOW_IMPORT => {
+            let p: WorkflowImportParams = serde_json::from_value(params)?;
+            serde_json::to_value(store.import(p.definition)?)?
+        }
+        method::WORKFLOW_RUNS_LIST => {
+            let p: WorkflowRunsListParams = serde_json::from_value(params)?;
+            anyhow::ensure!(
+                (1..=32).contains(&p.limit),
+                "workflow_invalid: list limit must be 1–32"
+            );
+            let all: Vec<_> = kcoder_tools::workflow_runs::list(runs_root)?
+                .into_iter()
+                .filter(|r| {
+                    p.definition_id
+                        .as_ref()
+                        .is_none_or(|id| r.definition_id.as_ref() == Some(id))
+                })
+                .collect();
+            let total = all.len();
+            let items: Vec<_> = all
+                .into_iter()
+                .skip(p.offset)
+                .take(p.limit)
+                .map(|mut r| {
+                    r.node_states.clear();
+                    r
+                })
+                .collect();
+            let end = p.offset.saturating_add(items.len());
+            {
+                let mut value = serde_json::json!({"items":items,"total":total});
+                if end < total {
+                    value["nextOffset"] = serde_json::json!(end);
+                }
+                value
+            }
+        }
+        method::WORKFLOW_RUNS_READ => {
+            let p: WorkflowRunReadParams = serde_json::from_value(params)?;
+            serde_json::to_value(kcoder_tools::workflow_runs::read(runs_root, &p.run_id)?)?
+        }
+        method::WORKFLOW_RUNS_OUTPUT => {
+            let p: WorkflowRunOutputParams = serde_json::from_value(params)?;
+            kcoder_tools::workflow_runs::output(
+                runs_root, &p.run_id, &p.node_id, p.offset, p.limit,
+            )?
+        }
         method::WORKFLOW_LIST => {
             let p: WorkflowListParams = serde_json::from_value(params)?;
             serde_json::to_value(list_page(&store, p)?)?

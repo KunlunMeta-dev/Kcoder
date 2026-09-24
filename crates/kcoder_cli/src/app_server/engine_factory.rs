@@ -352,6 +352,7 @@ impl AppServerEngineFactory {
         factory.workspace_services = self.workspace_services.with_private_client_storage(owner);
         let state = factory.new_state()?;
         state.enter_session_mode_before_first_message(source.state.session_mode())?;
+        if let Some(id) = source.state.workflow_definition_id() { state.bind_workflow_definition_before_first_message(&id)?; }
         state.set_messages(messages);
         let engine = factory.build(state, user_questioner)?;
         Ok(engine.with_client_model_configuration_from(source))

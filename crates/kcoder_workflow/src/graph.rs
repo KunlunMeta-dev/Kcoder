@@ -1,6 +1,6 @@
 //! Validation and compilation of declarative graphs into the existing restricted runtime.
-use anyhow::{Result, bail, ensure};
-use kcoder_types::workflow::{WorkflowDefinition, WorkflowStatus};
+use anyhow::{bail, ensure, Result};
+use kcoder_types::workflow::{WorkflowDefinition, WorkflowNodeKind, WorkflowStatus};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 
@@ -52,9 +52,30 @@ pub fn validate(definition: &WorkflowDefinition, complete: bool) -> Result<()> {
             "workflow_invalid: saved workflows require at least one node"
         );
     }
+    if let Some(schema) = &definition.input_schema {
+        crate::graph_data::schema(schema)?;
+    }
+    let mut execution_budget = 0usize;
     let mut ids = HashSet::new();
     for node in &definition.nodes {
         validate_id(&node.id)?;
+        crate::graph_data::validate_node_config(node, complete)?;
+        let iterations = node
+            .config
+            .r#loop
+            .as_ref()
+            .map_or(1, |config| config.max_iterations as usize);
+        execution_budget = execution_budget.saturating_add(
+            1 + if matches!(node.kind, WorkflowNodeKind::Agent | WorkflowNodeKind::Loop) {
+                iterations * (usize::from(node.config.validation_retries) + 1)
+            } else {
+                0
+            },
+        );
+        ensure!(
+            execution_budget <= 256,
+            "workflow_quota: conservative execution budget exceeds 256 steps/attempts"
+        );
         ensure!(
             ids.insert(node.id.as_str()),
             "workflow_invalid: duplicate node ID {}",
@@ -69,7 +90,7 @@ pub fn validate(definition: &WorkflowDefinition, complete: bool) -> Result<()> {
         text(
             &node.prompt,
             16 * 1024,
-            complete,
+            complete && matches!(node.kind, WorkflowNodeKind::Agent | WorkflowNodeKind::Loop),
             &format!("node {} prompt", node.id),
         )?;
         text(&node.agent_type, 64, true, "agent type")?;
@@ -121,6 +142,22 @@ pub fn validate(definition: &WorkflowDefinition, complete: bool) -> Result<()> {
         "workflow_quota: definition exceeds {MAX_DEFINITION_BYTES} bytes"
     );
     if complete {
+        for node in &definition.nodes {
+            if let Some(guard) = &node.run_if {
+                ensure!(
+                    node.depends_on.contains(&guard.node_id),
+                    "workflow_invalid: runIf must name a direct dependency"
+                );
+                ensure!(
+                    definition
+                        .nodes
+                        .iter()
+                        .any(|source| source.id == guard.node_id
+                            && source.kind == WorkflowNodeKind::Condition),
+                    "workflow_invalid: runIf requires a condition node"
+                );
+            }
+        }
         let mut remaining: HashMap<&str, HashSet<&str>> = definition
             .nodes
             .iter()
@@ -159,10 +196,21 @@ pub fn validate(definition: &WorkflowDefinition, complete: bool) -> Result<()> {
     Ok(())
 }
 
+pub fn is_rich(definition: &WorkflowDefinition) -> bool {
+    definition.input_schema.is_some()
+        || definition.nodes.iter().any(|node| {
+            node.kind != WorkflowNodeKind::Agent || !node.config.is_empty() || node.run_if.is_some()
+        })
+}
+
 /// Compile only immutable saved definitions. Args and node text are encoded JSON
 /// data, never JavaScript statements or evaluated templates.
 pub fn compile(definition: &WorkflowDefinition, args: Value) -> Result<String> {
     validate(definition, true)?;
+    ensure!(
+        !is_rich(definition),
+        "workflow_invalid: rich definitions require execute_definition"
+    );
     ensure!(
         definition.status == WorkflowStatus::Saved && definition.saved_version.is_some(),
         "workflow_unsaved: execute an explicitly saved version"
@@ -239,6 +287,9 @@ mod tests {
     }
     fn node(id: &str, prompt: &str, dependencies: &[&str]) -> WorkflowNode {
         WorkflowNode {
+            kind: Default::default(),
+            config: Default::default(),
+            run_if: None,
             id: id.into(),
             title: id.into(),
             prompt: prompt.into(),
@@ -253,6 +304,7 @@ mod tests {
     }
     fn definition() -> WorkflowDefinition {
         WorkflowDefinition {
+            input_schema: None,
             id: "fixture".into(),
             title: "Portable".into(),
             description: "".into(),
@@ -295,11 +347,9 @@ mod tests {
             let captured = executor.0.lock().unwrap();
             let batch = &captured[captured.len() - 3..];
             assert!(batch.iter().all(|request| request.prompt.contains(input)));
-            assert!(
-                batch
-                    .iter()
-                    .all(|request| !request.prompt.contains("DO_NOT_PIN_ARGS"))
-            );
+            assert!(batch
+                .iter()
+                .all(|request| !request.prompt.contains("DO_NOT_PIN_ARGS")));
             let consumer = batch
                 .iter()
                 .find(|request| request.prompt.starts_with("C\n"))
@@ -339,12 +389,10 @@ mod tests {
     fn incomplete_graphs_and_invalid_bounds_cannot_compile() {
         let mut graph = definition();
         graph.status = WorkflowStatus::Draft;
-        assert!(
-            compile(&graph, Value::Null)
-                .unwrap_err()
-                .to_string()
-                .contains("workflow_unsaved")
-        );
+        assert!(compile(&graph, Value::Null)
+            .unwrap_err()
+            .to_string()
+            .contains("workflow_unsaved"));
         graph.status = WorkflowStatus::Saved;
         graph.nodes[0].position.x = f64::NAN;
         assert!(validate(&graph, false).is_err());
@@ -355,11 +403,9 @@ mod tests {
         for index in 0..MAX_NODES {
             graph.nodes.push(node(&format!("extra{index}"), "x", &[]));
         }
-        assert!(
-            validate(&graph, false)
-                .unwrap_err()
-                .to_string()
-                .contains("workflow_quota")
-        );
+        assert!(validate(&graph, false)
+            .unwrap_err()
+            .to_string()
+            .contains("workflow_quota"));
     }
 }

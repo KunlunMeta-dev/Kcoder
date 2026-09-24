@@ -11,6 +11,8 @@ rust-version.workspace = true
 kcoder_types = { path = "../kcoder_types" }
 kcoder_config = { path = "../kcoder_config" }
 anyhow = { workspace = true }
+jsonschema = { workspace = true }
+futures = { workspace = true }
 fs2 = "0.4"
 uuid = { workspace = true }
 async-trait = { workspace = true }

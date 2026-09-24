@@ -61,6 +61,37 @@ impl AppState {
         self.read_inner().session_mode
     }
 
+    pub fn workflow_definition_id(&self) -> Option<String> {
+        self.read_inner().workflow_definition_id.clone()
+    }
+
+    /// Bind a design conversation once; the binding survives recovery and forks.
+    pub fn bind_workflow_definition_before_first_message(&self, id: &str) -> anyhow::Result<()> {
+        anyhow::ensure!(!id.is_empty() && id.len() <= 64 && id.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_')), "Invalid workflow definition ID");
+        let _persist = self.lock_session_state_persistence();
+        let mut inner = self.write_inner();
+        check_direct_history_fault(&inner)?;
+        anyhow::ensure!(inner.session_mode == SessionMode::WorkflowDraft, "Workflow binding requires a workflow design session");
+        if inner.workflow_definition_id.as_deref() == Some(id) { return Ok(()); }
+        anyhow::ensure!(inner.workflow_definition_id.is_none(), "Workflow binding is immutable");
+        anyhow::ensure!(!inner.conversation_started && inner.messages.is_empty(), "Bind the workflow before the first message");
+        if inner.history_path.is_some() { require_history_source(&inner)?; }
+        inner.workflow_definition_id = Some(id.into());
+        if let Some(path) = inner.session_state_path.clone() {
+            let state = PersistedSessionState::from_inner(&inner);
+            let result = match inner.history_source.as_ref() {
+                Some(source) => source.write_metadata(&path, || prepare_legacy_session_state_write(&path, state.clone())),
+                None => write_session_state(&path, &state),
+            };
+            if let Err(error) = result {
+                if crate::history_store::is_uncertain_mutation(&error) { inner.history_write_fault = Some(format!("{error:#}")); }
+                else { inner.workflow_definition_id = None; }
+                return Err(error).context("Failed to persist workflow conversation binding");
+            }
+        }
+        Ok(())
+    }
+
     /// Enter orchestration session mode only before the first conversation message is written.
     ///
     /// Return true when this call performs the transition and false when the mode was
@@ -208,6 +239,7 @@ impl AppState {
         inner.session_created_at_ms = now_millis();
         inner.session_updated_at_ms = inner.session_created_at_ms;
         inner.session_mode = SessionMode::Default;
+        inner.workflow_definition_id = None;
         inner.model_selection_mode = Default::default();
         inner.selected_model = None;
         inner.conversation_started = false;
@@ -576,6 +608,7 @@ impl AppState {
             inner.message_history_ids = history_ids;
             inner.last_assistant_message_timestamp_ms = last_assistant_message_timestamp_ms;
             inner.session_mode = persisted_state.session_mode;
+            inner.workflow_definition_id = persisted_state.workflow_definition_id;
             inner.model_selection_mode = persisted_state.model_selection_mode;
             inner.selected_model = persisted_state.selected_model;
             inner.goal = persisted_state.goal;
@@ -600,6 +633,7 @@ impl AppState {
             session_id: inner.session_id.clone(),
             cwd: inner.cwd.clone(),
             session_mode: inner.session_mode,
+            workflow_definition_id: inner.workflow_definition_id.clone(),
             model_selection_mode: inner.model_selection_mode,
             selected_model: inner.selected_model.clone(),
             conversation_started: inner.conversation_started,
@@ -667,6 +701,7 @@ impl AppState {
             .collect();
         let mut imported_state = PersistedSessionState::from_inner(&inner);
         imported_state.session_mode = snapshot.session_mode;
+        imported_state.workflow_definition_id = snapshot.workflow_definition_id.clone();
         imported_state.model_selection_mode = snapshot.model_selection_mode;
         imported_state.selected_model = snapshot.selected_model.clone();
         imported_state.conversation_started =
@@ -729,6 +764,7 @@ impl AppState {
             inner.last_history_uuid = None;
         }
         inner.session_mode = snapshot.session_mode;
+        inner.workflow_definition_id = snapshot.workflow_definition_id;
         inner.model_selection_mode = snapshot.model_selection_mode;
         inner.selected_model = snapshot.selected_model;
         inner.todos = snapshot.todos;
@@ -823,6 +859,8 @@ pub(super) struct PersistedSessionState {
     pub(super) base_cwd: Option<PathBuf>,
     #[serde(default, skip_serializing_if = "SessionMode::is_default")]
     pub(super) session_mode: SessionMode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) workflow_definition_id: Option<String>,
     #[serde(default)]
     pub(super) model_selection_mode: kcoder_types::ModelSelectionMode,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -853,6 +891,7 @@ impl PersistedSessionState {
             cwd: Some(inner.cwd.clone()),
             base_cwd: Some(inner.base_cwd.clone()),
             session_mode: inner.session_mode,
+            workflow_definition_id: inner.workflow_definition_id.clone(),
             model_selection_mode: inner.model_selection_mode,
             selected_model: inner.selected_model.clone(),
             conversation_started: inner.conversation_started,
@@ -877,6 +916,7 @@ impl Default for PersistedSessionState {
             cwd: None,
             base_cwd: None,
             session_mode: SessionMode::Default,
+            workflow_definition_id: None,
             model_selection_mode: Default::default(),
             selected_model: None,
             conversation_started: false,

@@ -2628,6 +2628,8 @@ dependencies = [
  "anyhow",
  "async-trait",
  "fs2",
+ "futures",
+ "jsonschema",
  "kcoder_config",
  "kcoder_types",
  "rquickjs",

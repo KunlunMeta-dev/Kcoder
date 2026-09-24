@@ -43,6 +43,7 @@ pub(super) fn inspect(engine: &QueryEngine) -> SessionModesResult {
         Err(error) => (Vec::new(), Some(error.to_string())),
     };
     SessionModesResult {
+        workflow_definition_id: engine.state.workflow_definition_id(),
         session_mode: mode(engine),
         moa_summary: engine.moa_status_summary(),
         moa_plan_planners,

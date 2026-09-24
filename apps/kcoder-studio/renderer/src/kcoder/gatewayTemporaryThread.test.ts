@@ -129,3 +129,14 @@ test('unsupported settings templates fail closed instead of silently ignoring th
   ).rejects.toThrow('会话配置模板')
   expect(request).not.toHaveBeenCalled()
 })
+
+test('workflow conversation binds its draft only on a capable target', async () => {
+  const request = vi.fn().mockResolvedValue({ thread: { id: 'thread' } })
+  const client = { request, supportsExperimental: (name: string) => ['sessionModes', 'workflowCanvasV1', 'workflowConversationV1'].includes(name) } as unknown as GatewayClient
+  await startTaskThread(client, { serverId: 'target', workspacePath: 'D:\\dist', model: 'chosen/model', params: { sessionMode: 'workflow_draft', workflowDefinitionId: 'draft' } })
+  expect(request).toHaveBeenCalledWith('thread/start', expect.objectContaining({ cwd: 'D:\\dist', model: 'chosen/model', sessionMode: 'workflow_draft', workflowDefinitionId: 'draft' }))
+  request.mockClear()
+  client.supportsExperimental = name => name !== 'workflowConversationV1'
+  await expect(startTaskThread(client, { serverId: 'target', workspacePath: 'D:\\dist', params: { sessionMode: 'workflow_draft', workflowDefinitionId: 'draft' } })).rejects.toThrow('workflowConversationV1')
+  expect(request).not.toHaveBeenCalled()
+})

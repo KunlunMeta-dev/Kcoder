@@ -592,6 +592,7 @@ export type RuntimeSessionMode = 'default' | 'orchestrate' | 'workflow_draft'
 export type RuntimeTurnMode = 'standard' | 'moa' | 'moa-plan'
 
 export interface RuntimeExecutionModes {
+  workflowDefinitionId?: string
   sessionMode?: RuntimeSessionMode
   turnMode?: RuntimeTurnMode
   /** Saved session settings template id; absent uses the store default. */
@@ -605,6 +606,7 @@ export interface RuntimeSessionModesRequest {
 }
 
 export interface RuntimeSessionModesResponse {
+  workflowDefinitionId?: string | null
   sessionMode: RuntimeSessionMode
   moaSummary: string
   moaPlanPlanners: string[]

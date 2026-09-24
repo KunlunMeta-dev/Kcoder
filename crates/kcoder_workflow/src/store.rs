@@ -1,8 +1,10 @@
 //! Account-scoped workflow library. One bounded transaction file atomically owns
 //! drafts and immutable saved versions; the caller supplies the authorized root.
-use anyhow::{Context, Result, ensure};
+use anyhow::{ensure, Context, Result};
 use kcoder_config::PrivateDirectory;
-use kcoder_types::workflow::{WorkflowDefinition, WorkflowNode, WorkflowStatus, WorkflowSummary};
+use kcoder_types::workflow::{
+    WorkflowDefinition, WorkflowNode, WorkflowStatus, WorkflowSummary, WorkflowVersionSummary,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::ffi::OsStr;
@@ -65,6 +67,7 @@ impl WorkflowStore {
             );
             let now = now_ms()?;
             let definition = WorkflowDefinition {
+                input_schema: None,
                 id: uuid::Uuid::new_v4().to_string(),
                 title: title.trim().into(),
                 description: description.into(),
@@ -198,7 +201,7 @@ impl WorkflowStore {
             record.draft.saved_version = Some(version);
             // Refuse definitions whose encoded script cannot fit the existing runtime.
             // This is compilation only; saving never executes agents or other effects.
-            crate::graph::compile(&record.draft, serde_json::Value::Null)?;
+            if !crate::graph::is_rich(&record.draft) { crate::graph::compile(&record.draft, serde_json::Value::Null)?; }
             record.versions.insert(version, record.draft.clone());
             Ok(record.draft.clone())
         })
@@ -216,6 +219,82 @@ impl WorkflowStore {
             .get(&version)
             .cloned()
             .with_context(|| format!("workflow_not_found: saved version {version}"))
+    }
+
+    /// Metadata edits are draft changes, even when only the input contract changes.
+    pub fn update_metadata(
+        &self,
+        id: &str,
+        expected_revision: u64,
+        title: &str,
+        description: &str,
+        input_schema: Option<serde_json::Value>,
+    ) -> Result<WorkflowDefinition> {
+        crate::graph::validate_id(id)?;
+        self.transaction(|library| {
+            let record = find_mut(library, id, expected_revision)?;
+            record.draft.title = title.trim().into();
+            record.draft.description = description.into();
+            record.draft.input_schema = input_schema;
+            touch(&mut record.draft)?;
+            crate::graph::validate(&record.draft, false)?;
+            Ok(record.draft.clone())
+        })
+    }
+
+    pub fn versions(&self, id: &str) -> Result<Vec<WorkflowVersionSummary>> {
+        crate::graph::validate_id(id)?;
+        let library = self.read_library()?;
+        Ok(find(&library, id)?
+            .versions
+            .iter()
+            .rev()
+            .map(|(version, definition)| WorkflowVersionSummary {
+                version: *version,
+                revision: definition.revision,
+                title: definition.title.clone(),
+                node_count: definition.nodes.len(),
+                saved_at_ms: definition.updated_at_ms,
+            })
+            .collect())
+    }
+
+    pub fn export(&self, id: &str, version: Option<u64>) -> Result<WorkflowDefinition> {
+        if let Some(version) = version {
+            self.read_saved(id, Some(version))
+        } else {
+            self.read(id)
+        }
+    }
+
+    pub fn clone_workflow(
+        &self,
+        id: &str,
+        version: Option<u64>,
+        title: Option<&str>,
+    ) -> Result<WorkflowDefinition> {
+        crate::graph::validate_id(id)?;
+        self.transaction(|library| {
+            let record = find(library, id)?;
+            let mut definition = if let Some(version) = version {
+                record
+                    .versions
+                    .get(&version)
+                    .cloned()
+                    .context("workflow_not_found: saved version")?
+            } else {
+                record.draft.clone()
+            };
+            if let Some(title) = title {
+                definition.title = title.trim().into();
+            }
+            insert_copy(library, definition)
+        })
+    }
+
+    /// Import never overwrites a known ID, revision or saved version.
+    pub fn import(&self, definition: WorkflowDefinition) -> Result<WorkflowDefinition> {
+        self.transaction(|library| insert_copy(library, definition))
     }
 
     fn open(&self, create: bool) -> Result<Option<PrivateDirectory>> {
@@ -261,6 +340,12 @@ impl WorkflowStore {
         );
         let mut library = load(&directory)?;
         let result = mutate(&mut library)?;
+        if library.records.values().any(|record| {
+            crate::graph::is_rich(&record.draft)
+                || record.versions.values().any(crate::graph::is_rich)
+        }) {
+            library.format_version = 2;
+        }
         validate_library(&library)?;
         let bytes = serde_json::to_vec(&library)?;
         ensure!(
@@ -272,6 +357,31 @@ impl WorkflowStore {
             .context("workflow_storage: atomic commit was not confirmed; reload before retrying")?;
         Ok(result)
     }
+}
+
+fn insert_copy(
+    library: &mut Library,
+    mut definition: WorkflowDefinition,
+) -> Result<WorkflowDefinition> {
+    ensure!(
+        library.records.len() < MAX_WORKFLOWS,
+        "workflow_quota: library is full"
+    );
+    definition.id = uuid::Uuid::new_v4().to_string();
+    definition.revision = 1;
+    definition.status = WorkflowStatus::Draft;
+    definition.saved_version = None;
+    definition.created_at_ms = now_ms()?;
+    definition.updated_at_ms = definition.created_at_ms;
+    crate::graph::validate(&definition, false)?;
+    library.records.insert(
+        definition.id.clone(),
+        Record {
+            draft: definition.clone(),
+            versions: BTreeMap::new(),
+        },
+    );
+    Ok(definition)
 }
 
 fn load(directory: &PrivateDirectory) -> Result<Library> {
@@ -305,7 +415,7 @@ fn bounded_read(file: File) -> Result<Vec<u8>> {
 }
 fn validate_library(library: &Library) -> Result<()> {
     ensure!(
-        library.format_version == 1,
+        matches!(library.format_version, 1 | 2),
         "workflow_corrupt: unsupported library format version"
     );
     ensure!(
@@ -400,6 +510,9 @@ mod tests {
 
     fn node(id: &str, deps: &[&str]) -> WorkflowNode {
         WorkflowNode {
+            kind: Default::default(),
+            config: Default::default(),
+            run_if: None,
             id: id.into(),
             title: id.into(),
             prompt: format!("Perform {id}"),
@@ -417,19 +530,69 @@ mod tests {
     }
 
     #[test]
+    fn management_preserves_snapshots_and_imports_new_identity() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store(&temp);
+        let draft = store.create("Original", "").unwrap();
+        let draft = store
+            .upsert_node(&draft.id, draft.revision, node("work", &[]))
+            .unwrap();
+        let saved = store.save(&draft.id, draft.revision).unwrap();
+        let schema = serde_json::json!({"type":"object","required":["name"]});
+        let edited = store
+            .update_metadata(
+                &saved.id,
+                saved.revision,
+                "Changed",
+                "Description",
+                Some(schema.clone()),
+            )
+            .unwrap();
+        assert!(store
+            .update_metadata(&saved.id, saved.revision, "Stale", "", None)
+            .is_err());
+        assert_eq!(store.read_saved(&saved.id, Some(1)).unwrap(), saved);
+        assert_eq!(store.read(&saved.id).unwrap().input_schema, Some(schema));
+        let second = store.save(&edited.id, edited.revision).unwrap();
+        assert_eq!(
+            store
+                .versions(&saved.id)
+                .unwrap()
+                .iter()
+                .map(|v| v.version)
+                .collect::<Vec<_>>(),
+            vec![2, 1]
+        );
+        let cloned = store
+            .clone_workflow(&saved.id, Some(1), Some("Copy"))
+            .unwrap();
+        assert_ne!(cloned.id, saved.id);
+        assert_eq!(cloned.title, "Copy");
+        assert_eq!(cloned.status, WorkflowStatus::Draft);
+        assert_eq!(cloned.saved_version, None);
+        assert_eq!(cloned.input_schema, None);
+        let imported = store
+            .import(store.export(&saved.id, Some(2)).unwrap())
+            .unwrap();
+        assert_ne!(imported.id, saved.id);
+        assert_eq!(imported.revision, 1);
+        assert_eq!(imported.saved_version, None);
+        assert_eq!(imported.nodes, second.nodes);
+        assert_eq!(store.read_saved(&saved.id, Some(1)).unwrap(), saved);
+    }
+
+    #[test]
     fn node_drafts_publish_immutable_versions_across_reopened_sessions() {
         let temp = tempfile::tempdir().unwrap();
         let store = store(&temp);
         assert!(store.list().unwrap().is_empty());
         assert!(!store.root.exists());
         let draft = store.create("Build project", "A portable DAG").unwrap();
-        assert!(
-            store
-                .save(&draft.id, draft.revision)
-                .unwrap_err()
-                .to_string()
-                .contains("at least one node")
-        );
+        assert!(store
+            .save(&draft.id, draft.revision)
+            .unwrap_err()
+            .to_string()
+            .contains("at least one node"));
         let mut incomplete = node("consumer", &["producer"]);
         incomplete.prompt.clear();
         let draft = store
@@ -439,13 +602,11 @@ mod tests {
         let draft = store
             .upsert_node(&draft.id, draft.revision, node("consumer", &["producer"]))
             .unwrap();
-        assert!(
-            store
-                .save(&draft.id, draft.revision)
-                .unwrap_err()
-                .to_string()
-                .contains("unknown dependency")
-        );
+        assert!(store
+            .save(&draft.id, draft.revision)
+            .unwrap_err()
+            .to_string()
+            .contains("unknown dependency"));
         let draft = store
             .upsert_node(&draft.id, draft.revision, node("producer", &[]))
             .unwrap();
@@ -512,27 +673,21 @@ mod tests {
             .upsert_node(&draft.id, draft.revision, node("b", &["a"]))
             .unwrap();
         let before = std::fs::read(store.root.join(LIBRARY)).unwrap();
-        assert!(
-            store
-                .save(&draft.id, draft.revision)
-                .unwrap_err()
-                .to_string()
-                .contains("cycle")
-        );
-        assert!(
-            store
-                .upsert_node(&draft.id, 1, node("new", &[]))
-                .unwrap_err()
-                .to_string()
-                .contains("workflow_conflict")
-        );
+        assert!(store
+            .save(&draft.id, draft.revision)
+            .unwrap_err()
+            .to_string()
+            .contains("cycle"));
+        assert!(store
+            .upsert_node(&draft.id, 1, node("new", &[]))
+            .unwrap_err()
+            .to_string()
+            .contains("workflow_conflict"));
         let mut oversized = node("new", &[]);
         oversized.prompt = "x".repeat(16385);
-        assert!(
-            store
-                .upsert_node(&draft.id, draft.revision, oversized)
-                .is_err()
-        );
+        assert!(store
+            .upsert_node(&draft.id, draft.revision, oversized)
+            .is_err());
         assert_eq!(std::fs::read(store.root.join(LIBRARY)).unwrap(), before);
         for invalid in ["../outside", "/tmp/outside", "a/b", "a\\b", "", ".", ".."] {
             assert!(store.read(invalid).is_err());
@@ -560,13 +715,11 @@ mod tests {
             .upsert_node(&current.id, current.revision, update)
             .unwrap();
         let before = std::fs::read(store.root.join(LIBRARY)).unwrap();
-        assert!(
-            store
-                .save(&current.id, current.revision)
-                .unwrap_err()
-                .to_string()
-                .contains("workflow_quota")
-        );
+        assert!(store
+            .save(&current.id, current.revision)
+            .unwrap_err()
+            .to_string()
+            .contains("workflow_quota"));
         assert_eq!(std::fs::read(store.root.join(LIBRARY)).unwrap(), before);
         assert_eq!(store.read_saved(&current.id, Some(1)).unwrap(), first);
         let file = File::options()
@@ -574,13 +727,11 @@ mod tests {
             .open(store.root.join(LIBRARY))
             .unwrap();
         file.set_len((MAX_LIBRARY_BYTES + 1) as u64).unwrap();
-        assert!(
-            store
-                .list()
-                .unwrap_err()
-                .to_string()
-                .contains("workflow_quota")
-        );
+        assert!(store
+            .list()
+            .unwrap_err()
+            .to_string()
+            .contains("workflow_quota"));
     }
 
     #[cfg(unix)]

@@ -1,9 +1,54 @@
+import { Bot, LogIn, FileCode2, GitBranch, GitMerge, Repeat2, LogOut } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Maximize2, Minus, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useTranslation } from '@/hooks/useTranslation'
-import type { WorkflowDefinition, WorkflowNode } from './workflowApi'
+import type { WorkflowDefinition, WorkflowNode, WorkflowRun } from './workflowApi'
 
+const nodeAppearance = {
+  agent: {
+    Icon: Bot,
+    color: 'text-blue-600 dark:text-blue-300',
+    header: 'bg-blue-50 dark:bg-blue-950/50',
+    border: 'border-blue-200 dark:border-blue-800',
+  },
+  input: {
+    Icon: LogIn,
+    color: 'text-cyan-700 dark:text-cyan-300',
+    header: 'bg-cyan-50 dark:bg-cyan-950/50',
+    border: 'border-cyan-200 dark:border-cyan-800',
+  },
+  template: {
+    Icon: FileCode2,
+    color: 'text-violet-600 dark:text-violet-300',
+    header: 'bg-violet-50 dark:bg-violet-950/50',
+    border: 'border-violet-200 dark:border-violet-800',
+  },
+  condition: {
+    Icon: GitBranch,
+    color: 'text-amber-700 dark:text-amber-300',
+    header: 'bg-amber-50 dark:bg-amber-950/50',
+    border: 'border-amber-200 dark:border-amber-800',
+  },
+  merge: {
+    Icon: GitMerge,
+    color: 'text-indigo-600 dark:text-indigo-300',
+    header: 'bg-indigo-50 dark:bg-indigo-950/50',
+    border: 'border-indigo-200 dark:border-indigo-800',
+  },
+  loop: {
+    Icon: Repeat2,
+    color: 'text-pink-600 dark:text-pink-300',
+    header: 'bg-pink-50 dark:bg-pink-950/50',
+    border: 'border-pink-200 dark:border-pink-800',
+  },
+  output: {
+    Icon: LogOut,
+    color: 'text-teal-700 dark:text-teal-300',
+    header: 'bg-teal-50 dark:bg-teal-950/50',
+    border: 'border-teal-200 dark:border-teal-800',
+  },
+}
 const WIDTH = 220,
   HEIGHT = 100
 export function WorkflowCanvas({
@@ -12,10 +57,12 @@ export function WorkflowCanvas({
   onSelect,
   onMove,
   disabled,
+  nodeStates = [],
 }: {
   definition: WorkflowDefinition
   selectedId: string | null
   disabled: boolean
+  nodeStates?: WorkflowRun['nodeStates']
   onSelect: (id: string) => void
   onMove: (node: WorkflowNode, revision: number) => void
 }) {
@@ -57,6 +104,8 @@ export function WorkflowCanvas({
       setView({ x: 24, y: 24, zoom: 1 })
       return
     }
+    // Cached panes may mount while hidden. Never fit against a zero-size viewport.
+    if (element.clientWidth <= 64 || element.clientHeight <= 64) return
     const minX = Math.min(...definition.nodes.map(node => node.position.x))
     const minY = Math.min(...definition.nodes.map(node => node.position.y))
     const width = Math.max(...definition.nodes.map(node => node.position.x)) + WIDTH - minX
@@ -71,6 +120,31 @@ export function WorkflowCanvas({
       y: (element.clientHeight - height * zoom) / 2 - minY * zoom,
     })
   }, [definition.nodes])
+  const fitRef = useRef(fit)
+  useEffect(() => {
+    fitRef.current = fit
+  }, [fit])
+  useEffect(() => {
+    const element = root.current
+    if (!element || typeof ResizeObserver === 'undefined') return
+    let frame = 0
+    let previousWidth = 0
+    let previousHeight = 0
+    const observer = new ResizeObserver(() => {
+      const width = element.clientWidth
+      const height = element.clientHeight
+      if (width === previousWidth && height === previousHeight) return
+      previousWidth = width
+      previousHeight = height
+      cancelAnimationFrame(frame)
+      if (width > 64 && height > 64) frame = requestAnimationFrame(() => fitRef.current())
+    })
+    observer.observe(element)
+    return () => {
+      observer.disconnect()
+      cancelAnimationFrame(frame)
+    }
+  }, [])
   const previousCount = useRef(0)
   useEffect(() => {
     const previous = previousCount.current
@@ -85,6 +159,11 @@ export function WorkflowCanvas({
       ref={root}
       data-testid="workflow-canvas"
       className="relative min-h-80 min-w-0 flex-1 touch-none overflow-hidden rounded-xl border border-border bg-surface/30"
+      style={{
+        backgroundImage:
+          'radial-gradient(circle, color-mix(in srgb, currentColor 12%, transparent) 1px, transparent 1px)',
+        backgroundSize: '20px 20px',
+      }}
       onPointerDown={event => {
         if (event.button !== 0 || (event.target as HTMLElement).closest('button')) return
         pan.current = { clientX: event.clientX, clientY: event.clientY, x: view.x, y: view.y }
@@ -146,7 +225,7 @@ export function WorkflowCanvas({
             refY="4"
             orient="auto"
           >
-            <path d="M0,0 L8,4 L0,8" fill="currentColor" />
+            <path d="M0,0 L8,4 L0,8" fill="context-stroke" />
           </marker>
         </defs>
         <g transform={`translate(${view.x},${view.y}) scale(${view.zoom})`}>
@@ -158,6 +237,16 @@ export function WorkflowCanvas({
                 b = position(node)
               return (
                 <path
+                  className={
+                    nodeStates.find(item => item.nodeId === node.id)?.status === 'failed'
+                      ? 'text-red-600 dark:text-red-400'
+                      : nodeStates.find(item => item.nodeId === node.id)?.status === 'running'
+                        ? 'text-blue-600 dark:text-blue-300'
+                        : nodeStates.find(item => item.nodeId === parent.id)?.status === 'completed'
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : nodeAppearance[parent.kind ?? 'agent'].color
+                  }
+                  opacity={selectedId === node.id || selectedId === parent.id ? 0.9 : 0.4}
                   data-testid="workflow-edge"
                   key={`${id}-${node.id}`}
                   d={`M ${a.x + WIDTH} ${a.y + HEIGHT / 2} C ${a.x + WIDTH + 40} ${a.y + HEIGHT / 2}, ${b.x - 40} ${b.y + HEIGHT / 2}, ${b.x} ${b.y + HEIGHT / 2}`}
@@ -180,13 +269,17 @@ export function WorkflowCanvas({
       >
         {definition.nodes.map(node => {
           const point = position(node)
+          const runtime = nodeStates.find(item => item.nodeId === node.id)
+          const kind = node.kind ?? 'agent'
+          const appearance = nodeAppearance[kind]
+          const Icon = appearance.Icon
           return (
             <button
               type="button"
               key={node.id}
               data-testid={`workflow-node-${node.id}`}
               aria-pressed={selectedId === node.id}
-              className="absolute overflow-hidden rounded-xl border border-border bg-background p-3 text-left shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus aria-pressed:border-focus"
+              className={`absolute rounded-xl border bg-background text-left shadow-sm transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus aria-pressed:ring-2 aria-pressed:ring-focus ${appearance.border}`}
               style={{ left: point.x, top: point.y, width: WIDTH, height: HEIGHT }}
               onClick={() => onSelect(node.id)}
               onPointerDown={event => {
@@ -235,11 +328,27 @@ export function WorkflowCanvas({
                 setMoving(null)
               }}
             >
-              <span className="block truncate text-sm font-medium">{node.title || node.id}</span>
-              <span className="mt-1 block text-xs text-text-muted">
-                {node.agentType} · {node.id}
+              <span
+                aria-hidden
+                className={`absolute -left-1.5 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full border-2 bg-background ${appearance.border}`}
+              />
+              <span
+                aria-hidden
+                className={`absolute -right-1.5 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full border-2 bg-background ${appearance.border}`}
+              />
+              <span
+                className={`flex items-center gap-2 rounded-t-xl border-b px-3 py-2 ${appearance.header} ${appearance.border}`}
+              >
+                <Icon className={`h-4 w-4 shrink-0 ${appearance.color}`} />
+                <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                  {node.title || node.id}
+                </span>
               </span>
-              <span className="mt-1 block truncate text-xs text-text-secondary">
+              <span className={`mt-2 block truncate px-3 text-xs ${appearance.color}`}>
+                {t(`workflowCanvas.kind_${kind}`)} ·{' '}
+                {runtime ? t(`workflowCanvas.status_${runtime.status}`, runtime.status) : node.id}
+              </span>
+              <span className="mt-1 block truncate px-3 text-xs text-text-secondary">
                 {node.prompt || t('workflowCanvas.noPrompt')}
               </span>
             </button>

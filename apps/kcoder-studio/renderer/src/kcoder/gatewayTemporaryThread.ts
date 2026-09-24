@@ -27,6 +27,10 @@ export async function startTaskThread(
 ): Promise<{ thread?: { id?: string }; ephemeral?: boolean }> {
   const { serverId, workspacePath, params, model } = options
   const { sessionMode } = executionModeParams(params, client)
+  const workflowDefinitionId = typeof params.workflowDefinitionId === 'string' ? params.workflowDefinitionId : undefined
+  if (workflowDefinitionId && (sessionMode !== 'workflow_draft' || client.supportsExperimental?.('workflowConversationV1') !== true)) {
+    throw new Error('Workflow conversations require workflowConversationV1 and workflow_draft mode')
+  }
   const ephemeral = isTemporaryTaskCreate(params)
   const settingsTemplate =
     typeof params.settingsTemplate === 'string' && params.settingsTemplate.trim()
@@ -41,6 +45,7 @@ export async function startTaskThread(
       throw new Error('请升级目标 KCoder 以使用会话配置模板')
     const startParams = {
       cwd: workspacePath,
+      ...(workflowDefinitionId ? { workflowDefinitionId } : {}),
       ...(model ? { model } : {}),
       ...(sessionMode ? { sessionMode } : {}),
       ...(settingsTemplate ? { settingsTemplate } : {}),
@@ -78,6 +83,7 @@ export async function startTaskThread(
     {
       threadId,
       cwd: workspacePath,
+      ...(workflowDefinitionId ? { workflowDefinitionId } : {}),
       ephemeral: true,
     }
   )

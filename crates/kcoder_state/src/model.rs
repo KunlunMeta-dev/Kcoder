@@ -789,6 +789,8 @@ pub struct SessionSnapshot {
     pub cwd: PathBuf,
     #[serde(default, skip_serializing_if = "SessionMode::is_default")]
     pub session_mode: SessionMode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_definition_id: Option<String>,
     #[serde(default)]
     pub model_selection_mode: kcoder_types::ModelSelectionMode,
     #[serde(default, skip_serializing_if = "Option::is_none")]

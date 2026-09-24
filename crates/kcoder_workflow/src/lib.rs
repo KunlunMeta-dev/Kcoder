@@ -1,3 +1,5 @@
+mod graph_data;
+mod graph_runtime;
 pub mod graph;
 pub mod store;
 
@@ -19,6 +21,8 @@ use tokio_util::sync::CancellationToken;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentRequest {
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub output_repair_only: bool,
     pub prompt: String,
     pub agent_type: String,
     pub max_turns: usize,
@@ -44,6 +48,10 @@ pub trait AgentExecutor: Send + Sync {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum WorkflowEvent {
+    NodeStarted { node_id: String, iteration: Option<u32>, attempt: u32, agent_id: Option<String> },
+    NodeCompleted { node_id: String, iteration: Option<u32>, attempt: u32, agent_id: Option<String>, output: Value },
+    NodeFailed { node_id: String, iteration: Option<u32>, attempt: u32, agent_id: Option<String>, error: String, will_retry: bool },
+    NodeSkipped { node_id: String, iteration: Option<u32>, reason: String },
     Log {
         message: String,
     },
@@ -130,6 +138,8 @@ impl Default for WorkflowRuntimeConfig {
 
 #[derive(Debug, Error)]
 pub enum WorkflowError {
+    #[error("workflow definition failed: {0}")]
+    Definition(String),
     #[error("workflow script is too large ({actual} bytes; maximum {maximum} bytes)")]
     ScriptTooLarge { actual: usize, maximum: usize },
     #[error("failed to initialize JavaScript runtime: {0}")]
@@ -145,6 +155,8 @@ pub enum WorkflowError {
     #[error("workflow event is too large ({actual} bytes; maximum {maximum} bytes)")]
     EventTooLarge { actual: usize, maximum: usize },
 }
+
+fn is_false(value: &bool) -> bool { !*value }
 
 pub struct WorkflowRuntime;
 
@@ -230,6 +242,7 @@ impl WorkflowRuntime {
                         ));
                     }
                     let request = AgentRequest {
+                        output_repair_only: wire.output_repair_only,
                         prompt,
                         agent_type: normalized_agent_type(wire.agent_type.as_deref()),
                         max_turns: wire
@@ -365,6 +378,8 @@ fn reserve_events(counter: &AtomicUsize, maximum: usize, requested: usize) -> Re
 
 #[derive(Debug, Deserialize)]
 struct AgentRequestWire {
+    #[serde(default)]
+    output_repair_only: bool,
     prompt: String,
     #[serde(default)]
     agent_type: Option<String>,
@@ -440,6 +455,7 @@ fn build_script(script: &str, args_json: &str) -> String {
                     request.max_turns = request.maxTurns;
                 }}
                 for (const [camel, snake] of [
+                    ["outputRepairOnly", "output_repair_only"],
                     ["allowedWritePaths", "allowed_write_paths"],
                     ["acceptanceCriteria", "acceptance_criteria"],
                     ["expectedArtifacts", "expected_artifacts"],

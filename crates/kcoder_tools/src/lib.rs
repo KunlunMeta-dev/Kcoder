@@ -69,6 +69,7 @@ pub mod web_search;
 #[cfg(windows)]
 mod windows_sandbox;
 pub mod workflow;
+pub mod workflow_runs;
 pub mod workflow_draft;
 pub mod worktree;
 pub mod write;

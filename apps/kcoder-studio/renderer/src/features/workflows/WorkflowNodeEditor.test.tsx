@@ -48,3 +48,32 @@ test('remote polling never overwrites dirty edits or silently rebases their CAS 
   fireEvent.click(screen.getByTestId('workflow-node-save'))
   expect(save).toHaveBeenCalledWith(expect.objectContaining({ title: 'New title' }), 2)
 })
+
+test('typed template fields update config and invalid advanced JSON blocks saving', async () => {
+  const save = vi.fn(async () => false)
+  const dirty = vi.fn()
+  render(
+    <WorkflowNodeEditor
+      definition={definition}
+      node={node}
+      busy={false}
+      onSave={save}
+      onDelete={vi.fn(async () => true)}
+      onDirty={dirty}
+    />
+  )
+  fireEvent.change(screen.getByTestId('workflow-node-kind'), { target: { value: 'template' } })
+  expect(screen.queryByTestId('workflow-node-prompt')).not.toBeInTheDocument()
+  fireEvent.change(screen.getByTestId('workflow-node-template'), {
+    target: { value: 'PPT: {{/input/topic}}' },
+  })
+  fireEvent.click(screen.getByTestId('workflow-node-save'))
+  expect(save).toHaveBeenCalledWith(
+    expect.objectContaining({ kind: 'template', config: { template: 'PPT: {{/input/topic}}' } }),
+    1
+  )
+  await Promise.resolve()
+  expect(dirty).not.toHaveBeenCalledWith(false)
+  fireEvent.change(screen.getByTestId('workflow-node-config'), { target: { value: '{broken' } })
+  expect(screen.getByTestId('workflow-node-save')).toBeDisabled()
+})

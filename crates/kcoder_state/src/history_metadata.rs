@@ -15,6 +15,7 @@ pub struct PreparedSessionMetadata {
     path: PathBuf,
     base_cwd: Option<PathBuf>,
     session_mode: SessionMode,
+    workflow_definition_id: Option<String>,
     created_at_ms: Option<u64>,
     updated_at_ms: Option<u64>,
 }
@@ -80,6 +81,7 @@ impl PreparedSessionMetadata {
             path: path.to_path_buf(),
             base_cwd: state.base_cwd.or(state.cwd),
             session_mode: state.session_mode,
+            workflow_definition_id: state.workflow_definition_id,
             created_at_ms: state.created_at_ms,
             updated_at_ms: state.updated_at_ms,
         }
@@ -93,11 +95,14 @@ impl PreparedSessionMetadata {
             &self.path,
             &self.base_cwd,
             self.session_mode,
+            &self.workflow_definition_id,
             self.created_at_ms,
             self.updated_at_ms,
         ))?;
         Ok(Sha256::digest(encoded).into())
     }
+
+    pub fn workflow_definition_id(&self) -> Option<&str> { self.workflow_definition_id.as_deref() }
 
     pub fn base_cwd(&self) -> Option<&Path> {
         self.base_cwd.as_deref()
@@ -299,19 +304,21 @@ mod tests {
             path: PathBuf::from("session.jsonl"),
             base_cwd: Some(PathBuf::from("workspace")),
             session_mode: SessionMode::Default,
+            workflow_definition_id: None,
             created_at_ms: Some(1),
             updated_at_ms: Some(2),
         };
         let key = original().list_input_key().unwrap();
         assert_eq!(key, original().list_input_key().unwrap());
-        for field in 0..5 {
+        for field in 0..6 {
             let mut prepared = original();
             match field {
                 0 => prepared.path = PathBuf::from("other.jsonl"),
                 1 => prepared.base_cwd = Some(PathBuf::from("other")),
                 2 => prepared.session_mode = SessionMode::Orchestrate,
                 3 => prepared.created_at_ms = None,
-                _ => prepared.updated_at_ms = Some(3),
+                4 => prepared.updated_at_ms = Some(3),
+                _ => prepared.workflow_definition_id = Some("workflow-fixture".into()),
             }
             assert_ne!(key, prepared.list_input_key().unwrap(), "field {field}");
         }

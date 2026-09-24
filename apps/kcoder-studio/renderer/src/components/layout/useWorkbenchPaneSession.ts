@@ -2044,6 +2044,7 @@ export function useWorkbenchPaneSession({ currentRuntimeTask }: WorkbenchPaneSes
           let seededGoalAddress: RuntimeTaskAddress | null = null
           const sent = await sendCurrentInput(submittedInput, {
             sessionMode: options.sessionMode,
+            workflowDefinitionId: options.workflowDefinitionId,
             turnMode: options.turnMode,
             clientMessageId: optimisticMessage.id,
             initialGoal,
@@ -2163,6 +2164,7 @@ export function useWorkbenchPaneSession({ currentRuntimeTask }: WorkbenchPaneSes
           )
           const sent = await sendCurrentInput(visibleSubmittedInput, {
             sessionMode: options.sessionMode,
+            workflowDefinitionId: options.workflowDefinitionId,
             turnMode: options.turnMode,
             clientMessageId: optimisticMessage.id,
             codeCommentContexts,
@@ -2683,6 +2685,7 @@ export function useWorkbenchPaneSession({ currentRuntimeTask }: WorkbenchPaneSes
   const [loadedSessionMode, setLoadedSessionMode] = useState<{
     taskId: string
     mode: import('@/types/api').RuntimeSessionMode
+    workflowDefinitionId?: string | null
   } | null>(null)
   const [loadedSessionTemplate, setLoadedSessionTemplate] = useState<{
     taskId: string
@@ -2694,7 +2697,7 @@ export function useWorkbenchPaneSession({ currentRuntimeTask }: WorkbenchPaneSes
     void getRuntimeSessionModes({ address: currentRuntimeTask })
       .then(result => {
         if (cancelled) return
-        setLoadedSessionMode({ taskId: currentRuntimeTask.taskId, mode: result.sessionMode })
+        setLoadedSessionMode({ taskId: currentRuntimeTask.taskId, mode: result.sessionMode, workflowDefinitionId: result.workflowDefinitionId })
         // Read-only: a running session keeps its bound template, so Studio only shows it.
         setLoadedSessionTemplate({
           taskId: currentRuntimeTask.taskId,
@@ -2714,6 +2717,7 @@ export function useWorkbenchPaneSession({ currentRuntimeTask }: WorkbenchPaneSes
 
   return {
     getRuntimeSessionModes,
+    workflowDefinitionId: loadedSessionMode?.taskId === currentRuntimeTask?.taskId ? loadedSessionMode?.workflowDefinitionId : undefined,
     sessionMode:
       loadedSessionMode?.taskId === currentRuntimeTask?.taskId
         ? loadedSessionMode?.mode

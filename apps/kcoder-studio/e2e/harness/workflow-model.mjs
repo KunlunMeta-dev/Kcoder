@@ -27,6 +27,9 @@ export async function startWorkflowModelFixture(context) {
       const names = toolNames(body);
       const messages = body.messages || [];
       const users = messages.filter(message => message.role === 'user').map(text).join('\n');
+      const system = messages.filter(message => message.role === 'system').map(text).join('\n');
+      const binding = system.match(/Workflow draft binding:\s*(\{[^\n]*\})/)?.[1];
+      const boundId = binding ? JSON.parse(binding).id : null;
       const last = [...messages].reverse().find(message => message.role === 'tool');
       const output = result(last);
       const reply = (content, name, input) => {
@@ -38,9 +41,9 @@ export async function startWorkflowModelFixture(context) {
         ]) response.write(`data: ${JSON.stringify(frame)}\n\n`);
         response.end('data: [DONE]\n\n');
       };
-      if (users.includes('Use WorkflowDraft to build draft') && !(names.length === 1 && names[0] === 'WorkflowDraft')) throw new Error('Generation exposed execution tools');
+      if ((boundId || users.includes('Use WorkflowDraft to build draft')) && !(names.length === 1 && names[0] === 'WorkflowDraft')) throw new Error('Generation exposed execution tools');
       if (names.length === 1 && names[0] === 'WorkflowDraft') {
-        const id = users.match(/Use WorkflowDraft to build draft "([a-zA-Z0-9_-]+)"/)?.[1];
+        const id = boundId || users.match(/Use WorkflowDraft to build draft "([a-zA-Z0-9_-]+)"/)?.[1];
         if (!id) throw new Error('Workflow generation draft ID missing');
         observations.push({ kind: 'generation', names, id, nodeCount: output?.nodes?.length ?? null });
         if (!output?.nodes) return reply(null, 'WorkflowDraft', { action: 'read', id });
@@ -59,9 +62,8 @@ export async function startWorkflowModelFixture(context) {
       if (users.includes('WF_NODE_A_WORK')) {
         observations.push({ kind: 'agent', node: 'A' }); return reply('WF_NODE_A_RESULT');
       }
-      const saved = users.match(/Run the saved workflow using Workflow with exactly (\{[^\n]+?\})\./)?.[1];
-      if (saved) {
-        const input = JSON.parse(saved);
+      const input = savedInvocation(users);
+      if (input) {
         observations.push({ kind: 'saved-run', id: input.definition_id, version: input.version });
         if (!last) return reply(null, 'Workflow', input);
         if (output?.run_id && output?.status === 'running') return reply(null, 'TaskOutput', { task_id: output.run_id, block: true, timeout: 30000 });
@@ -85,4 +87,28 @@ export async function startWorkflowModelFixture(context) {
     await Promise.allSettled([...active]); await closed;
   });
   return { baseUrl: `http://127.0.0.1:${port}/v1`, firstNode, releaseSecondNode: () => releaseSecond(), observations };
+}
+
+// Parse only a balanced JSON object supplied by the run-reference composer.
+function savedInvocation(text) {
+  for (const match of text.matchAll(/\{\s*"definition_id"\s*:/g)) {
+    let depth = 0, quoted = false, escaped = false;
+    for (let index = match.index; index < Math.min(text.length, match.index + 32768); index++) {
+      const ch = text[index];
+      if (quoted) {
+        if (escaped) escaped = false;
+        else if (ch === '\\') escaped = true;
+        else if (ch === '"') quoted = false;
+      } else if (ch === '"') quoted = true;
+      else if (ch === '{') depth++;
+      else if (ch === '}' && --depth === 0) {
+        try {
+          const value = JSON.parse(text.slice(match.index, index + 1));
+          if (typeof value.definition_id === 'string' && Number.isInteger(value.version)) return value;
+        } catch { /* Continue to another candidate, never evaluate text. */ }
+        break;
+      }
+    }
+  }
+  return null;
 }
