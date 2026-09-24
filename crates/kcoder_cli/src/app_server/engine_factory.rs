@@ -351,9 +351,7 @@ impl AppServerEngineFactory {
         factory.base_settings.history_enabled = true;
         factory.workspace_services = self.workspace_services.with_private_client_storage(owner);
         let state = factory.new_state()?;
-        if source.state.session_mode().is_orchestrate() {
-            state.enter_orchestrate_before_first_message()?;
-        }
+        state.enter_session_mode_before_first_message(source.state.session_mode())?;
         state.set_messages(messages);
         let engine = factory.build(state, user_questioner)?;
         Ok(engine.with_client_model_configuration_from(source))

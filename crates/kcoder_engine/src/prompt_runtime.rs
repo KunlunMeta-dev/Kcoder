@@ -215,6 +215,9 @@ pub(super) fn build_system_prompt(
         )
     })
         .unwrap_or_default();
+    let workflow_authoring_prompt = if available_tools.contains("WorkflowDraft") {
+        "For workflow design requests, use WorkflowDraft to create or update a persistent graph. Submit one node per call so the canvas can display generation progress. Use the returned revision for subsequent edits; read again after a conflict. Draft creation and saving do not execute nodes. Run a saved version only after an explicit execution request, using execution controls actually attached to that request.".to_string()
+    } else { String::new() };
     let skill_routing_prompt = if available_tools.contains("DiscoverSkills")
         && available_tools.contains("skill")
     {
@@ -272,6 +275,7 @@ pub(super) fn build_system_prompt(
         },
         shell_process_prompt,
         skill_routing_prompt,
+        workflow_authoring_prompt,
         cli_entry_prompt,
         if available_tools.contains("WebSearch") {
             "Web search is available in this request. When a question involves an unfamiliar or uncertain concept, factual knowledge that you cannot answer confidently, or highly time-sensitive news or current events, investigate with the web tools and evaluate relevant sources before answering. Prefer current primary or authoritative sources, use WebFetch when available to inspect important results in context, distinguish sourced facts from inference, and acknowledge any remaining uncertainty. Do not refuse, guess, or give a cursory answer merely because the topic is new, uncertain, or fast-moving."

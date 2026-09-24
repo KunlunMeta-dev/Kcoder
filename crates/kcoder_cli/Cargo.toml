@@ -20,6 +20,7 @@ kcoder_repl = { path = "../kcoder_repl" }
 kcoder_state = { path = "../kcoder_state" }
 kcoder_config = { path = "../kcoder_config" }
 kcoder_tools = { path = "../kcoder_tools" }
+kcoder_workflow = { path = "../kcoder_workflow" }
 kcoder_permissions = { path = "../kcoder_permissions" }
 kcoder_engine = { path = "../kcoder_engine" }
 kcoder_hooks = { path = "../kcoder_hooks" }

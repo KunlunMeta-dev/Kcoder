@@ -1,3 +1,4 @@
+import { WorkflowWorkspace } from '@/features/workflows/WorkflowWorkspace'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEventHandler } from 'react'
 import type { ProjectCreateMode } from '@/components/chat/ChatInput'
@@ -113,7 +114,8 @@ export function DesktopWorkbenchLayout() {
   const [currentPath, setCurrentPath] = useState(initialPath)
   const todoOpen = currentPath === '/todo'
   const automationsOpen = currentPath === '/automations'
-  const activeItem = todoOpen ? 'todo' : automationsOpen ? 'automation' : 'chat'
+  const workflowsOpen = currentPath === '/workflows'
+  const activeItem = workflowsOpen ? 'workflows' : todoOpen ? 'todo' : automationsOpen ? 'automation' : 'chat'
   const taskReminders = runtimeTaskReminders ?? EMPTY_RUNTIME_TASK_REMINDERS
   const createPermanentWorktree = useCallback(
     async ({
@@ -716,6 +718,7 @@ export function DesktopWorkbenchLayout() {
               {t('workbench.cloud_board_loading', '正在加载云端看板…')}
             </div>
           ))}
+        {workflowsOpen && <WorkflowWorkspace />}
         {automationsOpen && (
           <ScheduledTasksPanel
             runtimeWork={state.runtimeWork}
@@ -726,11 +729,11 @@ export function DesktopWorkbenchLayout() {
           />
         )}
         <div
-          style={{ display: todoOpen || automationsOpen ? 'none' : 'contents' }}
-          aria-hidden={todoOpen || automationsOpen}
+          style={{ display: todoOpen || automationsOpen || workflowsOpen ? 'none' : 'contents' }}
+          aria-hidden={todoOpen || automationsOpen || workflowsOpen}
         >
           <DesktopWorkbenchMain
-            visible={!settingsOpen && !todoOpen && !automationsOpen}
+            visible={!settingsOpen && !todoOpen && !automationsOpen && !workflowsOpen}
             sidebarCollapsed={effectiveSidebarCollapsed}
             sidebarResizing={sidebarResizing}
             onSidebarCollapsedChange={updateSidebarCollapsed}

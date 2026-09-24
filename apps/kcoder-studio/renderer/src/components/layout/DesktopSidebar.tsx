@@ -161,7 +161,7 @@ interface DesktopSidebarProps {
   imNotificationSettings?: RuntimeIMNotificationSettingsResponse | null
   unreadRuntimeTaskKeys?: ReadonlySet<string>
   preferredDeviceId?: string | null
-  activeItem?: 'chat' | 'todo' | 'plugins' | 'sites' | 'automation'
+  activeItem?: 'chat' | 'todo' | 'plugins' | 'sites' | 'automation' | 'workflows'
   collapsed?: boolean
   containerTestId?: string
   hideResizeHandle?: boolean
@@ -3398,6 +3398,7 @@ export function DesktopSidebar({
                 selected={activeItem === 'automation'}
                 onClick={() => navigateTo('/automations')}
               />
+              <SidebarButton icon={GitCompareArrows} label={t('workflowCanvas.heading')} testId="workflows-button" selected={activeItem === 'workflows'} onClick={() => navigateTo('/workflows')} />
               {SHOW_PLUGINS_NAVIGATION && (
                 <SidebarButton
                   icon={Sparkles}

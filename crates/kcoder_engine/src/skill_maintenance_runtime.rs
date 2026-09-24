@@ -54,6 +54,7 @@ impl Drop for ResetFlagOnDrop {
 
 impl QueryEngine {
     pub(super) fn maybe_spawn_skill_review(&self, recent_tools: &[String]) {
+        if self.state.session_mode() == kcoder_state::SessionMode::WorkflowDraft { return; }
         if !self
             .workspace_persistence_mode
             .allows_implicit_project_writes()
@@ -160,6 +161,7 @@ impl QueryEngine {
     }
 
     pub(super) fn maybe_spawn_auto_curator(&self) {
+        if self.state.session_mode() == kcoder_state::SessionMode::WorkflowDraft { return; }
         if !self
             .workspace_persistence_mode
             .allows_implicit_project_writes()

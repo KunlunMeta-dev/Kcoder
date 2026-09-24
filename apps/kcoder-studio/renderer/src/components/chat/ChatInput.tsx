@@ -441,7 +441,7 @@ export function ChatInput({
         })
     }
   }
-  const executionModes = onSetGoal
+  const executionModes = onSetGoal && sessionMode !== 'workflow_draft'
     ? { canSelectOrchestrate, onSelect: selectExecutionMode }
     : undefined
   const selectGoal = onSetGoal
@@ -638,10 +638,10 @@ export function ChatInput({
     </div>
   ) : null
   const executionModePill =
-    executionMode || sessionMode === 'orchestrate' ? (
+    executionMode || sessionMode === 'orchestrate' || sessionMode === 'workflow_draft' ? (
       <div className="flex min-w-0 items-center gap-1" data-testid="execution-mode-footer">
         <ComposerModePill
-          label={`/${executionMode ?? 'orchestrate'}`}
+          label={sessionMode === 'workflow_draft' ? t('workflowCanvas.draftSession') : `/${executionMode ?? 'orchestrate'}`}
           testId="execution-mode-draft"
           className="min-w-0 shrink font-normal [&>span]:truncate"
           onCancel={

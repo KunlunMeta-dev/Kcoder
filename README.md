@@ -770,7 +770,7 @@ force, recovery, Doctor, and degradation boundaries are described alongside the 
 | Goal | `get_goal`, `create_goal`, `update_goal` |
 | Scheduled tasks | `cron_create`, `cron_delete`, `cron_list` |
 | Orchestrate | `CreateWorkPlan`, `EditWorkPlan`, `RecordTaskAcceptance`, `ReopenTask`, `ReviewVote`, `AgentFleet`, `ControlAgent` |
-| Workflow | `Workflow` (embedded QuickJS scripted JS workflow runtime) |
+| Workflow | `WorkflowDraft` (incremental saved visual graphs), `Workflow` (versioned graph or JavaScript execution in QuickJS) |
 | Code review | `ocr` (external code review CLI integration) |
 | LSP | Not an independent tool: automatically attaches LSP diagnostics after writes (currently supports Python/pyright) |
 | Configuration | `Config` (runtime settings read/write; `action=list` discovers paths and `action=describe` returns their schema and write restrictions) |
@@ -1197,6 +1197,16 @@ Governance principles:
 
 `SpecInit` syncs the built-in workflow skills to `.kcoder/skills/`. These skills include engineering discipline, such as
 planning, TDD, verification, code review, worktree, parallel agents, etc.
+
+## Visual workflows in Studio
+
+Open **Workflows** in Studio, choose the runtime target and execution workspace, and create a draft. Enter the requirement and generate: nodes are persisted one at a time and appear on the canvas while generation continues. The dedicated `workflow_draft` conversation only exposes `WorkflowDraft`; it cannot execute shell commands, spawn agents or run the workflow. The canvas supports node selection/editing, dependency lines, dragging, panning, zoom and fit-to-view.
+
+Save publishes a validated immutable version. The workflow library belongs to the selected target account, so another conversation can reuse the same saved definition. **Use in a new conversation** selects a fixed definition ID and version; later draft edits do not alter that version. Generation, saving and execution are separate actions. Execution uses the selected workspace and existing Agent permission, cancellation and concurrency rules.
+
+The first graph format supports Agent-task DAGs: independent nodes run in parallel and dependent nodes receive prerequisite outputs as JSON data. Drafts may be incomplete; publish rejects cycles, unknown dependencies and empty required fields. Concurrent edits use revisions and surface conflicts instead of overwriting newer changes. Limits are 64 nodes per definition, 128 KiB per definition, 256 workflows and 32 saved versions per workflow within an 8 MiB account library. Existing versions are not silently pruned.
+
+The model can discover saved definitions with `WorkflowDraft` action `list`, author graphs through the same tool, and run a published version through `Workflow` with `definition_id` and `version`. Legacy inline JavaScript and `.kcoder/workflows/<name>.js` remain supported; arbitrary JavaScript is not automatically converted into an editable graph. Studio requires the target's `workflowCanvasV1` capability. Run status and output remain in the execution conversation; the canvas represents the definition, not a promise of successful execution.
 
 ## Spec-Driven Workflow
 

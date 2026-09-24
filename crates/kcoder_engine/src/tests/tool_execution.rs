@@ -484,3 +484,37 @@ async fn model_tool_execution_uses_request_allowset_even_when_capability_changes
         assert_eq!(tool_errors, vec![!originally_attached]);
     }
 }
+
+#[tokio::test]
+async fn workflow_generation_mode_rejects_forged_execution_tools() {
+    let root = tempfile::tempdir().unwrap();
+    let target = root.path().join("must-not-exist");
+    let calls = Arc::new(AtomicUsize::new(0));
+    let provider = Arc::new(RequestBoundToolUseProvider {
+        emitted: AtomicBool::new(false), live_settings: Mutex::new(None),
+        enable_after_request: true, observed_attachment: Mutex::new(vec![]),
+    });
+    let settings = Settings { permission_mode: PermissionMode::Bypass, ..Settings::default() };
+    let engine = TestEngineBuilder::new(root.path()).settings(settings).provider(provider.clone())
+        .tool_registry(kcoder_tools::default_registry().register(RequestBoundWriteTool { target: target.clone(), calls: calls.clone() })).build();
+    engine.state.enter_workflow_draft_before_first_message().unwrap();
+    engine.enable_moa_for_next_turn(None);
+    assert!(engine.take_moa_for_next_turn().is_none());
+    assert!(engine.moa_plan_preflight().unwrap_err().to_string().contains("Workflow draft"));
+    let names = engine.tool_definitions_for_model().await.into_iter().map(|tool| tool.name).collect::<Vec<_>>();
+    assert_eq!(names, ["WorkflowDraft"]);
+    assert!(engine.start_workflow(serde_json::json!({"script":"return 1;"})).await.is_err());
+    *provider.live_settings.lock().unwrap() = Some(engine.settings.clone());
+    engine.state.add_message(Message::user_text("Generate a graph only"));
+    let prompt = kcoder_permissions::AutoAllowPrompt;
+    let mut events = engine.run_turn_stream(&prompt);
+    let mut denied = false;
+    while let Some(event) = events.next().await {
+        if let EngineEvent::ToolResult { name, output, .. } = event {
+            if name == "request_bound_write" { denied = output.is_error; }
+        }
+    }
+    assert!(denied);
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    assert!(!target.exists());
+}

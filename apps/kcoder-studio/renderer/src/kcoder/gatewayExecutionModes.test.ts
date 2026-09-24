@@ -28,3 +28,16 @@ test('typed execution modes require explicit capability, without silent fallback
   expect(() => executionModeParams({ sessionMode: 'moa' }, client)).toThrow('Invalid')
   expect(() => executionModeParams({ turnMode: ['moa'] }, client)).toThrow('Invalid')
 })
+
+test('workflow draft sessions require both capabilities and never silently fall back', () => {
+  const client = {
+    supportsExperimental: (name: string) => name === 'sessionModes',
+  } as GatewayClient
+  expect(() => executionModeParams({ sessionMode: 'workflow_draft' }, client)).toThrow(
+    'workflowCanvasV1'
+  )
+  client.supportsExperimental = () => true
+  expect(executionModeParams({ sessionMode: 'workflow_draft' }, client)).toEqual({
+    sessionMode: 'workflow_draft',
+  })
+})

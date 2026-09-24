@@ -13,10 +13,10 @@ impl Drop for MoaTurnGuard {
 }
 
 pub(super) fn mode(engine: &QueryEngine) -> ThreadSessionMode {
-    if engine.state.session_mode().is_orchestrate() {
-        ThreadSessionMode::Orchestrate
-    } else {
-        ThreadSessionMode::Default
+    match engine.state.session_mode() {
+        kcoder_state::SessionMode::Default => ThreadSessionMode::Default,
+        kcoder_state::SessionMode::Orchestrate => ThreadSessionMode::Orchestrate,
+        kcoder_state::SessionMode::WorkflowDraft => ThreadSessionMode::WorkflowDraft,
     }
 }
 
@@ -25,8 +25,12 @@ pub(super) fn set_mode(engine: &QueryEngine, requested: ThreadSessionMode) -> an
         ThreadSessionMode::Orchestrate => {
             engine.state.enter_orchestrate_before_first_message()?;
         }
-        ThreadSessionMode::Default if engine.state.session_mode().is_orchestrate() => {
-            anyhow::bail!("Orchestrate mode cannot be exited; start a new session")
+        ThreadSessionMode::WorkflowDraft => {
+            anyhow::ensure!(engine.tools.get("WorkflowDraft").is_some(), "Workflow draft generation requires a tool profile with WorkflowDraft enabled");
+            engine.state.enter_workflow_draft_before_first_message()?;
+        }
+        ThreadSessionMode::Default if !engine.state.session_mode().is_default() => {
+            anyhow::bail!("Session mode cannot be exited; start a new session")
         }
         _ => {}
     }
@@ -55,6 +59,9 @@ pub(super) fn stream(
     mode: TurnExecutionMode,
     cancel: CancellationToken,
 ) -> Pin<Box<dyn Stream<Item = EngineEvent> + Send>> {
+    if engine.state.session_mode() == kcoder_state::SessionMode::WorkflowDraft && mode != TurnExecutionMode::Standard {
+        return Box::pin(futures::stream::once(async { EngineEvent::Error("Workflow draft sessions do not run MoA agents".into()) }));
+    }
     if mode != TurnExecutionMode::MoaPlan {
         return Box::pin(async_stream::stream! {
             let _moa_guard = (mode == TurnExecutionMode::Moa).then(|| MoaTurnGuard(engine.clone()));

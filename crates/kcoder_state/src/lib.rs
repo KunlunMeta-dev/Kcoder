@@ -2405,6 +2405,26 @@ mod tests {
     }
 
     #[test]
+    fn workflow_draft_mode_persists_and_cannot_be_escalated() {
+        let temp = TempDir::new().unwrap();
+        let history = temp.path().join("workflow-draft.jsonl");
+        let state = AppState::new(temp.path());
+        state.with_history_path(&history);
+        assert!(state.enter_workflow_draft_before_first_message().unwrap());
+        assert!(!state.enter_workflow_draft_before_first_message().unwrap());
+        assert!(state.enter_orchestrate_before_first_message().is_err());
+        state.add_message(Message::user_text("Design only"));
+        state.save_history().unwrap();
+        let resumed = AppState::new(temp.path());
+        resumed.resume_from_history(&history).unwrap();
+        assert_eq!(resumed.session_mode(), SessionMode::WorkflowDraft);
+        assert!(resumed.enter_orchestrate_before_first_message().is_err());
+        let ordinary = AppState::new(temp.path());
+        ordinary.add_message(Message::user_text("Already started"));
+        assert!(ordinary.enter_workflow_draft_before_first_message().is_err());
+    }
+
+    #[test]
     fn orchestrate_session_mode_is_set_once_before_first_message() {
         let state = AppState::new("/tmp/orchestrate-session");
         assert_eq!(state.session_mode(), SessionMode::Default);

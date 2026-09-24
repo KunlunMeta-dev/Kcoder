@@ -8,6 +8,11 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+kcoder_types = { path = "../kcoder_types" }
+kcoder_config = { path = "../kcoder_config" }
+anyhow = { workspace = true }
+fs2 = "0.4"
+uuid = { workspace = true }
 async-trait = { workspace = true }
 rquickjs = { version = "0.11", features = ["futures", "parallel"] }
 serde = { workspace = true }
@@ -15,3 +20,6 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

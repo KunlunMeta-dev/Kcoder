@@ -67,12 +67,20 @@ impl AppState {
     /// already active. State checking, mutation, and sidecar writing share one critical
     /// section, and persistence failure rolls back the transition.
     pub fn enter_orchestrate_before_first_message(&self) -> anyhow::Result<bool> {
+        self.enter_session_mode_before_first_message(SessionMode::Orchestrate)
+    }
+
+    pub fn enter_workflow_draft_before_first_message(&self) -> anyhow::Result<bool> {
+        self.enter_session_mode_before_first_message(SessionMode::WorkflowDraft)
+    }
+
+    /// Select an immutable creation mode, including when inheriting a fork source.
+    pub fn enter_session_mode_before_first_message(&self, target: SessionMode) -> anyhow::Result<bool> {
         let _persist = self.lock_session_state_persistence();
         let mut inner = self.write_inner();
         check_direct_history_fault(&inner)?;
-        if inner.session_mode.is_orchestrate() {
-            return Ok(false);
-        }
+        if inner.session_mode == target { return Ok(false); }
+        anyhow::ensure!(inner.session_mode.is_default(), "Session mode is immutable; start a new session");
         if inner.history_path.is_some() {
             require_history_source(&inner)?;
         }
@@ -80,10 +88,10 @@ impl AppState {
             std::fs::metadata(path).is_ok_and(|metadata| metadata.is_file() && metadata.len() > 0)
         });
         if inner.conversation_started || !inner.messages.is_empty() || durable_history_started {
-            anyhow::bail!("Orchestrate mode can only be entered before the first message");
+            anyhow::bail!("{target:?} mode can only be entered before the first message");
         }
 
-        inner.session_mode = SessionMode::Orchestrate;
+        inner.session_mode = target;
         if let Some(path) = inner.session_state_path.clone() {
             let state = PersistedSessionState::from_inner(&inner);
             let write = || write_session_state(&path, &state);
@@ -100,7 +108,7 @@ impl AppState {
                     inner.session_mode = SessionMode::Default;
                 }
                 return Err(error).with_context(|| {
-                    format!("failed to persist Orchestrate session mode to {:?}", path)
+                    format!("failed to persist {target:?} session mode to {:?}", path)
                 });
             }
         }

@@ -1,3 +1,4 @@
+import { WorkflowWorkspace } from '@/features/workflows/WorkflowWorkspace'
 import { useTranslation } from '@/hooks/useTranslation'
 import { useSettingsLayout } from '@/hooks/useSettingsLayout'
 import { isSettingsRoute } from '@/lib/navigation'
@@ -18,6 +19,12 @@ export function WorkbenchPage() {
   const { t } = useTranslation('common')
   const isMobileViewport = useIsMobile()
   const isTauri = isNativeTauriHost()
+  const [workflowOpen, setWorkflowOpen] = useState(() => stripAppBasePath(window.location.pathname) === '/workflows')
+  useEffect(() => {
+    const update = () => setWorkflowOpen(stripAppBasePath(window.location.pathname) === '/workflows')
+    window.addEventListener('popstate', update)
+    return () => window.removeEventListener('popstate', update)
+  }, [])
   const [settingsOpen, setSettingsOpen] = useState(() =>
     isSettingsRoute(stripAppBasePath(window.location.pathname))
   )
@@ -64,5 +71,5 @@ export function WorkbenchPage() {
     })
   }, [trayMenuTaskGroups, trayTooltip])
 
-  return mobileLayout ? <MobileWorkbenchLayout /> : <DesktopWorkbenchLayout />
+  return mobileLayout ? (workflowOpen ? <WorkflowWorkspace /> : <MobileWorkbenchLayout />) : <DesktopWorkbenchLayout />
 }

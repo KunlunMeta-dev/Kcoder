@@ -11,7 +11,7 @@ use std::path::PathBuf;
 pub const BUNDLED_MARKETPLACE_ID: &str = "kcoder-bundled";
 const BUNDLE_ID: &str = "kcoder-workflow-basics";
 const BUNDLE_DIGEST: &str =
-    "sha256:6908251b041e4d38e7f003e169cf3a7da43a1363fd1192e761dc5449846c4d22";
+    "sha256:841c79f3367d4334935e2d5fa3874c4557e2696966370ba89079d5f4a7c704ff";
 
 const BUNDLE_FILES: &[(&str, &[u8])] = &[
     (
@@ -46,13 +46,13 @@ pub(crate) fn marketplace() -> MarketplaceManifest {
                 bundle: BUNDLE_ID.to_string(),
                 digest: BUNDLE_DIGEST.to_string(),
             },
-            version: Some("1.0.0".to_string()),
+            version: Some("1.1.0".to_string()),
             install_policy: InstallPolicy::Available,
             auth_policy: AuthPolicy::OnInstall,
             manifest_fallback: Some(serde_json::json!({
                 "packageIdentity": format!("{BUNDLE_ID}@{BUNDLED_MARKETPLACE_ID}"),
                 "source": "KCoder repository",
-                "resolvedVersion": "1.0.0",
+                "resolvedVersion": "1.1.0",
                 "license": "MIT",
                 "digest": BUNDLE_DIGEST,
                 "build": "embedded with Rust include_bytes! and materialized through PluginStore"
@@ -118,6 +118,8 @@ mod tests {
 
         let materialized = materialize(bundle, digest).unwrap();
 
+        let manifest: serde_json::Value = serde_json::from_slice(&std::fs::read(materialized.root.join(".codex-plugin/plugin.json")).unwrap()).unwrap();
+        assert_eq!(manifest["version"].as_str(), marketplace.plugins[0].version.as_deref());
         assert!(digest.starts_with("sha256:"));
         assert_eq!(digest, BUNDLE_DIGEST);
         assert!(materialized.root.join("LICENSE").is_file());

@@ -493,3 +493,5 @@ include!("app_server_stdio/continuation_hook_delivery.rs");
 include!("app_server_stdio/continuation_background_delivery.rs");
 
 include!("app_server_stdio/thread_creation_receipts.rs");
+
+include!("app_server_stdio/workflow_canvas.rs");

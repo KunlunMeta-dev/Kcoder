@@ -69,6 +69,7 @@ pub mod web_search;
 #[cfg(windows)]
 mod windows_sandbox;
 pub mod workflow;
+pub mod workflow_draft;
 pub mod worktree;
 pub mod write;
 
@@ -156,6 +157,7 @@ pub use web_browser::WebBrowserTool;
 pub use web_fetch::WebFetchTool;
 pub use web_search::WebSearchTool;
 pub use workflow::WorkflowTool;
+pub use workflow_draft::WorkflowDraftTool;
 pub use worktree::{EnterWorktreeTool, ExitWorktreeTool, WorktreeCreateTool, WorktreeRemoveTool};
 pub use write::FileWriteTool;
 
@@ -460,6 +462,7 @@ pub fn arrangement_orchestrator_registry() -> ToolRegistry {
         .register(AgentTool)
         .register(ExploreAgentTool)
         .register(WorkflowTool)
+        .register(WorkflowDraftTool)
         .register(SendMessageTool)
         .register(WaitAgentTool)
         .register(CloseAgentTool)
@@ -495,6 +498,7 @@ pub fn orchestrate_orchestrator_registry() -> ToolRegistry {
         .register(AgentTool)
         .register(ExploreAgentTool)
         .register(WorkflowTool)
+        .register(WorkflowDraftTool)
         .register(SendMessageTool)
         .register(AgentFleetTool)
         .register(ControlAgentTool)
@@ -602,6 +606,7 @@ fn default_registry_for_platform(platform: ToolPlatform) -> ToolRegistry {
         .register(VerifyPlanExecutionTool)
         .register(REPLTool)
         .register(WorkflowTool)
+        .register(WorkflowDraftTool)
         .register(WebBrowserTool)
         .register(EnterWorktreeTool)
         .register(ExitWorktreeTool)

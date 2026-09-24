@@ -38,7 +38,7 @@ pub struct WorkflowTool;
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct WorkflowInput {
-    /// Inline JavaScript workflow body. Use exactly one of script, name, or script_path.
+    /// Inline JavaScript workflow body. Use exactly one of script, name, script_path, or definition_id with version.
     #[serde(default)]
     pub script: Option<String>,
     /// Named project workflow from `.kcoder/workflows/<name>.js`.
@@ -50,6 +50,12 @@ pub struct WorkflowInput {
     /// Resume a terminal workflow run by ID, reusing completed agent outputs.
     #[serde(default)]
     pub resume: Option<String>,
+    /// Published workflow-library definition ID. Requires an explicit version; cannot be combined with JavaScript sources or resume.
+    #[serde(default)]
+    pub definition_id: Option<String>,
+    /// Immutable published version of definition_id to execute.
+    #[serde(default)]
+    pub version: Option<u64>,
     /// JSON value exposed to the script as `args`.
     #[serde(default)]
     pub args: Value,
@@ -702,7 +708,7 @@ impl Tool for WorkflowTool {
     }
 
     fn description(&self) -> String {
-        "Run a deterministic JavaScript workflow in an embedded QuickJS runtime. Scripts may use agent(), parallel(), pipeline(), phase(), workflow(), log(), and args. Agent calls use real KCoder sub-agents; the workflow runs in the background and persists script, arguments, state, journal, per-agent output, and final output under the current session. No Bun or Node installation is required."
+        "Run a deterministic JavaScript workflow or an explicitly published library definition_id and version in an embedded QuickJS runtime. Scripts may use agent(), parallel(), pipeline(), phase(), workflow(), log(), and args. Agent calls use real KCoder sub-agents; the workflow runs in the background and persists script, arguments, state, journal, per-agent output, and final output under the current session. No Bun or Node installation is required."
             .to_string()
     }
 
@@ -742,9 +748,9 @@ impl Tool for WorkflowTool {
             .filter(|value| !value.is_empty());
         let (run_id, script, name, workflow_args, store, max_concurrency, is_resume, resume_lease) =
             if let Some(run_id) = resume_id {
-                if input.script.is_some() || input.name.is_some() || input.script_path.is_some() {
+                if input.script.is_some() || input.name.is_some() || input.script_path.is_some() || input.definition_id.is_some() || input.version.is_some() {
                     return Err(ToolError::InvalidInput(
-                        "resume cannot be combined with script, name, or script_path".to_string(),
+                        "resume cannot be combined with script, name, script_path, definition_id, or version".to_string(),
                     ));
                 }
                 validate_workflow_run_id(run_id)?;
@@ -806,7 +812,20 @@ impl Tool for WorkflowTool {
                     Some(resume_lease),
                 )
             } else {
-                let (script, name, source) = resolve_script(&input, &ctx.state.cwd()).await?;
+                let (script, name, source) = if let Some(id) = &input.definition_id {
+                    if input.script.is_some() || input.name.is_some() || input.script_path.is_some() {
+                        return Err(ToolError::InvalidInput("definition_id cannot be combined with JavaScript sources".into()));
+                    }
+                    let version = input.version.ok_or_else(|| ToolError::InvalidInput("definition_id requires an explicit published version".into()))?;
+                    let library = kcoder_workflow::store::WorkflowStore::new(crate::workflow_draft::library_root(ctx)?);
+                    let definition = library.read_saved(id, Some(version)).map_err(|error| ToolError::Execution(error.to_string()))?;
+                    crate::workflow_draft::validate_workflow_agent_types(&definition)?;
+                    let script = kcoder_workflow::graph::compile(&definition, input.args.clone()).map_err(|error| ToolError::InvalidInput(error.to_string()))?;
+                    (script, definition.title, format!("definition:{id}@{version}"))
+                } else {
+                    if input.version.is_some() { return Err(ToolError::InvalidInput("version requires definition_id".into())); }
+                    resolve_script(&input, &ctx.state.cwd()).await?
+                };
                 let run_id = generate_workflow_id();
                 let max_concurrency = input
                     .max_concurrency
@@ -1840,7 +1859,7 @@ mod tests {
     }
 
     #[derive(Default)]
-    struct RecordingRunner(Mutex<Vec<String>>);
+    struct RecordingRunner(Mutex<Vec<String>>, Mutex<Vec<String>>);
 
     #[async_trait]
     impl AgentRunner for RecordingRunner {
@@ -1851,12 +1870,13 @@ mod tests {
         async fn run_agent_session_with_options(
             &self,
             agent_id: String,
-            _prompt: String,
+            prompt: String,
             _max_turns: usize,
             _agent_kind: crate::AgentKind,
             _options: AgentRunOptions,
         ) -> Result<String, AgentError> {
             self.0.lock().unwrap().push(agent_id);
+            self.1.lock().unwrap().push(prompt);
             Ok("agent result".to_string())
         }
     }
@@ -2027,6 +2047,43 @@ mod tests {
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         }
         panic!("workflow did not reach status {expected}");
+    }
+
+    #[tokio::test]
+    async fn published_definition_executes_explicit_version_and_rejects_mixed_sources() {
+        let temp = tempfile::tempdir().unwrap();
+        let profile = temp.path().join("profile");
+        let library = kcoder_workflow::store::WorkflowStore::new(profile.join("workflow-library"));
+        let draft = library.create("Published review", "").unwrap();
+        let node = serde_json::from_value(json!({"id":"review","title":"Review","prompt":"inspect","agentType":"review"})).unwrap();
+        let draft = library.upsert_node(&draft.id, draft.revision, node).unwrap();
+        let saved = library.save(&draft.id, draft.revision).unwrap();
+        let state = AppState::new(temp.path());
+        let project = profile.join("projects/project");
+        fs::create_dir_all(&project).unwrap();
+        state.with_history_path(project.join("session.jsonl"));
+        let runner = Arc::new(RecordingRunner::default());
+        let manager = Arc::new(ExecutingWorkflowManager::new(state.clone()));
+        let context = ToolContext::new(state.clone()).with_settings_persistence_path(Some(profile.join("settings.json")))
+            .with_agent_runner(runner.clone()).with_background_job_manager(manager.clone());
+        assert!(WorkflowTool.call(json!({"definition_id":saved.id,"version":1,"script":"return 1"}), &context).await.is_err());
+        assert!(WorkflowTool.call(json!({"definition_id":saved.id}), &context).await.is_err());
+        assert!(WorkflowTool.call(json!({"definition_id":saved.id,"version":1,"resume":"workflow-invalid"}), &context).await.is_err());
+        let output = WorkflowTool.call(json!({"definition_id":saved.id,"version":1,"args":{"marker":"first-saved-args"}}), &context).await.unwrap();
+        let kcoder_types::ContentBlock::Text { text } = &output.content[0] else { panic!("expected text") };
+        let result: Value = serde_json::from_str(text).unwrap();
+        let run_id = result["run_id"].as_str().unwrap();
+        manager.wait_for_completion(run_id).await;
+        assert_eq!(state.task(run_id).unwrap().status, TaskStatus::Completed);
+        assert_eq!(runner.0.lock().unwrap().len(), 1);
+        assert!(runner.1.lock().unwrap()[0].contains("first-saved-args"));
+        WorkflowTool.call(json!({"resume":run_id,"args":{"marker":"replacement-saved-args"}}), &context).await.unwrap();
+        manager.wait_for_completion(run_id).await;
+        assert_eq!(runner.0.lock().unwrap().len(), 2, "changed args must not reuse the old output");
+        assert!(runner.1.lock().unwrap()[1].contains("replacement-saved-args"));
+        assert!(!runner.1.lock().unwrap()[1].contains("first-saved-args"));
+
+        assert_eq!(library.read_saved(&saved.id, Some(1)).unwrap().revision, saved.revision);
     }
 
     #[tokio::test]

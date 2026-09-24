@@ -1,3 +1,4 @@
+import { notifyAccountContextChange } from './accountContextEvents'
 import { listen } from '@tauri-apps/api/event'
 import { describe, expect, test, vi } from 'vitest'
 import {
@@ -1253,4 +1254,46 @@ test('tool profile settings are scoped, leaf-only, and require an explicit targe
       params: { profile: 'none' },
     })
   ).rejects.toThrow('target')
+})
+
+test('account changes during target lookup reject old workflow writes and task prompts before dispatch', async () => {
+  for (const method of ['runtime.workflows.request', 'runtime.tasks.create']) {
+    const id = `workflow-owner-${method}`
+    let release!: () => void
+    const waiting = new Promise<void>(resolve => {
+      release = resolve
+    })
+    const client = new FakeGatewayClient(null)
+    const request = vi.spyOn(client, 'request')
+    const runtime = createTestGatewayRuntime('token', {
+      loadServers: async () => {
+        await waiting
+        return [
+          { id, label: 'Owned', description: '', transport: 'local', workspacePath: '/owned' },
+        ]
+      },
+      createClient: () => client,
+    })
+    try {
+      const pending = runtime.request(method, {
+        deviceId: id,
+        serverId: id,
+        method: 'workflow/create',
+        params: { title: 'Private draft' },
+        workspacePath: '/owned',
+        executionRequest: { prompt: 'Private old-account prompt' },
+      })
+      const rejected = expect(pending).rejects.toThrow()
+      notifyAccountContextChange(id)
+      release()
+      await rejected
+      expect(
+        request.mock.calls.some(([operation]) =>
+          ['workflow/create', 'thread/start', 'turn/start'].includes(operation)
+        )
+      ).toBe(false)
+    } finally {
+      await runtime.dispose()
+    }
+  }
 })

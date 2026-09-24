@@ -2071,6 +2071,8 @@ export class KCoderGatewayRuntime {
   async request(method: string, rawParams: unknown, options?: { signal?: AbortSignal }): Promise<unknown> {
     const params = record(rawParams)
     const pluginAccountValid = method === 'runtime.plugins.request' ? captureAccountContextRevision() : null
+    const workflowAccountValid = method === 'runtime.workflows.request' ? captureAccountContextRevision() : null
+    const createAccountValid = method === 'runtime.tasks.create' ? captureAccountContextRevision() : null
     const requestGeneration = this.workspaceScanGeneration
     if (this.restartingAppServers) await this.assertRequestTargetAvailable(params)
     const server = await this.server()
@@ -2128,6 +2130,32 @@ export class KCoderGatewayRuntime {
         throw new Error(i18n.t('common:storageSettings.cancelUnsupported'))
       if (operation === 'diagnostics/storage/clean' && !('confirm' in fields)) fields.confirm = true
       return client.request(operation, fields)
+    }
+    if (method === 'runtime.workflows.request') {
+      const operation = text(params.method)
+      if (!['workflow/list', 'workflow/read', 'workflow/create', 'workflow/upsertNode', 'workflow/removeNode', 'workflow/save'].includes(operation ?? ''))
+        throw new Error('Unsupported workflow operation')
+      if (!text(params.serverId)) throw new Error('A workflow target is required')
+      const target = await this.serverForParams({ deviceId: params.serverId })
+      const targetScope = hookTargetScope(target)
+      const assertScope = () => {
+        if (this.disposed || !workflowAccountValid?.(target.id))
+          throw new Error(i18n.t('common:workflowCanvas.scopeChanged'))
+      }
+      assertScope()
+      const client = await this.commandClient(target)
+      assertScope()
+      if (hookTargetScope(await this.serverForParams({ deviceId: params.serverId })) !== targetScope)
+        throw new Error(i18n.t('common:workflowCanvas.scopeChanged'))
+      assertScope()
+      if (client.supportsExperimental?.('workflowCanvasV1') !== true)
+        throw new Error(i18n.t('common:workflowCanvas.unsupported'))
+      const result = await client.request(operation!, record(params.params))
+      assertScope()
+      if (hookTargetScope(await this.serverForParams({ deviceId: params.serverId })) !== targetScope)
+        throw new Error(i18n.t('common:workflowCanvas.scopeChanged'))
+      assertScope()
+      return result
     }
     if (method === 'runtime.settings.request') {
       const operation = text(params.method)
@@ -2445,7 +2473,17 @@ export class KCoderGatewayRuntime {
     }
     if (method === 'runtime.tasks.dispose') return this.disposeTemporaryTask(params)
     if (method === 'runtime.tasks.create') {
-      return this.createTask(params, await this.serverForParams(params))
+      const target = await this.serverForParams(params)
+      const targetScope = hookTargetScope(target)
+      const assertScope = async () => {
+        if (this.disposed || !createAccountValid?.(target.id))
+          throw new Error(i18n.t('common:workflowCanvas.scopeChanged'))
+        const latest = await this.serverForParams(params)
+        if (!createAccountValid?.(target.id) || hookTargetScope(latest) !== targetScope)
+          throw new Error(i18n.t('common:workflowCanvas.scopeChanged'))
+      }
+      await assertScope()
+      return this.createTask(params, target, assertScope)
     }
     if (method === 'runtime.tasks.fork_at_turn') return this.forkTaskAtTurn(params)
     if (method === 'runtime.tasks.import_fork') {
@@ -3946,7 +3984,7 @@ export class KCoderGatewayRuntime {
     return result
   }
 
-  private async createTask(params: Record<string, unknown>, server: GatewayServer) {
+  private async createTask(params: Record<string, unknown>, server: GatewayServer, assertScope: () => Promise<void> = async () => {}) {
     const ephemeral = isTemporaryTaskCreate(params)
     const execution = record(params.executionRequest)
     const clientMessageId = text(params.clientMessageId) ?? text(execution.clientMessageId)
@@ -3971,25 +4009,31 @@ export class KCoderGatewayRuntime {
     const workspacePath = text(params.workspacePath) ?? server.workspacePath ?? '/'
     let client = await this.connectClient(server, 'runtime', workspacePath)
     let prompt: string
-    let started: { thread?: { id?: string } }
+    let started: { thread?: { id?: string } } | undefined
     try {
+      await assertScope()
       modelSelectionModeParams(selectionMode, client, selectedModel ?? undefined)
       selectedModel = (await negotiateModelSelector(client, selectedModel)) ?? null
       prompt = await this.promptWithAttachmentsForClient(rawPrompt, execution, server, client)
+      await assertScope()
       started = await startTaskThread(client, {
         serverId: server.id,
         workspacePath,
         params,
         model: selectedModel,
         creationRequestId: requestedTaskId,
-        recoverClient: () => this.connectClient(server, 'runtime', workspacePath),
+        recoverClient: async () => { await assertScope(); const recovered = await this.connectClient(server, 'runtime', workspacePath); try { await assertScope(); return recovered } catch (error) { recovered.close(); throw error } },
         onRecoveredClient: recovered => { if (client !== recovered) client.close(); client = recovered },
       })
+      await assertScope()
     } catch (error) {
+      if (started?.thread?.id) {
+        try { await client.request(ephemeral ? 'thread/dispose' : 'thread/delete', { threadId: started.thread.id }) } catch { /* No turn was submitted; do not recover into another account. */ }
+      }
       client.close()
       throw error
     }
-    const threadId = text(started.thread?.id)
+    const threadId = text(started?.thread?.id)
     if (!threadId) {
       client.close()
       throw new Error('KCoder app-server 未返回 thread id')
@@ -4035,6 +4079,7 @@ export class KCoderGatewayRuntime {
     }
     this.tasks.set(taskId, createdTask)
     try {
+      await assertScope()
       await this.updateTaskMetadata(
         createdTask,
         {
@@ -4065,7 +4110,10 @@ export class KCoderGatewayRuntime {
       throw error
     }
     this.pendingTurnStartByTask.add(taskId)
+    let turnStartAttempted = false
     try {
+      await assertScope()
+      turnStartAttempted = true
       const submitted = await startTurnWithReceipt(client, {
         ...turnModeParams(params, client),
         ...modelSelectionModeParams(selectionMode, client, selectedModel ?? undefined),
@@ -4077,7 +4125,8 @@ export class KCoderGatewayRuntime {
         ...(proxyUrl !== null ? { proxyUrl } : {}),
         ...(serviceTier ? { serviceTier } : {}),
         ...turnPermissionParams(execution, client),
-      }, () => this.readyTaskClient(createdTask))
+      }, async () => { await assertScope(); const recovered = await this.readyTaskClient(createdTask); await assertScope(); return recovered })
+      await assertScope()
       const turn = submitted.result
       const turnId = text(turn.turn?.id)
       if (!turnId) throw new Error('KCoder app-server 未返回 turn id')
@@ -4092,6 +4141,12 @@ export class KCoderGatewayRuntime {
       }
     } catch (error) {
       this.pendingTurnStartByTask.delete(taskId)
+      try { await assertScope() } catch (scopeError) {
+        if (!turnStartAttempted) await deleteEmptyThread()
+        // A submitted/uncertain old-account turn is not a new-account failure.
+        // Do not reconnect, replay its prompt, or emit its data into the new scope.
+        throw scopeError
+      }
       if (error instanceof TurnAcceptanceUnknownError) {
         // Preserve the discoverable thread and the caller's draft. Unknown acceptance
         // is not a model failure and cannot safely trigger automatic re-submission.
@@ -6442,6 +6497,7 @@ export class KCoderGatewayRuntime {
         payload: {
           ...base,
           data: {
+            terminalStatus: status,
             ...(status === 'completed' ? { value: content } : { message: terminalError ?? status }),
             ...(status !== 'completed'
               ? { provider_failure: decodeProviderFailure(record(params.error).details) }

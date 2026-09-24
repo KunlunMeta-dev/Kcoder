@@ -588,7 +588,7 @@ export interface RuntimeTranscriptRequest extends RuntimeTaskAddress {
   includeFullContent?: boolean
 }
 
-export type RuntimeSessionMode = 'default' | 'orchestrate'
+export type RuntimeSessionMode = 'default' | 'orchestrate' | 'workflow_draft'
 export type RuntimeTurnMode = 'standard' | 'moa' | 'moa-plan'
 
 export interface RuntimeExecutionModes {

@@ -6,7 +6,12 @@ export function executionModeParams(
   client: GatewayClient
 ): RuntimeExecutionModes {
   const { sessionMode, turnMode } = params
-  if (sessionMode != null && sessionMode !== 'default' && sessionMode !== 'orchestrate') {
+  if (
+    sessionMode != null &&
+    sessionMode !== 'default' &&
+    sessionMode !== 'orchestrate' &&
+    sessionMode !== 'workflow_draft'
+  ) {
     throw new Error('Invalid session mode')
   }
   if (
@@ -21,6 +26,12 @@ export function executionModeParams(
     client.supportsExperimental?.('sessionModes') !== true
   ) {
     throw new Error('目标 KCoder 不支持特殊执行模式，请升级目标后重试')
+  }
+  if (
+    sessionMode === 'workflow_draft' &&
+    client.supportsExperimental?.('workflowCanvasV1') !== true
+  ) {
+    throw new Error('Workflow draft generation requires workflowCanvasV1 on the target')
   }
   return {
     ...(sessionMode ? { sessionMode: sessionMode as RuntimeExecutionModes['sessionMode'] } : {}),

@@ -2129,7 +2129,14 @@ impl QueryEngine {
     }
 
     fn active_tool_registry_for_mode(&self, arrangement_mode: bool) -> ToolRegistry {
-        let registry = if arrangement_mode {
+        let registry = if self.state.session_mode() == kcoder_state::SessionMode::WorkflowDraft {
+            let registry = self.tools.filtered_to_names(&["WorkflowDraft".to_string()]);
+            if self.is_luna_mode_active() {
+                registry.filtered_to_names(&recover_read_lock(&self.settings, "settings").tools.luna.allowed)
+            } else {
+                registry
+            }
+        } else if arrangement_mode {
             if self.state.session_mode().is_orchestrate() {
                 let registry = kcoder_tools::orchestrate_orchestrator_registry();
                 let optional_allowlist = recover_read_lock(&self.settings, "settings")
@@ -2302,6 +2309,9 @@ impl QueryEngine {
     /// Agent calls inside the workflow still use the normal engine runner,
     /// permissions, role filtering, cancellation, and artifact paths.
     pub async fn start_workflow(&self, input: serde_json::Value) -> Result<ToolOutput, ToolError> {
+        if self.state.session_mode() == kcoder_state::SessionMode::WorkflowDraft {
+            return Err(ToolError::Execution("Workflow generation sessions cannot execute workflows; start a separate run conversation".into()));
+        }
         let (max_out, head_out, tail_out, max_subagents) = {
             let settings = recover_read_lock(&self.settings, "settings");
             (
@@ -3405,6 +3415,9 @@ impl QueryEngine {
                             &available_tool_names,
                         );
                         system_prompt.push_str(&engine.skill_catalog_prompt(&available_tool_names));
+                        if engine.state.session_mode() == kcoder_state::SessionMode::WorkflowDraft {
+                            system_prompt.push_str("\n\nThis is a workflow design session. Only WorkflowDraft is available. Build the requested graph incrementally, one node per call; generation does not run nodes. Do not claim code or agents were executed. Preserve the requested draft ID and use the latest revision returned by each edit. The user saves and runs the workflow separately.");
+                        }
                         if let Some(role_prompt) = engine.subagent_system_prompt.as_deref() {
                             system_prompt.push_str("\n\n## Sub-agent role\n");
                             system_prompt.push_str(role_prompt);

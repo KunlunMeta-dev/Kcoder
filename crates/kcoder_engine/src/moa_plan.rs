@@ -167,6 +167,7 @@ fn moa_plan_model_labels(models: &[MoaModelConfig]) -> Vec<String> {
 
 impl QueryEngine {
     pub fn moa_plan_preflight(&self) -> Result<MoaPlanPreflight> {
+        anyhow::ensure!(self.state.session_mode() != kcoder_state::SessionMode::WorkflowDraft, "Workflow draft sessions do not run MoA planners");
         let settings = super::recover_read_lock(&self.settings, "settings");
         let models = resolve_moa_plan_models(&settings)?;
         let portable = moa_plan_portable_messages(&self.state.messages());

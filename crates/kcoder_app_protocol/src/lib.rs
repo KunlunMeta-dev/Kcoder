@@ -25,6 +25,8 @@ mod thread_creations;
 pub use thread_creations::*;
 mod turn_receipts;
 pub use turn_receipts::*;
+mod workflow_canvas;
+pub use workflow_canvas::*;
 mod tool_profiles;
 pub use tool_profiles::*;
 mod turn_file_changes;
@@ -147,6 +149,12 @@ pub mod method {
     pub const MARKETPLACE_REMOVE: &str = "marketplace/remove";
     pub const MARKETPLACE_REFRESH: &str = "marketplace/refresh";
     /// Session-level settings templates: list/read/save/delete/default.
+    pub const WORKFLOW_LIST: &str = "workflow/list";
+    pub const WORKFLOW_READ: &str = "workflow/read";
+    pub const WORKFLOW_CREATE: &str = "workflow/create";
+    pub const WORKFLOW_SAVE: &str = "workflow/save";
+    pub const WORKFLOW_UPSERT_NODE: &str = "workflow/upsertNode";
+    pub const WORKFLOW_REMOVE_NODE: &str = "workflow/removeNode";
     pub const SETTINGS_TOOLS_READ: &str = "settings/tools/read";
     pub const SETTINGS_TOOLS_SAVE: &str = "settings/tools/save";
     pub const SETTINGS_TEMPLATES_LIST: &str = "settings/templates/list";
@@ -1435,6 +1443,7 @@ pub enum ThreadSessionMode {
     #[default]
     Default,
     Orchestrate,
+    WorkflowDraft,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]

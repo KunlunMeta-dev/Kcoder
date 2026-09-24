@@ -96,6 +96,7 @@ mod turn_attempts;
 mod turn_execution;
 mod thread_creations;
 mod turn_receipts;
+mod workflow_canvas;
 mod turn_file_changes_settings;
 mod usage_processor;
 mod workspace_fs;
@@ -4041,6 +4042,7 @@ fn server_capabilities(thread_resume: bool) -> ServerCapabilities {
         thread_resume,
         experimental: BTreeMap::from([
             ("toolPathPreviewV1".to_string(), true),
+            (kcoder_app_protocol::CAPABILITY_WORKFLOW_CANVAS_V1.to_string(), true),
             (kcoder_app_protocol::CAPABILITY_GOAL_CANCELLATION_V1.to_string(), true),
             (
                 kcoder_app_protocol::CAPABILITY_THREAD_RUN_SUMMARY_V1.to_string(),
@@ -5037,6 +5039,13 @@ pub async fn run(
                     Err(error) => {
                         send(&outbound_tx, error_response(id, -32602, &error.to_string())).await?;
                     }
+                }
+            }
+            method::WORKFLOW_LIST | method::WORKFLOW_READ | method::WORKFLOW_CREATE | method::WORKFLOW_SAVE | method::WORKFLOW_UPSERT_NODE | method::WORKFLOW_REMOVE_NODE => {
+                let result = workflow_canvas::request(&workspace_engine, method, params.clone());
+                match result {
+                    Ok(value) => send(&outbound_tx, success_response(id, value)).await?,
+                    Err(error) => send(&outbound_tx, error_response(id, -32602, &error.to_string())).await?,
                 }
             }
             method::SETTINGS_TOOLS_READ | method::SETTINGS_TOOLS_SAVE => {
@@ -6658,10 +6667,9 @@ pub async fn run(
                                         );
                                         return Err(error);
                                     }
-                                    if target_engine.state.session_mode().is_orchestrate()
-                                        && let Err(error) =
-                                            fork_state.enter_orchestrate_before_first_message()
-                                    {
+                                    if let Err(error) = fork_state.enter_session_mode_before_first_message(
+                                        target_engine.state.session_mode(),
+                                    ) {
                                         let _ = std::fs::remove_dir_all(
                                             target_engine.session_storage_dir_for(&fork_id),
                                         );

@@ -2182,6 +2182,7 @@ dependencies = [
  "kcoder_state",
  "kcoder_tools",
  "kcoder_types",
+ "kcoder_workflow",
  "libc",
  "portable-pty",
  "reqwest 0.12.28",
@@ -2624,13 +2625,19 @@ dependencies = [
 name = "kcoder_workflow"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "async-trait",
+ "fs2",
+ "kcoder_config",
+ "kcoder_types",
  "rquickjs",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",
+ "uuid",
 ]
 
 [[package]]

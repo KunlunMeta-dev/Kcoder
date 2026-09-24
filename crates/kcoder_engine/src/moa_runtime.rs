@@ -541,6 +541,9 @@ impl QueryEngine {
     }
 
     pub fn moa_status_summary(&self) -> String {
+        if self.state.session_mode() == kcoder_state::SessionMode::WorkflowDraft {
+            return "MoA is unavailable in workflow draft sessions".into();
+        }
         let settings = recover_read_lock(&self.settings, "settings");
         let moa = &settings.moa;
         let default_preset = moa.default_preset.as_str();
@@ -567,7 +570,8 @@ impl QueryEngine {
     }
 
     pub(super) fn take_moa_for_next_turn(&self) -> Option<MoaTurnRequest> {
-        recover_write_lock(&self.next_moa_request, "next_moa_request").take()
+        let request = recover_write_lock(&self.next_moa_request, "next_moa_request").take();
+        if self.state.session_mode() == kcoder_state::SessionMode::WorkflowDraft { None } else { request }
     }
 
     /// Discard an unconsumed one-turn request when its owning input is cancelled.

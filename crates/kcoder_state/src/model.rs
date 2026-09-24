@@ -14,6 +14,7 @@ pub enum SessionMode {
     #[default]
     Default,
     Orchestrate,
+    WorkflowDraft,
 }
 
 impl SessionMode {
