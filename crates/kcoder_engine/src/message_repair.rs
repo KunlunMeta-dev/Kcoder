@@ -42,7 +42,7 @@ fn has_canonical_tool_sequence<'a>(get: impl Fn(usize) -> Option<&'a Message>) -
     let mut index = 0;
     while let Some(message) = get(index) {
         match message {
-            Message::User { content } => {
+            Message::User { content, .. } => {
                 if content.is_empty()
                     || content
                         .iter()
@@ -60,7 +60,10 @@ fn has_canonical_tool_sequence<'a>(get: impl Fn(usize) -> Option<&'a Message>) -
                     })
                     .peekable();
                 if ids.peek().is_some() {
-                    let Some(Message::User { content: results }) = get(index + 1) else {
+                    let Some(Message::User {
+                        content: results, ..
+                    }) = get(index + 1)
+                    else {
                         return false;
                     };
                     let mut seen = HashSet::new();
@@ -108,6 +111,7 @@ fn repair_tool_message_sequence_slow(messages: Vec<Message>) -> (Vec<Message>, b
         match mem::replace(
             &mut scratch[index],
             Message::User {
+                origin: kcoder_types::MessageOrigin::Runtime,
                 content: Vec::new(),
             },
         ) {
@@ -128,14 +132,15 @@ fn repair_tool_message_sequence_slow(messages: Vec<Message>) -> (Vec<Message>, b
                         );
                     }
                     repaired.push(Message::User {
+                        origin: kcoder_types::MessageOrigin::Runtime,
                         content: result_blocks,
                     });
                 }
             }
-            Message::User { content } => {
+            Message::User { content, origin } => {
                 let content = convert_orphan_tool_results(content);
                 if !content.is_empty() {
-                    repaired.push(Message::User { content });
+                    repaired.push(Message::User { content, origin });
                 }
                 index += 1;
             }
@@ -165,7 +170,7 @@ fn take_following_tool_results(
     let mut found = HashMap::new();
 
     for message in messages.iter_mut().skip(start) {
-        let Message::User { content } = message else {
+        let Message::User { content, .. } = message else {
             break;
         };
 
@@ -315,7 +320,10 @@ mod tests {
         let result = |id: &str| interrupted_tool_result(id);
         let variants = vec![
             Message::user_text("request"),
-            Message::User { content: vec![] },
+            Message::User {
+                origin: kcoder_types::MessageOrigin::Unknown,
+                content: vec![],
+            },
             Message::Assistant {
                 content: vec![],
                 usage: None,
@@ -333,15 +341,19 @@ mod tests {
                 usage: None,
             },
             Message::User {
+                origin: kcoder_types::MessageOrigin::Unknown,
                 content: vec![result("a")],
             },
             Message::User {
+                origin: kcoder_types::MessageOrigin::Unknown,
                 content: vec![result("a"), result("b")],
             },
             Message::User {
+                origin: kcoder_types::MessageOrigin::Unknown,
                 content: vec![result("b"), result("a")],
             },
             Message::User {
+                origin: kcoder_types::MessageOrigin::Unknown,
                 content: vec![
                     result("a"),
                     ContentBlock::Text {

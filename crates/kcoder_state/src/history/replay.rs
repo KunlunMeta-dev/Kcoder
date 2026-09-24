@@ -118,12 +118,17 @@ impl ReplayState {
             return Ok(());
         }
         let summary = is_compact_summary_record(&value);
-        let entry: HistoryEntry = serde_json::from_value(value).with_context(|| {
+        let mut entry: HistoryEntry = serde_json::from_value(value).with_context(|| {
             format!(
                 "failed to parse history message at line {}",
                 self.line_number
             )
         })?;
+        if summary {
+            entry.message = entry
+                .message
+                .with_origin(kcoder_types::MessageOrigin::Compaction);
+        }
         if !summary {
             // Generic predicates run on every original non-summary record, even if later rewound.
             let matching_prefix = self

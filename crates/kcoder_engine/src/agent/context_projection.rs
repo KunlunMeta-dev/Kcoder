@@ -107,20 +107,15 @@ pub(crate) fn recent_parent_start<'a>(
 }
 
 pub use kcoder_types::is_real_user_message;
-pub(crate) use kcoder_types::is_synthetic_parent_text;
-
-fn is_compact_summary_text(text: &str) -> bool {
-    let text = text.trim_start();
-    text.starts_with(
-        "This session is being continued from a previous conversation that ran out of context.",
-    ) || text.starts_with("Earlier conversation summary:")
-}
 
 fn semantic_parent_messages<'a>(messages: impl IntoIterator<Item = &'a Message>) -> Vec<Message> {
     messages
         .into_iter()
         .filter_map(|message| match message {
-            Message::User { content } => {
+            Message::User { content, origin } => {
+                if *origin == kcoder_types::MessageOrigin::Runtime {
+                    return None;
+                }
                 if content
                     .iter()
                     .any(|block| matches!(block, ContentBlock::ToolResult { .. }))
@@ -130,11 +125,7 @@ fn semantic_parent_messages<'a>(messages: impl IntoIterator<Item = &'a Message>)
                 let content = content
                     .iter()
                     .filter_map(|block| match block {
-                        ContentBlock::Text { text }
-                            if !text.trim().is_empty()
-                                && (!is_synthetic_parent_text(text)
-                                    || is_compact_summary_text(text)) =>
-                        {
+                        ContentBlock::Text { text } if !text.trim().is_empty() => {
                             Some(ContentBlock::Text { text: text.clone() })
                         }
                         ContentBlock::Image { source } => Some(ContentBlock::Image {
@@ -143,7 +134,10 @@ fn semantic_parent_messages<'a>(messages: impl IntoIterator<Item = &'a Message>)
                         _ => None,
                     })
                     .collect::<Vec<_>>();
-                (!content.is_empty()).then_some(Message::User { content })
+                (!content.is_empty()).then_some(Message::User {
+                    content,
+                    origin: *origin,
+                })
             }
             Message::Assistant { content, .. } => {
                 if content

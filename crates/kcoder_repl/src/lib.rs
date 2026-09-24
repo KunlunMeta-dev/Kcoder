@@ -4259,7 +4259,9 @@ impl ReplApp {
         let tool_results = messages
             .iter()
             .flat_map(|message| match message {
-                Message::User { content } | Message::Assistant { content, .. } => content.iter(),
+                Message::User { content, .. } | Message::Assistant { content, .. } => {
+                    content.iter()
+                }
             })
             .filter_map(|block| match block {
                 ContentBlock::ToolResult {
@@ -4328,7 +4330,7 @@ impl ReplApp {
         tool_results: &HashMap<String, (String, bool)>,
     ) {
         match message {
-            Message::User { content }
+            Message::User { content, .. }
                 if Self::user_content_blocks_can_merge_for_display(content) =>
             {
                 let text = content_blocks_text(content);
@@ -4336,7 +4338,7 @@ impl ReplApp {
                     self.push_message(MessageRole::User, text);
                 }
             }
-            Message::User { content } => {
+            Message::User { content, .. } => {
                 for block in content {
                     self.push_history_block(MessageRole::User, block, tool_uses);
                 }
@@ -9889,6 +9891,7 @@ fn goal_status_label(goal: &Goal) -> String {
             Some(usage) => format!("{name} unmet ({usage})"),
             None => format!("{name} abandoned"),
         },
+        GoalStatus::Cancelled => format!("{name} cancelled by user"),
         GoalStatus::Complete => format!("{name} complete ({})", completed_goal_usage(goal)),
     }
 }
@@ -10092,7 +10095,7 @@ fn fuzzy_file_score(path: &str, query: &str) -> Option<i64> {
 
 fn queued_user_message_preview(message: &Message) -> String {
     let raw = match message {
-        Message::User { content } | Message::Assistant { content, .. } => {
+        Message::User { content, .. } | Message::Assistant { content, .. } => {
             content_blocks_text(content)
         }
     };
@@ -10106,7 +10109,7 @@ fn queued_user_message_preview(message: &Message) -> String {
 
 fn editable_user_message_text(message: &Message) -> String {
     match message {
-        Message::User { content } => sanitize_tui_text(&content_blocks_text(content)),
+        Message::User { content, .. } => sanitize_tui_text(&content_blocks_text(content)),
         _ => String::new(),
     }
 }
@@ -12077,7 +12080,7 @@ async fn prepare_background_followup(
         .filter_map(|id| serde_json::from_str(&id).ok())
         .collect();
     if keys.is_empty() {
-        engine.state.add_message(Message::user_text(nudge));
+        engine.state.add_message(Message::runtime_text(nudge));
         return Ok(Some((keys, String::new())));
     }
     let records: Vec<_> = keys
@@ -12100,7 +12103,7 @@ async fn prepare_background_followup(
     }
     engine
         .state
-        .commit_message_with_uuid(Message::user_text(nudge), &turn_id)
+        .commit_message_with_uuid(Message::runtime_text(nudge), &turn_id)
         .await?;
     if !engine
         .state
@@ -12268,7 +12271,7 @@ async fn try_start_next_turn(
         Ok(kcoder_engine::orchestrate::continuation::ClaimedContinuation::Enqueued {
             prompt: nudge,
         }) => {
-            engine.state.add_message(Message::user_text(nudge));
+            engine.state.add_message(Message::runtime_text(nudge));
             start_turn(engine, app, tx, prompt);
             return Ok(StartTurnOutcome::Started);
         }
@@ -12423,7 +12426,7 @@ fn record_tui_goal_auto_continuation_start(
 ) -> Goal {
     let goal = engine
         .state
-        .record_goal_turn_start(&goal.goal_id)
+        .record_goal_continuation_start(&goal.goal_id)
         .unwrap_or_else(|| goal.clone());
     *app.goal_auto_continuations_started
         .entry(goal.goal_id.clone())
@@ -12491,7 +12494,7 @@ fn try_start_goal_continuation(
         }
     }
     let goal = record_tui_goal_auto_continuation_start(engine, app, &goal);
-    engine.state.add_message(Message::user_text(
+    engine.state.add_message(Message::runtime_text(
         kcoder_engine::goal_continuation::format_goal_continuation_prompt(&goal, &decision),
     ));
     start_turn(engine, app, tx, prompt);

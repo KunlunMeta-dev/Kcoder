@@ -36,6 +36,25 @@ describe.each([Runtime, InstalledRuntime])('initial goals reach the runtime', Ru
     }
   )
 
+  test('old remote cancellation is rejected without sending a goal mutation', async () => {
+    const client = new FakeGatewayClient('old-cancel-thread')
+    const supports = client.supportsExperimental.bind(client)
+    client.supportsExperimental = capability => capability !== 'goalCancellationV1' && supports(capability)
+    const runtime = new RuntimeClass('token', {
+      loadServers: async () => [{ id: 'local', label: 'Local', transport: 'local', workspacePath: '/workspace' }],
+      createClient: () => client,
+    })
+    try {
+      await runtime.request('runtime.tasks.create', {
+        taskId: 'cancel-goal', executionRequest: { prompt: 'fixture' },
+      })
+      await expect(runtime.request('runtime.tasks.goal.set', {
+        taskId: 'cancel-goal', status: 'cancelled',
+      })).rejects.toThrow('unsupported')
+      expect(client.requests.filter(request => request.method === 'thread/goal/set')).toHaveLength(0)
+    } finally { await runtime.dispose() }
+  })
+
   test('failed goal initialization does not start an ordinary turn or leave a fake active goal', async () => {
     const client = new FakeGatewayClient('failed-goal')
     const request = client.request.bind(client)

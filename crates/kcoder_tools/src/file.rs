@@ -1,7 +1,4 @@
-use crate::{
-    Tool, ToolContext, ToolError, ToolOutput, parse_input,
-    text_file::{read_text_file, resolve_path},
-};
+use crate::{Tool, ToolContext, ToolError, ToolOutput, parse_input, text_file::resolve_path};
 use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use kcoder_state::ReadRangeKey;
@@ -27,6 +24,10 @@ const THIN_SPACE: char = '\u{202f}';
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct FileReadInput {
+    /// Known source encoding for existing text files; auto accepts UTF-8/BOM Unicode.
+    /// Use gbk/gb18030 explicitly for Chinese legacy files; decoding never replaces invalid bytes.
+    #[serde(default)]
+    pub encoding: crate::text_file::TextEncodingHint,
     /// Absolute path, workspace-relative path, or ~/... path to the file.
     /// Directories are not accepted; use search/list tooling for directories.
     pub file_path: String,
@@ -36,9 +37,8 @@ pub struct FileReadInput {
     /// Optional maximum number of lines to read. Use a JSON integer; omit to
     /// read the default 2000-line range from the offset.
     pub limit: Option<usize>,
-    /// Optional page range for PDF files, e.g. "1-5". PDF extraction is not
-    /// implemented in this Rust tool yet; unsupported values return an
-    /// explicit error instead of silently reading binary data.
+    /// PDF text page or range, e.g. "1-5" (default 1-10, at most 20 pages).
+    /// Uses bundled pdftotext when available, otherwise the host tool; no OCR or visual rendering.
     pub pages: Option<String>,
 }
 
@@ -63,7 +63,8 @@ impl Tool for FileReadTool {
         "Read the contents of a file at the given path. \
          By default, reads up to 2000 lines from the beginning of a text file. \
          Optionally specify a 1-indexed offset and a line limit for targeted reads. \
-         Supports UTF-8 and UTF-16LE text files, common image files (PNG/JPG/GIF/WebP), \
+         Supports UTF-8 and UTF-16LE text; use encoding=gbk or gb18030 for legacy Chinese files. Supports common image files (PNG/JPG/GIF/WebP), \
+         PDF text through bundled/system pdftotext (32 MiB input limit, 20 pages per request; no OCR), \
          and Jupyter notebooks. CRLF text is shown with normalized line endings so \
          edit old_string values can use the text shown by Read. If the user provides a screenshot \
          path, use this tool to view it. Directories and binary files are rejected."
@@ -75,7 +76,9 @@ impl Tool for FileReadTool {
     }
 
     fn input_schema(&self) -> Value {
-        crate::clean_schema(schemars::schema_for!(FileReadInput))
+        let mut schema = crate::clean_schema(schemars::schema_for!(FileReadInput));
+        schema["properties"]["offset"]["minimum"] = serde_json::json!(1);
+        schema
     }
 
     fn is_read_only(&self) -> bool {
@@ -88,6 +91,11 @@ impl Tool for FileReadTool {
 
     async fn call(&self, input: Value, ctx: &ToolContext) -> Result<ToolOutput, ToolError> {
         let input: FileReadInput = parse_input(&input)?;
+        if input.offset == Some(0) {
+            return Err(ToolError::InvalidInput(
+                "read.offset is 1-indexed and must be at least 1".into(),
+            ));
+        }
         let path = normalize_lexical_path(&resolve_path(&input.file_path, &ctx.state.cwd()));
 
         if let Some(sandbox) = &ctx.sandbox {
@@ -134,13 +142,26 @@ impl Tool for FileReadTool {
             .map(|ext| ext.to_ascii_lowercase())
             .unwrap_or_default();
 
+        if input.encoding != crate::text_file::TextEncodingHint::Auto
+            && (ext == "pdf"
+                || image_media_type(&ext).is_some()
+                || (ext == "ipynb" && input.encoding != crate::text_file::TextEncodingHint::Utf8))
+        {
+            return Err(ToolError::InvalidInput("encoding applies to text files; PDF/images use their own formats and notebooks require UTF-8".into()));
+        }
+
         if ext == "pdf" {
-            return Ok(ToolOutput::error(match input.pages {
-                Some(pages) => format!(
-                    "PDF page reading is not implemented in this Rust tool yet (requested pages: {pages})."
-                ),
-                None => "PDF reading is not implemented in this Rust tool yet. Use a shell/PDF utility or provide a text export.".to_string(),
-            }));
+            if input.offset.is_some() || input.limit.is_some() {
+                return Err(ToolError::InvalidInput(
+                    "Use pages for PDF text extraction, not line offset/limit".into(),
+                ));
+            }
+            return crate::pdf_read::read_pdf(&path, input.pages.as_deref(), ctx).await;
+        }
+        if input.pages.is_some() {
+            return Err(ToolError::InvalidInput(
+                "pages applies only to PDF files".into(),
+            ));
         }
 
         if let Some(media_type) = image_media_type(&ext) {
@@ -174,8 +195,10 @@ impl Tool for FileReadTool {
             && compacted_full_snapshot
                 .as_ref()
                 .is_some_and(|snapshot| snapshot.anchor_pending || snapshot.full_body_compacted);
+
         if let Some(snapshot) = previous_snapshot.as_ref()
             && snapshot.from_read_tool
+            && snapshot.source_encoding_hint.as_deref() == Some(input.encoding.cache_key())
             && ReadRangeKey::new(snapshot.offset, snapshot.limit) == snapshot_range
             && snapshot.modified == file_modified_time(&path)
             && !explicit_range_may_cover_compacted_body
@@ -196,17 +219,17 @@ impl Tool for FileReadTool {
             && metadata.len() > MAX_TEXT_READ_BYTES
         {
             return Ok(ToolOutput::error(format!(
-                "Cannot read '{}': file is {} bytes, over the {} byte limit. Use grep to search within it, or bash with head/tail/sed to view a portion.",
+                "Cannot read '{}': file is {} bytes, over the {} byte limit. Use an attached bounded search or terminal capability, or provide a smaller file.",
                 path.display(),
                 metadata.len(),
                 MAX_TEXT_READ_BYTES
             )));
         }
 
-        let text_file = read_text_file(&path).await.map_err(|e| {
+        let text_file = crate::text_file::read_text_file_with_encoding(&path, input.encoding).await.map_err(|e| {
             if e.kind() == std::io::ErrorKind::InvalidData {
                 ToolError::Execution(format!(
-                    "This tool cannot read binary, non-UTF-8, or non-UTF-16LE files as text: {}",
+                    "This tool cannot read binary, unknown-encoding files as text; specify the known encoding explicitly: {} ({e})",
                     path.display()
                 ))
             } else {
@@ -324,20 +347,22 @@ fn record_text_read_snapshot(
         // Although this request may include offset/limit, it observed the complete
         // file. Update the independent full snapshot first. If the response is an
         // anchor, state retains a durable full_body_compacted marker and clears it when body content changes.
-        ctx.state.record_read_tool_snapshot(
+        ctx.state.record_read_tool_snapshot_with_encoding(
             path.to_path_buf(),
             Some(content.to_string()),
             modified,
             None,
             None,
+            input.encoding.cache_key(),
         );
         if !requested_range.is_full() {
-            ctx.state.record_read_tool_snapshot(
+            ctx.state.record_read_tool_snapshot_with_encoding(
                 path.to_path_buf(),
                 (!returned_anchor).then(|| content.to_string()),
                 modified,
                 input.offset,
                 input.limit,
+                input.encoding.cache_key(),
             );
             // Compaction must map a result that actually spans the complete body back to
             // the full snapshot; otherwise clearing an explicit range body would not restore anchor-only state.
@@ -347,12 +372,13 @@ fn record_text_read_snapshot(
             }
         }
     } else {
-        ctx.state.record_read_tool_snapshot(
+        ctx.state.record_read_tool_snapshot_with_encoding(
             path.to_path_buf(),
             None,
             modified,
             input.offset,
             input.limit,
+            input.encoding.cache_key(),
         );
     }
 }

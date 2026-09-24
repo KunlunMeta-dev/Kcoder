@@ -274,7 +274,7 @@ async fn indexed_tool_use_deltas_survive_delayed_content_block_stops() {
     let tool_results = messages
         .iter()
         .flat_map(|message| match message {
-            Message::User { content } => content.as_slice(),
+            Message::User { content, .. } => content.as_slice(),
             _ => &[],
         })
         .filter_map(|block| match block {
@@ -411,4 +411,76 @@ fn partition_tool_uses_runs_real_explore_agents_in_one_parallel_group() {
     assert_eq!(groups.len(), 1);
     assert!(!groups[0].sequential);
     assert_eq!(groups[0].items.len(), 2);
+}
+
+#[derive(Debug)]
+struct RequestBoundToolUseProvider {
+    emitted: AtomicBool,
+    live_settings: Mutex<Option<Arc<std::sync::RwLock<Settings>>>>,
+    enable_after_request: bool,
+    observed_attachment: Mutex<Vec<bool>>,
+}
+
+impl Provider for RequestBoundToolUseProvider {
+    fn name(&self) -> &'static str { "request-bound-tool-fixture" }
+    fn stream_messages(&self, request: MessagesRequest) -> Result<kcoder_api::ProviderStream, kcoder_api::ApiErrorKind> {
+        let first = !self.emitted.swap(true, Ordering::SeqCst);
+        self.observed_attachment.lock().unwrap().push(request.tools.iter().any(|tool| tool.name == "request_bound_write"));
+        if first {
+            self.live_settings.lock().unwrap().as_ref().unwrap().write().unwrap().model_capabilities.tools = self.enable_after_request;
+        }
+        Ok(Box::pin(async_stream::stream! {
+            if first {
+                yield Ok(StreamEvent::ContentBlockStart { index: 0, content_block: ContentBlock::ToolUse {
+                    id: "unsolicited-or-attached".into(), name: "request_bound_write".into(), input: serde_json::json!({}),
+                }});
+                yield Ok(StreamEvent::ContentBlockStop { index: 0 });
+            }
+            yield Ok(StreamEvent::MessageStop);
+        }))
+    }
+}
+
+struct RequestBoundWriteTool { target: std::path::PathBuf, calls: Arc<AtomicUsize> }
+#[async_trait::async_trait]
+impl kcoder_tools::Tool for RequestBoundWriteTool {
+    fn name(&self) -> String { "request_bound_write".into() }
+    fn description(&self) -> String { "Write the test marker".into() }
+    fn input_schema(&self) -> Value { serde_json::json!({"type":"object","properties":{}}) }
+    async fn call(&self, _: Value, _: &kcoder_tools::ToolContext) -> Result<kcoder_tools::ToolOutput, kcoder_tools::ToolError> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        tokio::fs::write(&self.target, "executed").await.unwrap();
+        Ok(kcoder_tools::ToolOutput::text("marker written"))
+    }
+}
+
+#[tokio::test]
+async fn model_tool_execution_uses_request_allowset_even_when_capability_changes_mid_response() {
+    for originally_attached in [false, true] {
+        let root = tempfile::tempdir().unwrap();
+        let target = root.path().join("side-effect.txt");
+        let calls = Arc::new(AtomicUsize::new(0));
+        let provider = Arc::new(RequestBoundToolUseProvider {
+            emitted: AtomicBool::new(false), live_settings: Mutex::new(None),
+            enable_after_request: !originally_attached, observed_attachment: Mutex::new(vec![]),
+        });
+        let mut settings = Settings { permission_mode: PermissionMode::Bypass, ..Settings::default() };
+        settings.model_capabilities.tools = originally_attached;
+        let engine = TestEngineBuilder::new(root.path()).settings(settings).provider(provider.clone())
+            .tool_registry(ToolRegistry::new().register(RequestBoundWriteTool { target: target.clone(), calls: calls.clone() })).build();
+        *provider.live_settings.lock().unwrap() = Some(engine.settings.clone());
+        engine.state.add_message(Message::user_text("exercise request-bound capability"));
+        let prompt = kcoder_permissions::AutoAllowPrompt;
+        let mut events = engine.run_turn_stream(&prompt);
+        let mut tool_errors = vec![];
+        while let Some(event) = events.next().await {
+            if let EngineEvent::ToolResult { name, output, .. } = event {
+                if name == "request_bound_write" { tool_errors.push(output.is_error); }
+            }
+        }
+        assert_eq!(provider.observed_attachment.lock().unwrap()[0], originally_attached);
+        assert_eq!(calls.load(Ordering::SeqCst), usize::from(originally_attached));
+        assert_eq!(target.exists(), originally_attached);
+        assert_eq!(tool_errors, vec![!originally_attached]);
+    }
 }

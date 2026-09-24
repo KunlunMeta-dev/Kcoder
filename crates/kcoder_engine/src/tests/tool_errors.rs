@@ -525,3 +525,13 @@ async fn invalid_tool_input_includes_top_three_past_repair_examples() {
     assert_eq!(text.matches("Successful corrected call:").count(), 3);
     assert!(text.contains("Use the corrected JSON shapes"));
 }
+
+#[test]
+fn unknown_tool_error_does_not_advertise_the_unfiltered_backing_registry() {
+    let output = unknown_tool_output("missing", &kcoder_tools::default_registry());
+    let serialized = serde_json::to_string(&output.content).unwrap();
+    assert!(serialized.contains("attached to the current request"));
+    for hidden in ["AskUserQuestion", "create_goal", "EnterPlanMode", "apply_patch"] {
+        assert!(!serialized.contains(hidden));
+    }
+}

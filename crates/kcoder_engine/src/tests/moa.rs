@@ -1,5 +1,5 @@
 #[test]
-fn append_moa_context_adds_private_block_to_latest_user_text() {
+fn append_moa_context_keeps_generated_context_separate_from_user_text() {
     let messages = vec![
         Message::user_text("first"),
         Message::assistant_text("answer"),
@@ -13,11 +13,12 @@ fn append_moa_context_adds_private_block_to_latest_user_text() {
             label: "minimax:MiniMax-M2.7".to_string(),
             text: "aggregated advice".to_string(),
         }],
+        true,
     );
 
     let enhanced = append_moa_context(messages.into(), &context);
     let last_text = match enhanced.last().unwrap() {
-        Message::User { content } => content
+        Message::User { content, .. } => content
             .iter()
             .find_map(|block| match block {
                 ContentBlock::Text { text } => Some(text.as_str()),
@@ -27,7 +28,9 @@ fn append_moa_context_adds_private_block_to_latest_user_text() {
         _ => panic!("expected latest message to remain user"),
     };
 
-    assert!(last_text.starts_with("latest"));
+    assert_eq!(enhanced[2], Message::user_text("latest"));
+    assert_eq!(enhanced.last().unwrap().origin(), kcoder_types::MessageOrigin::Runtime);
+    assert_eq!(enhanced.len(), 4);
     assert!(last_text.contains("[Mixture of Agents reference context]"));
     assert!(last_text.contains("Aggregator/acting model: minimax:MiniMax-M3"));
     assert!(last_text.contains("Reference 1"));
@@ -48,13 +51,14 @@ fn append_moa_context_adds_trailing_user_when_latest_message_is_not_user() {
             label: "minimax:MiniMax-M2.7".to_string(),
             text: "private advice".to_string(),
         }],
+        true,
     );
 
     let enhanced = append_moa_context(messages.into(), &context);
 
     assert_eq!(enhanced.len(), 3);
     let last_text = match enhanced.last().unwrap() {
-        Message::User { content } => content
+        Message::User { content, .. } => content
             .iter()
             .find_map(|block| match block {
                 ContentBlock::Text { text } => Some(text.as_str()),
@@ -139,19 +143,19 @@ async fn run_moa_references_returns_failed_reference_outputs() {
 }
 
 #[test]
-fn moa_context_detaches_only_the_latest_user_payload() {
+fn moa_context_keeps_all_user_payloads_shared_and_appends_runtime_context() {
     let original = kcoder_types::SharedMessages::from(vec![
         Message::user_text("large history".repeat(100_000)),
         Message::assistant_text("stable answer"),
         Message::user_text("latest"),
     ]);
     let enhanced = append_moa_context(original.clone(), "private advice");
-    for index in 0..2 {
+    for index in 0..3 {
         assert!(std::ptr::eq(&original[index], &enhanced[index]));
     }
-    assert!(!std::ptr::eq(&original[2], &enhanced[2]));
     assert_eq!(original[2], Message::user_text("latest"));
-    assert_eq!(enhanced[2], Message::user_text("latest\n\nprivate advice"));
+    assert_eq!(enhanced[2], Message::user_text("latest"));
+    assert_eq!(enhanced[3], Message::runtime_text("private advice"));
 }
 
 #[test]
@@ -164,7 +168,7 @@ fn moa_context_trailing_user_keeps_all_existing_payloads_shared() {
     for index in 0..original.len() {
         assert!(std::ptr::eq(&original[index], &enhanced[index]));
     }
-    assert_eq!(enhanced[2], Message::user_text("advice"));
+    assert_eq!(enhanced[2], Message::runtime_text("advice"));
     assert_eq!(original.len(), 2);
 }
 
@@ -225,4 +229,15 @@ fn moa_provider_retains_the_host_credential_factory() {
     assert_eq!(seen.len(), 1);
     assert_eq!(seen[0].active_provider.as_deref(), Some("moa-fixture"));
     assert_eq!(seen[0].model, "moa-fixture");
+}
+
+#[test]
+fn moa_context_does_not_invent_tools_for_text_only_aggregator() {
+    let model = MoaModelConfig::new("test", "test");
+    let no_tools = moa_reference_context("default", &model, &[], false);
+    assert!(no_tools.contains("No tools are available"));
+    assert!(!no_tools.contains("call tools as needed"));
+    let tools = moa_reference_context("default", &model, &[], true);
+    assert!(tools.contains("only the tools attached"));
+    assert!(!tools.contains("No tools are available"));
 }

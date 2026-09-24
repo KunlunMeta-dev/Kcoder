@@ -120,3 +120,19 @@ fn provider_failure_app_server_goal_status_preserves_typed_quota() {
         }
     }
 }
+
+#[test]
+fn goal_lifecycle_cancelled_wire_state_does_not_resume_or_accept_stale_finish() {
+    let temp = tempfile::tempdir().unwrap();
+    let engine = runtime_context_test_engine(temp.path(), None);
+    engine.state.set_goal("cancel me", None);
+    let mut lifecycle = goal_lifecycle::GoalLifecycle::default();
+    let ticket = lifecycle.begin(&engine, None, None);
+    assert_eq!(parse_goal_status("cancelled").unwrap(), GoalStatus::Cancelled);
+    let goal = engine.state.update_goal_status(GoalStatus::Cancelled).unwrap();
+    assert!(ensure_goal_status_transition(goal.status, Some(GoalStatus::Active)).is_err());
+    assert_eq!(thread_goal("thread", &goal).status, "cancelled");
+    lifecycle.finish(&engine, ticket, "completed", None);
+    assert!(!lifecycle.pending());
+    assert_eq!(engine.state.goal().unwrap().status, GoalStatus::Cancelled);
+}

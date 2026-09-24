@@ -871,6 +871,8 @@ pub struct WorktreeSessionState {
 /// Runtime record of a file read in the current session.
 #[derive(Debug, Clone)]
 pub struct FileReadSnapshot {
+    /// Decoder selection that produced this snapshot; not inferred from text.
+    pub source_encoding_hint: Option<String>,
     pub content: Option<Arc<str>>,
     pub modified: Option<SystemTime>,
     pub offset: Option<usize>,

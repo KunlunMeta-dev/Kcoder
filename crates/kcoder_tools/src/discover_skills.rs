@@ -35,8 +35,7 @@ impl Tool for DiscoverSkillsTool {
          when looking for specialized skills for an unusual workflow. Results are \
          ranked by TF-IDF-style keyword matching over registered skill names, \
          descriptions, and when-to-use guidance. Matching results update local \
-         skill-view telemetry, so this tool is stateful and serialized. Invoke a \
-         matching skill with the Skill tool before acting when the skill applies."
+         skill-view telemetry, so this tool is stateful and serialized. Activate a matching skill before applying its workflow when an activation control is attached."
             .to_string()
     }
 
@@ -520,7 +519,7 @@ mod tests {
 
     #[test]
     fn discover_skills_description_points_to_skill_tool() {
-        assert!(DiscoverSkillsTool.description().contains("Skill tool"));
+        assert!(DiscoverSkillsTool.description().contains("when an activation control is attached"));
         assert!(DiscoverSkillsTool.description().contains("TF-IDF"));
     }
 }

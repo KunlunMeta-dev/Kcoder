@@ -30,6 +30,7 @@ chrono-tz = { workspace = true }
 dirs = { workspace = true }
 schemars = "0.8"
 base64 = "0.22"
+encoding_rs = "0.8.35"
 html-escape = "0.2"
 globset = { workspace = true }
 walkdir = { workspace = true }

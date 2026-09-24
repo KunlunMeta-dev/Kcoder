@@ -29,28 +29,28 @@ impl PostCompactAttachments {
         let mut messages = Vec::new();
 
         if !self.project_md_digest.is_empty() {
-            messages.push(Message::user_text(format!(
+            messages.push(Message::runtime_text(format!(
                 "Project instructions (KCODER.md):\n{}",
                 self.project_md_digest
             )));
         }
 
         if let Some(instructions) = &self.post_compact_instructions {
-            messages.push(Message::user_text(format!(
+            messages.push(Message::runtime_text(format!(
                 "Additional instructions after compaction:\n{}",
                 instructions
             )));
         }
 
         if let Some(context) = &self.orchestrate_context {
-            messages.push(Message::user_text(format!(
+            messages.push(Message::runtime_text(format!(
                 "Orchestrate resume point after compaction:\n{}",
                 context
             )));
         }
 
         if !self.memory_text.is_empty() {
-            messages.push(Message::user_text(format!(
+            messages.push(Message::runtime_text(format!(
                 "Relevant memories:\n{}",
                 self.memory_text
             )));
@@ -58,15 +58,15 @@ impl PostCompactAttachments {
 
         if !self.active_skills.is_empty() {
             let skills = self.active_skills.join(", ");
-            messages.push(Message::user_text(format!(
-                "Active skills: {}. You may continue to use them via the skill tool.",
+            messages.push(Message::runtime_text(format!(
+                "Active skills: {}. Their loaded instructions remain context; additional activation is possible only if a corresponding tool is attached to the current request.",
                 skills
             )));
         }
 
         if let Some(plan) = self.plan_mode_instructions {
-            messages.push(Message::user_text(format!(
-                "You are currently in plan mode:\n{}",
+            messages.push(Message::runtime_text(format!(
+                "You are currently in plan mode. This is a runtime restriction, not a grant of model-callable mode controls; use only controls attached to the current request, otherwise mode changes belong to the user or host:\n{}",
                 plan
             )));
         }
@@ -95,7 +95,7 @@ impl PostCompactAttachments {
         if parts.is_empty() {
             return None;
         }
-        Some(Message::user_text(parts.join("\n\n")))
+        Some(Message::runtime_text(parts.join("\n\n")))
     }
 }
 
@@ -119,7 +119,7 @@ pub fn collect_recent_file_attachments(
     let mut attachments = Vec::new();
 
     for message in messages.iter().rev() {
-        let Message::User { content } = message else {
+        let Message::User { content, .. } = message else {
             continue;
         };
 
@@ -158,7 +158,7 @@ pub fn collect_recent_file_attachments(
                 continue;
             }
 
-            attachments.push(Message::user_text(format!(
+            attachments.push(Message::runtime_text(format!(
                 "Recent file read retained after compaction ({path}):\n{}",
                 truncate_attachment(&text)
             )));
@@ -203,7 +203,7 @@ pub fn build_tools_delta_attachment(tool_names: &[String], _call_site: &str) -> 
     if tool_names.is_empty() {
         return None;
     }
-    Some(Message::user_text(format!(
+    Some(Message::runtime_text(format!(
         "Available tools after compaction: {}",
         tool_names.join(", ")
     )))
@@ -286,6 +286,23 @@ fn truncate_attachment(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn compaction_restores_state_without_inventing_model_controls() {
+        let attachments = super::PostCompactAttachments {
+            active_skills: vec!["known-skill".into()],
+            plan_mode_instructions: Some("Inspect only".into()),
+            post_compact_instructions: Some("User text mentioning a custom_tool remains intact".into()),
+            ..Default::default()
+        };
+        let messages = attachments.into_messages();
+        let text = serde_json::to_string(&messages).unwrap();
+        assert!(text.contains("known-skill"));
+        assert!(text.contains("only if a corresponding tool is attached"));
+        assert!(!text.contains("via the skill tool"));
+        assert!(text.contains("mode changes belong to the user or host"));
+        assert!(text.contains("custom_tool remains intact"));
+    }
+
     use super::*;
 
     fn read_tool_use(id: &str, path: &str) -> Message {
@@ -301,6 +318,7 @@ mod tests {
 
     fn tool_result(id: &str, text: &str) -> Message {
         Message::User {
+            origin: kcoder_types::MessageOrigin::Unknown,
             content: vec![ContentBlock::ToolResult {
                 tool_use_id: id.to_string(),
                 content: vec![ContentBlock::Text {

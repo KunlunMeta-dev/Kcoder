@@ -138,7 +138,7 @@ impl Tool for OcrReviewTool {
          Start with preview=true on large workspaces to see the review scope; a full review may take many minutes \
          and may send repository diffs or file contents to the OCR-configured LLM provider. \
          If a review is still running after foregroundTimeoutSeconds (default 60), KCoder returns a background task id; \
-         use TaskOutput to check it and TaskStop to cancel it."
+         inspect or cancel it through the corresponding job controls when attached."
             .to_string()
     }
 
@@ -471,7 +471,7 @@ fn ocr_background_started_output(
             "foreground_timeout_seconds": foreground_timeout.as_secs(),
             "command_timeout_ms": wall_timeout.as_millis().min(u128::from(u64::MAX)) as u64,
             "next_action": format!(
-                "OpenCodeReview is still running after {}s, so KCoder moved it to the background as `{task_id}`. Continue useful work. Use TaskOutput with block=false to check progress/status, use a short blocking timeout only when the result is required, or TaskStop to cancel it.",
+                "OpenCodeReview is still running after {}s, so KCoder moved it to the background as `{task_id}`. Continue useful work. Use attached managed-job controls or the host for inspection/cancellation; otherwise rely on completion notifications.",
                 foreground_timeout.as_secs()
             ),
         })

@@ -94,7 +94,7 @@ impl Tool for LocalMemoryRecallTool {
         "Recall the user's own curated notes stored in ~/.kcoder/local-memory/ — a separate, user-managed namespace that is NOT the structured long-term memory store. The user manages these notes via /local-memory CLI (list, create, store, fetch, archive). \
          Use this tool when the user references prior notes, says 'last time' or 'my saved X', \
          or when continuing multi-session work. To write or search the agent's own long-term facts, \
-         use remember / memory_search instead — those live in the structured store. This tool is read-only — to write notes, \
+         use attached structured-memory controls if available; those operate on a separate store. This tool is read-only — to write notes, \
          ask the user to run /local-memory store. Default behavior returns a 2KB preview; \
          set preview_only=false only when full content is necessary. Each fetch is capped at 50KB \
          and all fetch calls in the same turn share a 100KB budget. Returned memory content is \

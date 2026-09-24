@@ -14,7 +14,7 @@ test("Windows full desktop package contains native runtime, Gateway, renderer an
   await verifyManifest(resolve(root, "resources"), { expectedCommit: process.env.KCODER_RELEASE_EXPECTED_COMMIT });
   const gatewayPackage = JSON.parse(await readFile(resolve(root, "resources/gateway/package.json"), "utf8"));
   assert.equal(gatewayPackage.type, "module", "external Gateway must declare its own module scope");
-  for (const path of ["kcoder-studio.exe", "resources/bin/kcoder.exe", "resources/bin/kcoder-process-supervisor.exe", "resources/bin/chrome/chrome-win64/chrome.exe"]) {
+  for (const path of ["kcoder-studio.exe", "resources/bin/kcoder.exe", "resources/bin/kcoder-process-supervisor.exe", "resources/bin/chrome/chrome-win64/chrome.exe", "resources/bin/pdf/pdftotext.exe"]) {
     await assertWindowsX64Executable(resolve(root, path));
   }
   const bins = await readdir(resolve(root, "resources/bin"));
@@ -22,6 +22,10 @@ test("Windows full desktop package contains native runtime, Gateway, renderer an
   await access(resolve(root, "resources/renderer-dist/index.html"));
   await access(resolve(root, "resources/bin/chrome/chrome-win64/ABOUT"));
   await access(resolve(root, "resources/bin/chrome/.kcoder-chrome.json"));
+  await access(resolve(root, "resources/bin/pdf/.kcoder-pdf.json"));
+  await access(resolve(root, "resources/bin/pdf/xpdfrc"));
+  await access(resolve(root, "resources/bin/pdf/COPYING"));
+  await access(resolve(root, "resources/bin/pdf/COPYING3"));
   await access(resolve(root, "resources/gateway/src/server-config.js"));
   await access(resolve(root, "使用说明.txt"));
   const asar = await readFile(resolve(root, "resources/app.asar"));

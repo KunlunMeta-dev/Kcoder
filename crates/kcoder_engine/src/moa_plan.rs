@@ -111,7 +111,7 @@ pub(crate) fn moa_plan_portable_messages(messages: &[Message]) -> Vec<Message> {
     let mut portable = Vec::new();
     for message in messages {
         match message {
-            Message::User { content } => {
+            Message::User { content, .. } => {
                 if let Some(text) = portable_content_text(content) {
                     let role = if moa_content_is_only_tool_results(content) {
                         MessageRole::Assistant

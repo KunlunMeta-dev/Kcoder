@@ -1,7 +1,7 @@
 import type { RuntimeGoal, RuntimeGoalContinuationPayload } from '@/types/api'
 
 export function isVisibleRuntimeGoal(goal: RuntimeGoal | null | undefined): goal is RuntimeGoal {
-  return Boolean(goal && goal.status !== 'complete')
+  return Boolean(goal && goal.status !== 'complete' && goal.status !== 'cancelled')
 }
 
 export function visibleRuntimeGoal(goal: RuntimeGoal | null | undefined): RuntimeGoal | null {

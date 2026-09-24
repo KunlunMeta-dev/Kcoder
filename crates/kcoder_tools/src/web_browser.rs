@@ -53,7 +53,8 @@ fn shared_client() -> reqwest::Client {
 pub enum BrowserAction {
     #[default]
     Navigate,
-    Screenshot,
+    #[serde(alias = "screenshot")]
+    Snapshot,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -61,7 +62,7 @@ pub struct WebBrowserInput {
     /// URL to fetch and extract content from.
     pub url: String,
     /// Action to perform. "navigate" fetches page content (default).
-    /// "screenshot" returns a text snapshot of the page.
+    /// "snapshot" returns a text-only snapshot, never an image.
     #[serde(default)]
     pub action: BrowserAction,
 }
@@ -104,7 +105,7 @@ impl Tool for WebBrowserTool {
     }
 
     fn description(&self) -> String {
-        "Fetch and read web page content via HTTP. This is a lightweight browser: it can navigate to a URL and extract server-rendered HTML text, but it does not execute JavaScript and cannot click, type, scroll, or capture real visual screenshots."
+        "Inspect the title and server-rendered HTML text of one page with navigate or snapshot. Document retrieval with HTTP metadata and caching is a separate capability. Returns text only, never a screenshot or visual evidence. No JavaScript execution or interactive browser controls."
             .to_string()
     }
 
@@ -207,9 +208,9 @@ impl Tool for WebBrowserTool {
             text = format!("[page body truncated at 10 MB download cap]\n\n{}", text);
         }
 
-        if matches!(input.action, BrowserAction::Screenshot) {
+        if matches!(input.action, BrowserAction::Snapshot) {
             text = format!(
-                "[Text snapshot — visual screenshots require Chrome browser tools or another full browser runtime]\n\n{}",
+                "[Text snapshot — no image was captured or visually inspected]\n\n{}",
                 text
             );
         }
@@ -267,5 +268,24 @@ mod tests {
         let text = text_from_output(output);
         assert!(text.contains("Error (not a url)"));
         assert!(text.contains("Invalid URL"));
+    }
+}
+
+#[cfg(test)]
+mod snapshot_contract_tests {
+    use super::*;
+    #[test]
+    fn advertises_text_snapshot_and_accepts_legacy_spelling() {
+        for action in ["snapshot", "screenshot"] {
+            let input: WebBrowserInput = serde_json::from_value(
+                serde_json::json!({"url":"https://example.test", "action": action}),
+            )
+            .unwrap();
+            assert!(matches!(input.action, BrowserAction::Snapshot));
+        }
+        let schema = WebBrowserTool.input_schema().to_string();
+        assert!(schema.contains("snapshot"));
+        assert!(!schema.contains("\"screenshot\""));
+        assert!(WebBrowserTool.description().contains("text only"));
     }
 }

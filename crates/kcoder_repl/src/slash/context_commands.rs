@@ -39,7 +39,7 @@ impl ContextBreakdown {
 
         for msg in messages.iter() {
             let blocks = match msg {
-                Message::User { content } => content,
+                Message::User { content, .. } => content,
                 Message::Assistant { content, .. } => content,
             };
             for block in blocks {

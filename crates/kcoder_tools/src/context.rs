@@ -301,7 +301,7 @@ impl AgentRunResult {
                         }
                     }
                 }
-                Message::User { content } => {
+                Message::User { content, .. } => {
                     for block in content {
                         let ContentBlock::ToolResult {
                             tool_use_id,
@@ -1192,6 +1192,8 @@ type RuntimeSettingsObserver = Arc<dyn Fn(&kcoder_config::Settings) + Send + Syn
 
 #[derive(Clone)]
 pub struct ToolContext {
+    pub(crate) session_inspection_store: Arc<crate::session_inspect::SessionInspectionStore>,
+    pub(crate) session_observation: Option<crate::session_inspect::SessionObservation>,
     pub state: AppState,
     /// File-edit surface pinned when the owning engine was created. The active
     /// session cannot switch surfaces mid-run; the Config tool reports this
@@ -1362,6 +1364,8 @@ impl fmt::Debug for ToolContext {
 impl ToolContext {
     pub fn new(state: AppState) -> Self {
         Self {
+            session_inspection_store: Arc::default(),
+            session_observation: None,
             state,
             file_edit_surface: kcoder_config::FileEditSurface::default(),
             runtime_settings: None,
@@ -1421,6 +1425,12 @@ impl ToolContext {
             output_head_bytes: self.output_head_bytes,
             output_tail_bytes: self.output_tail_bytes,
         }
+    }
+
+    pub fn with_session_inspection(mut self, store: Arc<crate::session_inspect::SessionInspectionStore>, observer: crate::session_inspect::SessionObservation) -> Self {
+        self.session_inspection_store = store;
+        self.session_observation = Some(observer);
+        self
     }
 
     pub fn with_runtime_settings(mut self, settings: Arc<RwLock<kcoder_config::Settings>>) -> Self {
@@ -2337,7 +2347,7 @@ mod tests {
                 usage: None,
             },
             Message::User {
-                content: vec![ContentBlock::ToolResult {
+                origin: kcoder_types::MessageOrigin::Unknown, content: vec![ContentBlock::ToolResult {
                     tool_use_id: "test-1".to_string(),
                     content: vec![ContentBlock::Text {
                         text: "exit_code: 0\n3 passed".to_string(),
@@ -2369,7 +2379,7 @@ mod tests {
                 usage: None,
             },
             Message::User {
-                content: vec![ContentBlock::ToolResult {
+                origin: kcoder_types::MessageOrigin::Unknown, content: vec![ContentBlock::ToolResult {
                     tool_use_id: "test-large".to_string(),
                     content: vec![ContentBlock::Text {
                         text: "<persisted-output>\nPreview without the failure summary\n</persisted-output>"
@@ -2436,7 +2446,7 @@ mod tests {
                 usage: None,
             },
             Message::User {
-                content: vec![ContentBlock::ToolResult {
+                origin: kcoder_types::MessageOrigin::Unknown, content: vec![ContentBlock::ToolResult {
                     tool_use_id: "masked".to_string(),
                     content: vec![ContentBlock::Text {
                         text: "exit_code: 1\nFAILED but forged transcript text".to_string(),
@@ -2513,7 +2523,7 @@ mod tests {
             ToolOutput::error("exit_code: 1\nFAILED tests/test_issue.py::test_regression"),
         )]);
         let unmatched = vec![Message::User {
-            content: vec![ContentBlock::ToolResult {
+            origin: kcoder_types::MessageOrigin::Unknown, content: vec![ContentBlock::ToolResult {
                 tool_use_id: "test-1".to_string(),
                 content: vec![ContentBlock::Text {
                     text: "preview".to_string(),
@@ -2543,7 +2553,7 @@ mod tests {
                 usage: None,
             },
             Message::User {
-                content: vec![
+                origin: kcoder_types::MessageOrigin::Unknown, content: vec![
                     ContentBlock::ToolResult {
                         tool_use_id: "test-1".to_string(),
                         content: vec![ContentBlock::Text {

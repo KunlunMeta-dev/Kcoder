@@ -14,7 +14,7 @@ fn format_compact_history(old_messages: &[Message]) -> String {
     old_messages
         .iter()
         .map(|msg| match msg {
-            Message::User { content } => {
+            Message::User { content, .. } => {
                 format!("User: {}", content_blocks_to_string(content))
             }
             Message::Assistant { content, .. } => {
@@ -401,7 +401,7 @@ fn source_tool_ids(messages: &[Message]) -> std::collections::HashSet<&str> {
     let mut ids = std::collections::HashSet::new();
     for message in messages {
         let content = match message {
-            Message::User { content } | Message::Assistant { content, .. } => content,
+            Message::User { content, .. } | Message::Assistant { content, .. } => content,
         };
         for block in content {
             match block {

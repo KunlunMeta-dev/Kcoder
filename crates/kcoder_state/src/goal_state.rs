@@ -178,6 +178,56 @@ impl AppState {
 
     /// Clear the current `/goal`. Returns the removed goal, if one existed.
     pub fn clear_goal(&self) -> Option<Goal> {
+        self.clear_goal_inner()
+    }
+
+    /// Explicit user removal records cancellation before removing the current goal.
+    pub fn clear_goal_by_user(&self) -> anyhow::Result<Option<Goal>> {
+        let _persist = self.lock_session_state_persistence();
+        let removed = {
+            let mut inner = self.write_inner();
+            let mut removed = inner.goal.take();
+            if let Some(goal) = removed.as_mut() {
+                if goal.status.is_unfinished() || goal.status.is_user_resumable() {
+                    refresh_goal_wall_elapsed(goal, now_millis());
+                    goal.status = GoalStatus::Cancelled;
+                    goal.push_event(GoalEventKind::Cancelled, "goal explicitly cleared by user");
+                    goal.touch();
+                }
+                archive_goal(&mut inner.goal_history, goal.clone());
+            }
+            removed
+        };
+        // Never restore an active goal after the user asked to stop it.
+        self.try_persist_latest_session_state_locked().context(
+            "Goal stopped in memory, but clearing was not saved. Repair storage and retry clear before restarting.",
+        )?;
+        Ok(removed)
+    }
+
+    pub fn cancel_goal_by_user(&self) -> anyhow::Result<Option<Goal>> {
+        let _persist = self.lock_session_state_persistence();
+        let goal = {
+            let mut inner = self.write_inner();
+            let Some(goal) = inner.goal.as_mut() else { return Ok(None); };
+            if !goal.status.is_unfinished() && !goal.status.is_user_resumable() && goal.status != GoalStatus::Cancelled { return Ok(None); }
+            if goal.status != GoalStatus::Cancelled {
+                refresh_goal_wall_elapsed(goal, now_millis());
+                goal.status = GoalStatus::Cancelled;
+                goal.push_event(GoalEventKind::Cancelled, "goal explicitly cancelled by user");
+                goal.touch();
+            }
+            let goal = goal.clone();
+            archive_goal(&mut inner.goal_history, goal.clone());
+            goal
+        };
+        self.try_persist_latest_session_state_locked().context(
+            "Goal stopped in memory, but cancellation was not saved. Repair storage and retry cancel before restarting.",
+        )?;
+        Ok(Some(goal))
+    }
+
+    fn clear_goal_inner(&self) -> Option<Goal> {
         let _persist = self.lock_session_state_persistence();
         let removed = {
             let mut inner = self.write_inner();
@@ -217,14 +267,30 @@ impl AppState {
 
     /// Update the current `/goal` status.
     pub fn update_goal_status(&self, status: GoalStatus) -> Option<Goal> {
+        self.update_goal_status_inner(status, None)
+    }
+
+    /// Model verdicts cannot overwrite a concurrent user cancellation/edit/replacement.
+    pub fn commit_goal_model_status(&self, goal_id: &str, revision: u64, status: GoalStatus) -> Option<Goal> {
+        if !matches!(status, GoalStatus::Complete | GoalStatus::Blocked) { return None; }
+        self.update_goal_status_inner(status, Some((goal_id, revision)))
+    }
+
+    fn update_goal_status_inner(&self, status: GoalStatus, expected: Option<(&str, u64)>) -> Option<Goal> {
         let _persist = self.lock_session_state_persistence();
         let goal = {
             let mut inner = self.write_inner();
             let goal = inner.goal.as_mut()?;
+            if let Some((id, revision)) = expected {
+                if goal.goal_id != id || goal.revision != revision
+                    || !matches!(goal.status, GoalStatus::Active | GoalStatus::BudgetLimited) { return None; }
+            }
             let now = now_millis();
             refresh_goal_wall_elapsed(goal, now);
             if status == GoalStatus::Active && goal.status != GoalStatus::Active {
                 goal.blocked_candidate_fingerprint = None;
+                goal.blocked_candidate_id = None;
+                goal.blocked_candidate_reason = None;
                 goal.blocked_candidate_count = 0;
                 goal.blocked_candidate_last_turn = None;
                 goal.push_event(GoalEventKind::Resumed, "goal resumed");
@@ -239,6 +305,7 @@ impl AppState {
                         Some((GoalEventKind::BudgetLimited, "token budget reached"))
                     }
                     GoalStatus::Complete => Some((GoalEventKind::Complete, "goal completed")),
+                    GoalStatus::Cancelled => Some((GoalEventKind::Cancelled, "goal explicitly cancelled by user")),
                     GoalStatus::Active => None,
                 };
                 if let Some((kind, summary)) = event {
@@ -309,8 +376,32 @@ impl AppState {
         self.account_goal_usage_inner(token_delta, elapsed_seconds, false)
     }
 
-    /// Record that a model turn has started for the active `/goal`.
+    /// Count one admitted outer Engine execution, not an API retry or tool round.
+    /// A goal created during an execution starts at epoch zero; each later execution
+    /// advances this epoch once. Only this boundary defines consecutive audit turns.
     pub fn record_goal_turn_start(&self, goal_id: &str) -> Option<Goal> {
+        let _persist = self.lock_session_state_persistence();
+        let goal = {
+            let mut inner = self.write_inner();
+            let goal = inner.goal.as_mut()?;
+            if goal.goal_id != goal_id || !goal.status.is_active() { return None; }
+            goal.turn_count = goal.turn_count.saturating_add(1);
+            if goal.blocked_candidate_last_turn.is_some_and(|last| last.saturating_add(1) < goal.turn_count) {
+                goal.blocked_candidate_count = 0;
+                goal.blocked_candidate_last_turn = None;
+                goal.blocked_candidate_fingerprint = None;
+                goal.blocked_candidate_id = None;
+                goal.blocked_candidate_reason = None;
+            }
+            goal.touch();
+            goal.clone()
+        };
+        self.persist_latest_session_state_locked();
+        Some(goal)
+    }
+
+    /// Count host-scheduled automatic continuations separately from execution epochs.
+    pub fn record_goal_continuation_start(&self, goal_id: &str) -> Option<Goal> {
         let _persist = self.lock_session_state_persistence();
         let goal = {
             let mut inner = self.write_inner();
@@ -319,7 +410,6 @@ impl AppState {
                 if goal.goal_id != goal_id || !goal.status.is_active() {
                     return None;
                 }
-                goal.turn_count = goal.turn_count.saturating_add(1);
                 goal.continuation_count = goal.continuation_count.saturating_add(1);
                 goal.push_event(
                     GoalEventKind::Continuation,
@@ -337,10 +427,17 @@ impl AppState {
 
     /// Record a model-proposed blocked candidate at most once per goal turn.
     pub fn record_goal_blocked_candidate(&self, fingerprint: &str) -> Option<Goal> {
+        self.record_goal_blocked_candidate_details(fingerprint, None, None, None)
+    }
+
+    pub fn record_goal_blocked_candidate_details(
+        &self, fingerprint: &str, blocker_id: Option<&str>, reason: Option<&str>, expected: Option<(&str, u64)>,
+    ) -> Option<Goal> {
         let _persist = self.lock_session_state_persistence();
         let goal = {
             let mut inner = self.write_inner();
             let goal = inner.goal.as_mut()?;
+            if expected.is_some_and(|(id, revision)| goal.goal_id != id || goal.revision != revision) { return None; }
             if !matches!(goal.status, GoalStatus::Active | GoalStatus::BudgetLimited) {
                 return None;
             }
@@ -350,12 +447,19 @@ impl AppState {
                 goal.blocked_candidate_count = 0;
                 goal.blocked_candidate_last_turn = None;
             }
+            goal.blocked_candidate_id = blocker_id.map(|id| id.chars().take(128).collect());
+            goal.blocked_candidate_reason = reason.map(|text| text.chars().filter(|c| !c.is_control()).take(512).collect());
             if goal.blocked_candidate_last_turn != Some(goal.turn_count) {
-                goal.blocked_candidate_count = goal.blocked_candidate_count.saturating_add(1);
+                let consecutive = goal.blocked_candidate_last_turn
+                    .and_then(|turn| turn.checked_add(1)) == Some(goal.turn_count);
+                goal.blocked_candidate_count = if consecutive { goal.blocked_candidate_count.saturating_add(1) } else { 1 };
                 goal.blocked_candidate_last_turn = Some(goal.turn_count);
                 goal.push_event(
                     GoalEventKind::BlockedCandidate,
-                    format!("blocked candidate attempt {}", goal.blocked_candidate_count),
+                    format!("turn {} blocked candidate {}/3 [{}]: {}", goal.turn_count,
+                        goal.blocked_candidate_count,
+                        goal.blocked_candidate_id.as_deref().unwrap_or("reason").chars().take(64).collect::<String>(),
+                        goal.blocked_candidate_reason.as_deref().unwrap_or("no reason supplied")),
                 );
             }
             goal.touch();
@@ -606,6 +710,103 @@ mod tests {
                 selection,
             )
             .unwrap()
+    }
+
+    #[test]
+    fn user_goal_stop_reports_real_storage_failure_and_retries_without_reactivation() {
+        for clear in [false, true] {
+            let temp = tempfile::tempdir().unwrap();
+            let state = AppState::new(temp.path());
+            let history = temp.path().join("history.jsonl");
+            state.with_history_path(&history);
+            state.add_message(kcoder_types::Message::user_text("ship"));
+            state.save_history().unwrap();
+            state.set_goal("ship", None);
+            let sidecar = state.session_state_path().unwrap();
+            std::fs::remove_file(&sidecar).unwrap();
+            std::fs::create_dir(&sidecar).unwrap();
+            let error = if clear { state.clear_goal_by_user() } else { state.cancel_goal_by_user() }.unwrap_err();
+            assert!(error.to_string().contains("not saved"));
+            assert!(state.goal().is_none_or(|goal| goal.status == GoalStatus::Cancelled));
+            std::fs::remove_dir(&sidecar).unwrap();
+            if clear { state.clear_goal_by_user().unwrap(); } else { state.cancel_goal_by_user().unwrap(); }
+            let restored = AppState::new(temp.path());
+            restored.resume_from_history(&history).unwrap();
+            if clear { assert!(restored.goal().is_none()); }
+            else { assert_eq!(restored.goal().unwrap().status, GoalStatus::Cancelled); }
+            assert_eq!(restored.goal_history().last().unwrap().status, GoalStatus::Cancelled);
+        }
+    }
+
+    #[test]
+    fn blocked_audit_requires_consecutive_execution_epochs() {
+        let state = AppState::new(".");
+        let goal = state.set_goal("ship", None);
+        for expected in [1, 2] {
+            state.record_goal_turn_start(&goal.goal_id).unwrap();
+            assert_eq!(state.record_goal_blocked_candidate("same").unwrap().blocked_candidate_count, expected);
+        }
+        // A real execution without a matching blocked report breaks the audit.
+        state.record_goal_turn_start(&goal.goal_id).unwrap();
+        state.record_goal_turn_start(&goal.goal_id).unwrap();
+        assert_eq!(state.goal().unwrap().blocked_candidate_count, 0);
+        assert_eq!(state.record_goal_blocked_candidate("same").unwrap().blocked_candidate_count, 1);
+        assert_eq!(state.record_goal_blocked_candidate("same").unwrap().blocked_candidate_count, 1);
+        state.record_goal_continuation_start(&goal.goal_id).unwrap();
+        assert_eq!(state.goal().unwrap().turn_count, 4);
+        assert_eq!(state.goal().unwrap().continuation_count, 1);
+    }
+
+    #[test]
+    fn blocked_audit_keeps_readable_reason_history() {
+        let state = AppState::new(".");
+        let goal = state.set_goal("ship", None);
+        state.record_goal_turn_start(&goal.goal_id).unwrap();
+        state.record_goal_blocked_candidate_details("a", Some("permission"), Some("Missing deployment permission"), None).unwrap();
+        state.record_goal_turn_start(&goal.goal_id).unwrap();
+        let updated = state.record_goal_blocked_candidate_details("b", Some("network"), Some("Server unavailable"), None).unwrap();
+        assert_eq!(updated.blocked_candidate_count, 1);
+        let history = serde_json::to_string(&updated.events).unwrap();
+        assert!(history.contains("Missing deployment permission"));
+        assert!(history.contains("Server unavailable"));
+    }
+
+    #[test]
+    fn legacy_nonconsecutive_blocked_counts_are_not_trusted() {
+        let state = AppState::new(".");
+        let goal = state.set_goal("ship", None);
+        let mut encoded = serde_json::to_value(goal).unwrap();
+        encoded.as_object_mut().unwrap().remove("blocked_audit_version");
+        encoded["blocked_candidate_count"] = serde_json::json!(2);
+        encoded["blocked_candidate_last_turn"] = serde_json::json!(42);
+        encoded["blocked_candidate_fingerprint"] = serde_json::json!("legacy");
+        let restored: Goal = serde_json::from_value(encoded).unwrap();
+        assert_eq!(restored.blocked_candidate_count, 0);
+        assert!(restored.blocked_candidate_fingerprint.is_none());
+    }
+
+    #[test]
+    fn explicit_cancel_is_terminal_durable_and_cannot_be_overwritten_by_model() {
+        let temp = tempfile::tempdir().unwrap();
+        let state = AppState::new(temp.path());
+        let path = temp.path().join("goal.jsonl");
+        state.with_history_path(&path);
+        state.add_message(kcoder_types::Message::user_text("ship"));
+        state.save_history().unwrap();
+        let initial = state.set_goal("ship", None);
+        let cancelled = state.update_goal_status(GoalStatus::Cancelled).unwrap();
+        assert!(!cancelled.status.is_unfinished());
+        assert!(!cancelled.status.is_user_resumable());
+        assert!(state.commit_goal_model_status(&initial.goal_id, initial.revision, GoalStatus::Complete).is_none());
+        assert_eq!(state.goal_history().last().unwrap().status, GoalStatus::Cancelled);
+        let restored = AppState::new(temp.path());
+        restored.resume_from_history(&path).unwrap();
+        assert_eq!(restored.goal().unwrap().status, GoalStatus::Cancelled);
+        assert!(restored.goal().unwrap().events.iter().any(|event| event.kind == GoalEventKind::Cancelled));
+        restored.set_goal("next", None);
+        let removed = restored.clear_goal_by_user().unwrap().unwrap();
+        assert_eq!(removed.status, GoalStatus::Cancelled);
+        assert!(restored.goal_history().iter().any(|goal| goal.goal_id == removed.goal_id));
     }
 
     #[test]

@@ -175,6 +175,7 @@ fn tui_dev_orchestrate_scenario_uses_only_a_read_only_main_tool() {
 
 fn tool_result_message(tool_use_id: &str, text: impl Into<String>) -> Message {
     Message::User {
+        origin: kcoder_types::MessageOrigin::Unknown,
         content: vec![ContentBlock::ToolResult {
             tool_use_id: tool_use_id.to_string(),
             content: vec![ContentBlock::Text { text: text.into() }],
@@ -340,6 +341,7 @@ fn tui_dev_goal_pro_does_not_reuse_an_earlier_goal_tool_result() {
                 usage: None,
             },
             Message::User {
+                origin: kcoder_types::MessageOrigin::Unknown,
                 content: vec![ContentBlock::ToolResult {
                     tool_use_id: "tui-lab-goal-pro-update".to_string(),
                     content: vec![ContentBlock::Text {
@@ -787,6 +789,7 @@ fn tui_dev_subagent_trace_notification_followup_does_not_spawn_again() {
                 usage: None,
             },
             Message::User {
+                origin: kcoder_types::MessageOrigin::Unknown,
                 content: vec![ContentBlock::ToolResult {
                     tool_use_id: "tui-lab-spawn-agent".to_string(),
                     content: vec![ContentBlock::Text {
@@ -837,6 +840,7 @@ fn tui_dev_full_turn_finishes_after_tool_result() {
                 usage: None,
             },
             Message::User {
+                origin: kcoder_types::MessageOrigin::Unknown,
                 content: vec![ContentBlock::ToolResult {
                     tool_use_id: "tui-lab-counted-lines".to_string(),
                     content: vec![ContentBlock::Text {
@@ -886,6 +890,7 @@ fn tui_dev_full_turn_recognizes_user_input_after_tool_result_as_live_steer() {
                 usage: None,
             },
             Message::User {
+                origin: kcoder_types::MessageOrigin::Unknown,
                 content: vec![ContentBlock::ToolResult {
                     tool_use_id: "tui-lab-counted-lines".to_string(),
                     content: vec![ContentBlock::Text {
@@ -936,7 +941,7 @@ fn tui_dev_lsp_diagnostics_reports_visibility_after_tool_result() {
                     usage: None,
                 },
                 Message::User {
-                    content: vec![ContentBlock::ToolResult {
+                    origin: kcoder_types::MessageOrigin::Unknown, content: vec![ContentBlock::ToolResult {
                         tool_use_id: "tui-lab-lsp-write".to_string(),
                         content: vec![ContentBlock::Text {
                             text: "<diagnostics source=\"lsp\" server=\"pyright\" file=\"src/lsp_case.py\">\nERROR [6:25] bad [reportArgumentType] (pyright)\n</diagnostics>".to_string(),
@@ -997,7 +1002,7 @@ fn tui_dev_ocr_review_reports_preview_visibility_after_tool_result() {
                     usage: None,
                 },
                 Message::User {
-                    content: vec![ContentBlock::ToolResult {
+                    origin: kcoder_types::MessageOrigin::Unknown, content: vec![ContentBlock::ToolResult {
                         tool_use_id: "tui-lab-ocr-preview".to_string(),
                         content: vec![ContentBlock::Text {
                             text: "OpenCodeReview command: ocr review --preview\nPreview: 1 file(s) changed".to_string(),
@@ -1080,6 +1085,7 @@ fn tui_dev_mixed_tools_finishes_after_tool_results() {
                 usage: None,
             },
             Message::User {
+                origin: kcoder_types::MessageOrigin::Unknown,
                 content: vec![
                     ContentBlock::ToolResult {
                         tool_use_id: "tui-lab-mixed-read".to_string(),
@@ -1159,6 +1165,7 @@ fn tui_dev_second_plain_turn_does_not_reuse_tool_state() {
                 usage: None,
             },
             Message::User {
+                origin: kcoder_types::MessageOrigin::Unknown,
                 content: vec![ContentBlock::ToolResult {
                     tool_use_id: "tui-lab-counted-lines".to_string(),
                     content: vec![ContentBlock::Text {

@@ -291,7 +291,7 @@ impl QueryEngine {
                         return None;
                     }
                     let output_file = Self::subagent_output_file_attr(state, id);
-                    state.add_message(Message::user_text(format!(
+                    state.add_message(Message::runtime_text(format!(
                         "<task_notification id=\"{id}\" status=\"completed\"{output_file}/>"
                     )));
                     return Some(event.into());
@@ -338,7 +338,7 @@ impl QueryEngine {
                     Self::orchestrate_acceptance_pending(state, id),
                 );
                 let review_vote_summary = state.task(id).and_then(|task| task.review_vote_summary);
-                state.add_message(Message::user_text(
+                state.add_message(Message::runtime_text(
                     crate::orchestrate::notification::enrich_review_vote_summary(
                         &notification,
                         review_vote_summary.as_deref(),
@@ -377,7 +377,7 @@ impl QueryEngine {
                     } else {
                         "failed"
                     };
-                    state.add_message(Message::user_text(format!(
+                    state.add_message(Message::runtime_text(format!(
                         "<task_notification id=\"{id}\" status=\"{status}\"{output_file} error=\"{sanitized}\"/>"
                     )));
                     return Some(event.into());
@@ -407,7 +407,7 @@ impl QueryEngine {
                 } else {
                     "failed"
                 };
-                state.add_message(Message::user_text(format!(
+                state.add_message(Message::runtime_text(format!(
                     "<{tag}_notification id=\"{id}\" status=\"{status}\"{output_file} error=\"{sanitized}\"/>"
                 )));
             }
@@ -418,7 +418,7 @@ impl QueryEngine {
                 let sanitized = Self::sanitize_xml_attr(reason);
                 let output_file = Self::subagent_output_file_attr(state, id);
                 let tag = Self::background_notification_tag(state, id);
-                state.add_message(Message::user_text(format!(
+                state.add_message(Message::runtime_text(format!(
                     "<{tag}_notification id=\"{id}\" status=\"halted\"{output_file} reason=\"{sanitized}\"/>"
                 )));
             }
@@ -439,7 +439,7 @@ impl QueryEngine {
                 }
                 let output_file = Self::subagent_output_file_attr(state, id);
                 let tag = Self::background_notification_tag(state, id);
-                state.add_message(Message::user_text(format!(
+                state.add_message(Message::runtime_text(format!(
                     "<{tag}_notification id=\"{id}\" status=\"cancelled\"{output_file} reason=\"{sanitized}\"/>"
                 )));
             }
@@ -633,7 +633,7 @@ impl QueryEngine {
         let tag = Self::background_notification_tag(state, id);
         let needle = format!("<{tag}_notification id=\"{}\"", id);
         state.recent_messages(8).iter().rev().any(|m| match m {
-            Message::User { content } => content.iter().any(|b| match b {
+            Message::User { content, .. } => content.iter().any(|b| match b {
                 ContentBlock::Text { text } => text.contains(&needle),
                 _ => false,
             }),

@@ -1,13 +1,19 @@
 //! Versioned pure semantics shared by live turns and persisted recovery.
-use crate::{ContentBlock, Message};
+use crate::{ContentBlock, Message, MessageOrigin};
 
 /// Bump when changing classification so persisted matching-prefix counts are invalidated.
-pub const REAL_USER_MESSAGE_SEMANTICS_VERSION: u32 = 2;
+pub const REAL_USER_MESSAGE_SEMANTICS_VERSION: u32 = 3;
 
 pub fn is_real_user_message(message: &Message) -> bool {
-    let Message::User { content } = message else {
+    let Message::User { content, .. } = message else {
         return false;
     };
+    if matches!(
+        message.origin(),
+        MessageOrigin::Runtime | MessageOrigin::Compaction
+    ) {
+        return false;
+    }
     if content.is_empty()
         || content
             .iter()
@@ -21,9 +27,7 @@ pub fn is_real_user_message(message: &Message) -> bool {
     for block in content {
         match block {
             ContentBlock::Image { .. } => has_image = true,
-            ContentBlock::Text { text }
-                if !text.trim().is_empty() && !is_synthetic_parent_text(text) =>
-            {
+            ContentBlock::Text { text } if !text.trim().is_empty() => {
                 has_real_text = true;
             }
             _ => {}
@@ -32,9 +36,9 @@ pub fn is_real_user_message(message: &Message) -> bool {
     has_image || has_real_text
 }
 
-/// Engine-generated user-role messages are useful context, but must not
-/// consume the finite `recent` user-turn budget. Prefix matching is deliberate:
-/// these messages are produced by KCoder itself and have stable wrappers.
+/// Legacy formatting recognizer retained for source compatibility only.
+/// Never infer message provenance or discard user content from this result.
+#[deprecated(note = "use Message::origin and is_real_user_message; text is not provenance")]
 pub fn is_synthetic_parent_text(text: &str) -> bool {
     let text = text.trim_start();
     [
@@ -67,8 +71,9 @@ pub fn is_synthetic_parent_text(text: &str) -> bool {
     .any(|prefix| text.starts_with(prefix))
 }
 
-/// Classify model-only text for display without swallowing incomplete user examples.
-/// Apply this to individual user text blocks, never to assistant or tool output.
+/// Legacy formatting recognizer, not a visibility or trust decision.
+/// A literal user may submit every one of these strings; inspect origin instead.
+#[deprecated(note = "inspect Message::origin; text is not a visibility boundary")]
 pub fn is_hidden_runtime_user_text(text: &str) -> bool {
     let text = text.trim();
     for tag in [
@@ -124,8 +129,38 @@ pub fn is_hidden_runtime_user_text(text: &str) -> bool {
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn structured_origin_roundtrips_and_legacy_user_prefixes_are_retained() {
+        for text in [
+            "<system-reminder>literal</system-reminder>",
+            "[system] literal",
+            "Earlier conversation summary: literal",
+        ] {
+            let legacy = serde_json::json!({"role":"user","content":[{"type":"text","text":text}]});
+            let message: Message = serde_json::from_value(legacy.clone()).unwrap();
+            assert_eq!(message.origin(), MessageOrigin::Unknown);
+            assert!(is_real_user_message(&message));
+            assert_eq!(serde_json::to_value(&message).unwrap(), legacy);
+            for origin in [
+                MessageOrigin::User,
+                MessageOrigin::Runtime,
+                MessageOrigin::Compaction,
+            ] {
+                let marked = message.clone().with_origin(origin);
+                let restored: Message =
+                    serde_json::from_str(&serde_json::to_string(&marked).unwrap()).unwrap();
+                assert_eq!(restored, marked);
+                assert_eq!(
+                    is_real_user_message(&restored),
+                    origin == MessageOrigin::User
+                );
+            }
+        }
+    }
 
     #[test]
     fn runtime_visibility_covers_modes_and_preserves_incomplete_examples() {
@@ -144,7 +179,14 @@ mod tests {
             "Active skills: fixture. You may continue to use them via the skill tool.",
         ] {
             assert!(is_hidden_runtime_user_text(text), "{text}");
-            assert!(!is_real_user_message(&Message::user_text(text)), "{text}");
+            assert!(
+                !is_real_user_message(&Message::runtime_text(text)),
+                "{text}"
+            );
+            assert!(
+                is_real_user_message(&Message::user_text(text)),
+                "literal {text}"
+            );
         }
         for text in [
             "<skill_content name=\"x\">incomplete example",
@@ -172,7 +214,7 @@ mod tests {
             "Earlier conversation summary: hidden",
             "<skill_content name=\"x\">body",
         ] {
-            assert!(!is_real_user_message(&Message::user_text(text)));
+            assert!(!is_real_user_message(&Message::runtime_text(text)));
         }
         assert!(is_real_user_message(&Message::user_text("discuss a skill")));
         assert!(!is_real_user_message(&Message::assistant_text("answer")));
@@ -184,9 +226,11 @@ mod tests {
             },
         };
         assert!(is_real_user_message(&Message::User {
+            origin: crate::MessageOrigin::Unknown,
             content: vec![image.clone()]
         }));
         assert!(!is_real_user_message(&Message::User {
+            origin: crate::MessageOrigin::Unknown,
             content: vec![
                 image,
                 ContentBlock::ToolResult {
@@ -197,6 +241,7 @@ mod tests {
             ]
         }));
         assert!(is_real_user_message(&Message::User {
+            origin: crate::MessageOrigin::Unknown,
             content: vec![
                 ContentBlock::Text {
                     text: "[system] helper".into()

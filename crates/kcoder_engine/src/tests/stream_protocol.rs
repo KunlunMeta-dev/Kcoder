@@ -206,7 +206,7 @@ async fn submit_message_content_stream_preserves_image_blocks_for_provider() {
         .await;
 
     let requests = requests.lock().unwrap();
-    let Some(Message::User { content }) = requests[0].messages.last() else {
+    let Some(Message::User { content, .. }) = requests[0].messages.last() else {
         panic!("provider request must end with the user message");
     };
     assert!(content.iter().any(|block| matches!(
@@ -514,7 +514,7 @@ async fn steer_is_injected_after_complete_tool_batch_within_same_turn() {
     let tool_result_index = second_messages
         .iter()
         .position(|message| {
-            matches!(message, Message::User { content } if content.iter().any(|block| {
+            matches!(message, Message::User { content, .. } if content.iter().any(|block| {
                 matches!(block, ContentBlock::ToolResult { tool_use_id, .. } if tool_use_id == "blocking-call")
             }))
         })

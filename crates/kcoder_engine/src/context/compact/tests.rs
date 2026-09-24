@@ -137,6 +137,7 @@ fn split_preserves_latest_real_request_among_tool_result_messages() {
             usage: None,
         });
         messages.push(Message::User {
+            origin: kcoder_types::MessageOrigin::Unknown,
             content: vec![ContentBlock::ToolResult {
                 tool_use_id: id,
                 content: vec![ContentBlock::Text {
@@ -154,7 +155,7 @@ fn split_preserves_latest_real_request_among_tool_result_messages() {
     assert!(
         split.recent.iter().any(|message| matches!(
             message,
-            Message::User { content }
+            Message::User { content, .. }
                 if matches!(&content[0], ContentBlock::Text { text } if text == "latest request")
         )),
         "latest real user request must be preserved verbatim"
@@ -162,12 +163,12 @@ fn split_preserves_latest_real_request_among_tool_result_messages() {
     assert!(
         split.old.iter().any(|message| matches!(
             message,
-            Message::User { content }
+            Message::User { content, .. }
                 if matches!(&content[0], ContentBlock::Text { text } if text == "request-0")
         )),
         "older rounds remain summarizable"
     );
-    if let Message::User { content } = &split.recent[0] {
+    if let Message::User { content, .. } = &split.recent[0] {
         assert!(
             !is_tool_result_only_content(content),
             "recent must not start with an orphaned tool_result"
@@ -192,6 +193,7 @@ fn split_falls_back_to_tail_split_for_single_request_sessions() {
             usage: None,
         });
         messages.push(Message::User {
+            origin: kcoder_types::MessageOrigin::Unknown,
             content: vec![ContentBlock::ToolResult {
                 tool_use_id: id,
                 content: vec![ContentBlock::Text {
@@ -214,7 +216,7 @@ fn split_falls_back_to_tail_split_for_single_request_sessions() {
         "recent keeps only the tail (plus pair integrity): {}",
         split.recent.len()
     );
-    if let Message::User { content } = &split.recent[0] {
+    if let Message::User { content, .. } = &split.recent[0] {
         assert!(
             !is_tool_result_only_content(content),
             "tool pairs must stay intact at the boundary"
@@ -275,6 +277,7 @@ fn ptl_retry_drops_oldest_user_turn_group() {
             usage: None,
         },
         Message::User {
+            origin: kcoder_types::MessageOrigin::Unknown,
             content: vec![ContentBlock::ToolResult {
                 tool_use_id: "call_1".to_string(),
                 content: vec![ContentBlock::Text {
@@ -318,7 +321,7 @@ fn ptl_retry_requires_at_least_two_old_groups() {
 #[test]
 fn finds_compact_summary_only_at_model_history_start() {
     let messages = vec![
-        Message::user_text(format_compact_summary_message("first summary")),
+        Message::compaction_text(format_compact_summary_message("first summary")),
         Message::user_text("new user"),
         Message::assistant_text("recent assistant"),
     ];
@@ -381,6 +384,7 @@ fn compaction_prompt_build_benchmark() {
                 }
             } else {
                 Message::User {
+                    origin: kcoder_types::MessageOrigin::Unknown,
                     content: vec![ContentBlock::ToolResult {
                         tool_use_id: format!("call_{}", idx - 1),
                         content: vec![ContentBlock::Text {
@@ -2472,6 +2476,7 @@ async fn compact_accepts_bracket_tool_references_with_source_id() {
             usage: None,
         },
         Message::User {
+            origin: kcoder_types::MessageOrigin::Unknown,
             content: vec![ContentBlock::ToolResult {
                 tool_use_id: "call_real".to_string(),
                 content: vec![ContentBlock::Text {
@@ -2572,7 +2577,7 @@ async fn compact_recompresses_and_replaces_prior_summary() {
         },
     );
     let messages = vec![
-        Message::user_text(format_compact_summary_message("PRIOR_ONLY summary")),
+        Message::compaction_text(format_compact_summary_message("PRIOR_ONLY summary")),
         Message::user_text("new old user 1"),
         Message::assistant_text("new old assistant 1"),
         Message::user_text("new old user 2"),
@@ -2628,7 +2633,7 @@ async fn ptl_retry_preserves_latest_boundary_summary_in_retry_prompt() {
         failures: 1,
     }));
     let messages = vec![
-        Message::user_text(format_compact_summary_message(
+        Message::compaction_text(format_compact_summary_message(
             "PRIOR_BOUNDARY_FACT that must survive PTL retry",
         )),
         Message::user_text("old user one"),
@@ -2665,7 +2670,7 @@ async fn repeated_ptl_retries_preserve_boundary_and_single_marker() {
         requests: Arc::clone(&requests),
         failures: 3,
     }));
-    let mut messages = vec![Message::user_text(format_compact_summary_message(
+    let mut messages = vec![Message::compaction_text(format_compact_summary_message(
         "BOUNDARY_SURVIVES_ALL_RETRIES",
     ))];
     for index in 0..8 {
@@ -2759,7 +2764,7 @@ async fn repeated_ptl_stops_safely_when_suffix_becomes_insufficient() {
         failures: 3,
     }));
     let messages = vec![
-        Message::user_text(format_compact_summary_message("BOUNDARY_REMAINS")),
+        Message::compaction_text(format_compact_summary_message("BOUNDARY_REMAINS")),
         Message::user_text("droppable suffix one"),
         Message::assistant_text("droppable response one"),
         Message::user_text("droppable suffix two"),
@@ -2843,7 +2848,7 @@ async fn ptl_retry_with_insufficient_suffix_fails_without_dropping_boundary() {
         failures: 1,
     }));
     let messages = vec![
-        Message::user_text(format_compact_summary_message("ONLY_BOUNDARY_COPY")),
+        Message::compaction_text(format_compact_summary_message("ONLY_BOUNDARY_COPY")),
         Message::user_text("old suffix"),
         Message::assistant_text("old suffix response"),
         Message::user_text("recent user"),
@@ -2906,7 +2911,7 @@ async fn compact_keeps_prior_summary_when_nothing_after_boundary_can_be_summariz
         },
     );
     let messages = vec![
-        Message::user_text(format_compact_summary_message("prior summary")),
+        Message::compaction_text(format_compact_summary_message("prior summary")),
         Message::user_text("recent user"),
         Message::assistant_text("recent assistant"),
     ];
@@ -3668,6 +3673,7 @@ fn prefire_identity_covers_tool_payload_and_role_and_allows_append() {
             usage: None,
         },
         Message::User {
+            origin: kcoder_types::MessageOrigin::Unknown,
             content: vec![ContentBlock::ToolResult {
                 tool_use_id: "call".into(),
                 content: vec![ContentBlock::Text {
@@ -3690,7 +3696,7 @@ fn prefire_identity_covers_tool_payload_and_role_and_allows_append() {
     }
     assert!(!note.matches(&changed));
     changed = current.clone();
-    if let Message::User { content } = &mut changed[1] {
+    if let Message::User { content, .. } = &mut changed[1] {
         if let ContentBlock::ToolResult { content, .. } = &mut content[0] {
             *content = vec![ContentBlock::Text {
                 text: "corrected output".into(),

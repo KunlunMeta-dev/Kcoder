@@ -56,7 +56,7 @@ impl Tool for EnterWorktreeTool {
     }
 
     fn description(&self) -> String {
-        "Create or enter an isolated git worktree and switch the session working directory into it — the session-level worktree flow, paired with ExitWorktree to come back. Use only when the user explicitly asks to work in a worktree. Input is either {\"name\":\"feature-name\"} to create/resume a managed worktree under `.kcoder/worktrees/`, or {\"path\":\"../existing-worktree\"} to enter an existing git worktree. The optional name may contain letters, digits, dots, underscores, dashes, and nested `/` segments; it must be 64 characters or fewer. Do not use this merely to switch branches; use git commands for normal branch changes. For a bare `git worktree add` without switching the session, use WorktreeCreate; for isolating a sub-agent, use spawn_agent with isolation=\"worktree\" instead."
+        "Create or enter an isolated git worktree and switch the session working directory into it — the session-level worktree flow, returning requires an attached session-exit control or host workflow. Use only when the user explicitly asks to work in a worktree. Input is either {\"name\":\"feature-name\"} to create/resume a managed worktree under `.kcoder/worktrees/`, or {\"path\":\"../existing-worktree\"} to enter an existing git worktree. The optional name may contain letters, digits, dots, underscores, dashes, and nested `/` segments; it must be 64 characters or fewer. Do not use this merely to switch branches; use git commands for normal branch changes. Creating without switching cwd and isolating a sub-agent require their corresponding attached controls."
             .to_string()
     }
 
@@ -143,7 +143,7 @@ async fn enter_existing_worktree(
     }
 
     let mut output = ToolOutput::text(format!(
-        "Switched working directory to existing worktree {}. Use ExitWorktree with action \"keep\" to return to {}. Because this worktree was supplied by path, ExitWorktree action \"remove\" will refuse; use WorktreeRemove explicitly if deletion is intended.",
+        "Switched working directory to existing worktree {}. Return to {} through an attached session-exit control or host workflow. This path-supplied worktree cannot be removed by a session exit; deletion requires an explicit removal capability.",
         path.display(),
         cwd.display()
     ));
@@ -247,7 +247,7 @@ async fn create_or_resume_session_worktree(
 
     let verb = if existed { "Resumed" } else { "Created" };
     let mut output = ToolOutput::text(format!(
-        "{verb} worktree at {} on branch {}. The session is now working in the worktree. Use ExitWorktree with action \"keep\" to preserve it, or action \"remove\" to remove this managed worktree after confirming changes can be discarded.",
+        "{verb} worktree at {} on branch {}. The session is now working in the worktree. Use an attached session-exit control or host workflow to preserve or remove this managed worktree after confirming changes can be discarded.",
         path.display(),
         branch
     ));
@@ -285,7 +285,7 @@ impl Tool for ExitWorktreeTool {
     }
 
     fn description(&self) -> String {
-        "Exit a worktree session created or entered by EnterWorktree and return to the previous working directory — the second half of the session-level worktree flow. Input shape is {\"action\":\"keep\"} or {\"action\":\"remove\",\"discard_changes\":true}. `keep` preserves the directory and branch. `remove` deletes only managed `.kcoder/worktrees/...` worktrees created/resumed by EnterWorktree in this session, and refuses if there are uncommitted files or new commits unless discard_changes is true. If no EnterWorktree session is active, the tool reports a no-op instead of touching filesystem state. To delete a worktree created directly with WorktreeCreate (not a session flow), use WorktreeRemove instead.".to_string()
+        "Exit a worktree session created or entered by EnterWorktree and return to the previous working directory — the second half of the session-level worktree flow. Input shape is {\"action\":\"keep\"} or {\"action\":\"remove\",\"discard_changes\":true}. `keep` preserves the directory and branch. `remove` deletes only managed `.kcoder/worktrees/...` worktrees created/resumed by EnterWorktree in this session, and refuses if there are uncommitted files or new commits unless discard_changes is true. If no EnterWorktree session is active, the tool reports a no-op instead of touching filesystem state. To delete a worktree created directly with WorktreeCreate (not a session flow), use an attached worktree-removal control or host workflow.".to_string()
     }
 
     fn input_schema_is_stable(&self) -> bool {
@@ -343,7 +343,7 @@ impl Tool for ExitWorktreeTool {
 
         if matches!(action, ExitWorktreeAction::Remove) && !session.created_by_session {
             return Err(ToolError::InvalidInput(format!(
-                "Refusing to remove {} because it was entered by explicit path, not created/resumed as a managed EnterWorktree session. Use action \"keep\" to leave it, or call WorktreeRemove with an explicit path if deletion is intended.",
+                "Refusing to remove {} because it was entered by explicit path, not created/resumed as a managed EnterWorktree session. Use action \"keep\" to leave it, or use an attached removal capability with an explicit path if deletion is intended.",
                 session.worktree_path.display()
             )));
         }
@@ -502,8 +502,7 @@ impl Tool for WorktreeCreateTool {
          {\"path\":\"../feature-worktree\",\"base\":\"main\",\"newBranch\":\"feature/name\",\"force\":false}. \
          Only `path` is required. Use `base` for an existing commit/branch/tag, `newBranch` to create a new branch, \
          and `force` only when git requires --force. When the goal is to actually work inside a worktree for \
-         this session, prefer EnterWorktree (it creates/resumes the worktree and moves the session cwd); \
-         for sub-agent isolation use spawn_agent with isolation=\"worktree\"."
+         this session, use an attached session-entry control; sub-agent isolation likewise requires an attached delegation control."
             .to_string()
     }
 
@@ -599,8 +598,7 @@ impl Tool for WorktreeRemoveTool {
         "Remove a real git worktree by running `git worktree remove` — the low-level deletion primitive, \
          paired with WorktreeCreate. Input must be an object: \
          {\"path\":\"../feature-worktree\",\"force\":false}. Do not use this for merely leaving a worktree; \
-         use ExitWorktree for changing the session cwd back to the original project, and use ExitWorktree \
-         action=remove for deleting a managed worktree created by EnterWorktree."
+         leaving or deleting a managed session worktree requires its attached session-exit control or the host workflow."
             .to_string()
     }
 
@@ -623,7 +621,7 @@ impl Tool for WorktreeRemoveTool {
 
         if crate::sandbox::path_starts_with(&cwd, &path) {
             return Err(ToolError::InvalidInput(format!(
-                "cannot remove the current session working directory {}; call ExitWorktree first",
+                "cannot remove the current session working directory {}; leave the worktree through an attached session-exit control or host workflow first",
                 path.display()
             )));
         }

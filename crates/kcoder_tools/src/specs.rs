@@ -1133,7 +1133,7 @@ impl Tool for SpecStatusTool {
     }
 
     fn description(&self) -> String {
-        "List active spec changes, show one change's quick dashboard with name, or deeply read its artifacts with change. Use SpecCheck for validation, verification, and apply preflight."
+        "List active spec changes, show one change's quick dashboard with name, or deeply read its artifacts with change. Validation, verification, and apply preflight require the corresponding attached checking capability."
             .to_string()
     }
 
@@ -1237,8 +1237,7 @@ impl Tool for StatusDeepRead {
     fn description(&self) -> String {
         "Show a spec-driven change as structured JSON: status summary plus proposal, \
          tasks, optional design, and delta spec files. This is the deep read of one change; \
-         for a quick drift/completion glance use SpecStatus, for rule enforcement use \
-         SpecCheck(validate). Prefer this over directly guessing paths under .kcoder/specs/changes."
+         for a quick drift/completion glance use SpecStatus, rule enforcement requires an attached checking capability. Prefer this over directly guessing paths under .kcoder/specs/changes."
             .to_string()
     }
 
@@ -1441,7 +1440,7 @@ impl Tool for SpecCheckTool {
     }
 
     fn description(&self) -> String {
-        "Run read-only spec checks by action: validate structural and configured rules, verify scenario-to-test coverage, or preflight one change before apply/archive. Use SpecStatus to inspect state without enforcement."
+        "Run read-only spec checks by action: validate structural and configured rules, verify scenario-to-test coverage, or preflight one change before apply/archive. Non-enforcing state inspection is a separate capability."
             .to_string()
     }
 

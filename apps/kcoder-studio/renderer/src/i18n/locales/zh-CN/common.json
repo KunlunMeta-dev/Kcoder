@@ -1147,6 +1147,7 @@
     "goal_status_active": "进行中的目标",
     "goal_status_paused": "已暂停的目标",
     "goal_status_blocked": "受阻的目标",
+    "goal_status_cancelled": "已取消的目标",
     "goal_status_complete": "已完成的目标",
     "goal_status_usage_limited": "用量受限的目标",
     "goal_status_budget_limited": "预算受限的目标",

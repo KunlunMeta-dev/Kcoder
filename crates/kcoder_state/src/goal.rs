@@ -96,6 +96,8 @@ pub struct Goal {
     pub token_budget: Option<u64>,
     pub tokens_used: u64,
     pub time_used_seconds: u64,
+    /// Execution epoch: zero at creation, then one increment per admitted outer Engine turn.
+    /// API retries and tool iterations do not increment it.
     #[serde(default)]
     pub turn_count: u64,
     #[serde(default)]
@@ -110,8 +112,14 @@ pub struct Goal {
     pub model_escalation_rung: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blocked_candidate_fingerprint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocked_candidate_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocked_candidate_reason: Option<String>,
     #[serde(default)]
     pub blocked_candidate_count: u32,
+    #[serde(default)]
+    pub blocked_audit_version: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blocked_candidate_last_turn: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -163,7 +171,13 @@ struct GoalWire {
     #[serde(default)]
     blocked_candidate_fingerprint: Option<String>,
     #[serde(default)]
+    blocked_candidate_id: Option<String>,
+    #[serde(default)]
+    blocked_candidate_reason: Option<String>,
+    #[serde(default)]
     blocked_candidate_count: u32,
+    #[serde(default)]
+    blocked_audit_version: u32,
     #[serde(default)]
     blocked_candidate_last_turn: Option<u64>,
     #[serde(default)]
@@ -185,7 +199,15 @@ impl<'de> Deserialize<'de> for Goal {
     where
         D: serde::Deserializer<'de>,
     {
-        let wire = GoalWire::deserialize(deserializer)?;
+        let mut wire = GoalWire::deserialize(deserializer)?;
+        if wire.blocked_audit_version != 1 {
+            // Legacy counts did not prove consecutive execution epochs.
+            wire.blocked_candidate_count = 0;
+            wire.blocked_candidate_last_turn = None;
+            wire.blocked_candidate_fingerprint = None;
+            wire.blocked_candidate_id = None;
+            wire.blocked_candidate_reason = None;
+        }
         if wire.verification_kind.is_answer() && !wire.mode.is_strict() {
             return Err(serde::de::Error::custom(
                 "Answer verification requires Strict goal mode",
@@ -210,7 +232,10 @@ impl<'de> Deserialize<'de> for Goal {
             semantic_completion_rejected_count: wire.semantic_completion_rejected_count,
             model_escalation_rung: wire.model_escalation_rung,
             blocked_candidate_fingerprint: wire.blocked_candidate_fingerprint,
+            blocked_candidate_id: wire.blocked_candidate_id,
+            blocked_candidate_reason: wire.blocked_candidate_reason,
             blocked_candidate_count: wire.blocked_candidate_count,
+            blocked_audit_version: 1,
             blocked_candidate_last_turn: wire.blocked_candidate_last_turn,
             last_progress_fingerprint: wire.last_progress_fingerprint,
             stall_count: wire.stall_count,
@@ -301,7 +326,10 @@ impl Goal {
             semantic_completion_rejected_count: 0,
             model_escalation_rung: 0,
             blocked_candidate_fingerprint: None,
+            blocked_candidate_id: None,
+            blocked_candidate_reason: None,
             blocked_candidate_count: 0,
+            blocked_audit_version: 1,
             blocked_candidate_last_turn: None,
             last_progress_fingerprint: None,
             stall_count: 0,
@@ -514,6 +542,7 @@ pub enum GoalStatus {
     UsageLimited,
     BudgetLimited,
     Complete,
+    Cancelled,
 }
 
 impl<'de> Deserialize<'de> for GoalStatus {
@@ -529,6 +558,7 @@ impl<'de> Deserialize<'de> for GoalStatus {
             "usage_limited" => Self::UsageLimited,
             "budget_limited" => Self::BudgetLimited,
             "complete" => Self::Complete,
+            "cancelled" => Self::Cancelled,
             _ => Self::Paused,
         })
     }
@@ -557,6 +587,7 @@ pub enum GoalEventKind {
     BudgetLimited,
     UsageLimited,
     Complete,
+    Cancelled,
 }
 
 impl GoalEventKind {
@@ -575,6 +606,7 @@ impl GoalEventKind {
             Self::BudgetLimited => "budget_limited",
             Self::UsageLimited => "usage_limited",
             Self::Complete => "complete",
+            Self::Cancelled => "cancelled",
         }
     }
 }
@@ -588,6 +620,7 @@ impl GoalStatus {
             Self::UsageLimited => "usage_limited",
             Self::BudgetLimited => "budget_limited",
             Self::Complete => "complete",
+            Self::Cancelled => "cancelled",
         }
     }
 
@@ -603,14 +636,14 @@ impl GoalStatus {
     pub fn is_unfinished(self) -> bool {
         !matches!(
             self,
-            Self::Complete | Self::BudgetLimited | Self::UsageLimited
+            Self::Complete | Self::Cancelled | Self::BudgetLimited | Self::UsageLimited
         )
     }
 
     pub fn is_history_worthy(self) -> bool {
         matches!(
             self,
-            Self::Complete | Self::Blocked | Self::BudgetLimited | Self::UsageLimited
+            Self::Complete | Self::Cancelled | Self::Blocked | Self::BudgetLimited | Self::UsageLimited
         )
     }
 }
@@ -663,9 +696,10 @@ pub fn goal_context_snapshot(messages: &[Message]) -> Option<String> {
         .iter()
         .rev()
         .filter_map(|message| match message {
-            Message::User { content } => {
+            Message::User { content, .. } => {
                 let text = visible_text(content);
-                (!text.is_empty() && !text.starts_with("[system]")).then(|| format!("User: {text}"))
+                (!text.is_empty() && kcoder_types::is_real_user_message(message))
+                    .then(|| format!("User: {text}"))
             }
             Message::Assistant { content, .. } => {
                 let text = visible_text(content);
@@ -1084,6 +1118,7 @@ mod tests {
                 usage: None,
             },
             Message::User {
+                origin: kcoder_types::MessageOrigin::Unknown,
                 content: vec![ContentBlock::ToolResult {
                     tool_use_id: "tool-1".to_string(),
                     content: vec![ContentBlock::Text {

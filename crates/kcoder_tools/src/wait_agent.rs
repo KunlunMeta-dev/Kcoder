@@ -50,15 +50,7 @@ impl Tool for WaitAgentTool {
     }
 
     fn description(&self) -> String {
-        "Short-poll a spawned sub-agent and report its status. \
-         Use this only when blocked on the result. The engine will automatically notify \
-         the main conversation when sub-agents finish, so do not use wait for long polling. \
-         Returns `status` as a JSON value: the string \"pending\", \"running\", \
-         \"cancelled\", or \"not_a_subagent\"; or an object {\"completed\": \"<output>\"} \
-         / {\"failed\": \"<error>\"} when the sub-agent finishes. Also returns \
-         `agent_id` (string), `output_file` (optional path), `timed_out` (bool), `effective_timeout_ms` (u64), \
-         and `next_action` (string)."
-            .to_string()
+        "Wait briefly for a spawn_agent agent_id/run_id to finish when its result blocks your next step. Not for shell or workflow task IDs; those require a managed-job output control. Returns terminal agent output or status with timed_out and next_action. This is a completion wait, not an incremental output reader. Completion notifications are automatic; avoid reflexive polling.".into()
     }
 
     fn input_schema_is_stable(&self) -> bool {
@@ -118,7 +110,7 @@ impl Tool for WaitAgentTool {
                 timed_out: false,
                 effective_timeout_ms: timeout_ms,
                 next_action: format!(
-                    "`{id}` is a background command task, not a sub-agent. Use TaskOutput with block=false to inspect it, a short TaskOutput timeout only if its result is on the critical path, or TaskStop to cancel it."
+                    "`{id}` is a background command task, not a sub-agent. Inspect or cancel it through attached managed-job controls or the host; otherwise rely on completion notifications."
                 ),
             })?));
         }
@@ -285,16 +277,16 @@ fn task_output_file(task: &Task) -> Option<String> {
 fn final_next_action(status: TaskStatus) -> String {
     match status {
         TaskStatus::Completed => {
-            "The agent has completed. Integrate the result and call close_agent when the task no longer needs to be tracked.".to_string()
+            "The agent has completed. Integrate the result and release its tracking state through an attached control or host workflow when no longer needed.".to_string()
         }
         TaskStatus::Failed => {
-            "The agent failed. Read the failure payload, decide whether to recover locally, and call close_agent when done.".to_string()
+            "The agent failed. Read the failure payload, decide whether to recover locally, and release its tracking state through an attached control or host workflow when done.".to_string()
         }
         TaskStatus::Cancelled => {
-            "The agent was cancelled. Do not wait for it again; call close_agent when done.".to_string()
+            "The agent was cancelled. Do not wait for it again; release its tracking state through an attached control or host workflow when done.".to_string()
         }
         TaskStatus::Paused => {
-            "The agent is paused at a safe boundary. Use ControlAgent with action=resume and the current control revision when it should continue.".to_string()
+            "The agent is paused at a safe boundary. Resume only through an attached agent-control capability or host workflow using the current control revision.".to_string()
         }
         TaskStatus::Halted => {
             "The agent was gracefully halted and cannot resume. Integrate retained results or spawn a fresh sub-agent.".to_string()
@@ -435,8 +427,8 @@ mod tests {
         assert_eq!(result.agent_id, "job-shell");
         assert!(!result.timed_out);
         assert_eq!(result.status, serde_json::json!("not_a_subagent"));
-        assert!(result.next_action.contains("TaskOutput"));
-        assert!(result.next_action.contains("TaskStop"));
+        assert!(result.next_action.contains("attached managed-job controls"));
+        assert!(result.next_action.contains("cancel"));
     }
 
     #[tokio::test]

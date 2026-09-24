@@ -324,7 +324,7 @@ fn record_headless_background_goal_turn(engine: &QueryEngine, continuation_count
     let Some(goal) = engine.state.goal().filter(|goal| goal.status.is_active()) else {
         return;
     };
-    let _ = engine.state.record_goal_turn_start(&goal.goal_id);
+    let _ = engine.state.record_goal_continuation_start(&goal.goal_id);
     *continuation_count += 1;
 }
 
@@ -386,9 +386,9 @@ fn prepare_headless_goal_continuation(
     }
     let goal = engine
         .state
-        .record_goal_turn_start(&goal.goal_id)
+        .record_goal_continuation_start(&goal.goal_id)
         .unwrap_or(goal);
-    engine.state.add_message(Message::user_text(
+    engine.state.add_message(Message::runtime_text(
         kcoder_engine::goal_continuation::format_goal_continuation_prompt(&goal, &decision),
     ));
     HeadlessGoalContinuation::Continue
@@ -413,7 +413,7 @@ fn prepare_headless_orchestrate_continuation(
         },
     ) {
         Ok(kcoder_engine::orchestrate::continuation::ClaimedContinuation::Enqueued { prompt }) => {
-            engine.state.add_message(Message::user_text(prompt));
+            engine.state.add_message(Message::runtime_text(prompt));
             HeadlessGoalContinuation::Continue
         }
         Ok(kcoder_engine::orchestrate::continuation::ClaimedContinuation::StayIdle {
@@ -658,7 +658,7 @@ async fn prepare_background_followup(
         .filter_map(|id| serde_json::from_str(&id).ok())
         .collect();
     if keys.is_empty() {
-        engine.state.add_message(Message::user_text(nudge));
+        engine.state.add_message(Message::runtime_text(nudge));
         return Ok(Some((keys, String::new())));
     }
     let records: Vec<_> = keys
@@ -681,7 +681,7 @@ async fn prepare_background_followup(
     }
     engine
         .state
-        .commit_message_with_uuid(Message::user_text(nudge), &turn_id)
+        .commit_message_with_uuid(Message::runtime_text(nudge), &turn_id)
         .await?;
     if !engine
         .state

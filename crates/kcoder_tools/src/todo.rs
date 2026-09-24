@@ -18,6 +18,10 @@ pub struct TodoWriteInput {
     /// the changed one.
     #[serde(rename = "TodoList", alias = "todos")]
     pub todos: Vec<TodoWriteItem>,
+    /// Optional reason for clearing an empty TodoList, e.g. user cancellation or
+    /// replacing an obsolete checklist. Clearing never claims task completion.
+    #[serde(default)]
+    pub clear_reason: Option<String>,
 }
 
 /// A single todo item.
@@ -64,12 +68,12 @@ impl Tool for TodoWriteTool {
     fn description(&self) -> String {
         "Update the TodoList for the current coding session — the agent's own execution checklist for the work at hand. Use this proactively for multi-step work in progress, \
          user-provided task lists, new instructions, and discovered follow-up work. Skip it for trivial one-step, \
-         purely conversational, or immediately completed tasks. This is NOT the orchestration layer: when work spans turns, carries dependencies, or must notify the user on completion, use TaskCreate instead (TaskCreate tracks cross-turn orchestrated work with owners and dependency edges; TodoWrite tracks what you are doing right now). The `TodoList` input is the complete replacement list, not a \
+         purely conversational, or immediately completed tasks. This is NOT the orchestration layer: when work spans turns, carries dependencies, or must notify the user on completion, use an attached task-orchestration control if one exists; TodoWrite only tracks the current checklist. The `TodoList` input is the complete replacement list, not a \
          partial patch. Each TodoList item requires `content` in imperative form (for example `Run tests`) and `activeForm` \
          in present-continuous form (for example `Running tests`). Valid statuses are `pending`, `in_progress`, \
          and `completed`. Do not call TodoWrite with placeholder strings such as `{\"TodoList\":[\"\"]}`; \
          if there is no concrete checklist to track, skip TodoWrite instead. Do not send null-valued fields anywhere in the TodoWrite input: every todo object must \
-         provide non-null `content`, `activeForm`, and `status` values. When every item in `TodoList` has status `completed`, TodoWrite clears the stored TodoList and returns `all todos are completed`. Ideally exactly ONE task is `in_progress` at any time unless all tasks are completed; \
+         provide non-null `content`, `activeForm`, and `status` values. An empty TodoList clears the checklist without claiming completion; use clear_reason to record cancellation or why the checklist is obsolete. For a non-empty list where every item in `TodoList` has status `completed`, TodoWrite clears the stored TodoList and returns `all todos are completed`. Ideally exactly ONE task is `in_progress` at any time unless all tasks are completed; \
          complete the current task before starting another, remove irrelevant tasks entirely, and never mark a task \
          completed while tests are failing, implementation is partial, blockers remain, or required files/dependencies \
          were not found."
@@ -90,12 +94,18 @@ impl Tool for TodoWriteTool {
 
     async fn call(&self, input: Value, ctx: &ToolContext) -> Result<ToolOutput, ToolError> {
         let input: TodoWriteInput = parse_input(&input)?;
+        if let Some(reason) = &input.clear_reason {
+            if !input.todos.is_empty() || reason.trim().is_empty() || reason.len() > 2048 {
+                return Err(ToolError::InvalidInput("clear_reason requires an empty TodoList and 1..=2048 UTF-8 bytes of non-whitespace reason text".into()));
+            }
+        }
         let old_todos = ctx.state.todos();
 
-        let all_done = input
-            .todos
-            .iter()
-            .all(|item| matches!(item.status, TodoWriteStatus::Completed));
+        let all_done = !input.todos.is_empty()
+            && input
+                .todos
+                .iter()
+                .all(|item| matches!(item.status, TodoWriteStatus::Completed));
         let in_progress_count = input
             .todos
             .iter()
@@ -134,7 +144,12 @@ impl Tool for TodoWriteTool {
         );
         text.push_str(&format!("\n\nPrevious todo count: {}", old_todos.len()));
 
-        if all_done {
+        if input.todos.is_empty() {
+            text.push_str("\nTodoList cleared without marking unfinished tasks completed.");
+            if let Some(reason) = &input.clear_reason {
+                text.push_str(&format!("\nClear reason: {}", reason.trim()));
+            }
+        } else if all_done {
             text.push_str("\nall todos are completed; the TodoList has been cleared.");
         } else {
             text.push_str(&format!("\nCurrent todo count: {}", input.todos.len()));
@@ -155,7 +170,7 @@ impl Tool for TodoWriteTool {
 
         if verification_nudge_needed {
             text.push_str(
-                "\n\nNOTE: You just closed out 3+ tasks and none of them was a verification step. Before writing the final summary, run focused verification yourself or spawn a verifier sub-agent with `spawn_agent` and `agent_type=\"verifier\"`.",
+                "\n\nNOTE: You just closed out 3+ tasks and none of them was a verification step. Before writing the final summary, perform focused verification using attached capabilities, or report that verification is unavailable.",
             );
         }
 
@@ -187,6 +202,41 @@ mod tests {
                 _ => None,
             })
             .collect()
+    }
+
+    #[tokio::test]
+    async fn clearing_or_cancelling_is_not_completion_and_invalid_reasons_do_not_mutate() {
+        let ctx = ToolContext::new(kcoder_state::AppState::new("."));
+        let pending = json!({"TodoList":[{"content":"Fix bug","activeForm":"Fixing bug","status":"pending"}]});
+        TodoWriteTool.call(pending.clone(), &ctx).await.unwrap();
+        let mut invalid = pending.clone();
+        invalid["clear_reason"] = json!("user cancelled");
+        assert!(TodoWriteTool.call(invalid, &ctx).await.is_err());
+        assert_eq!(ctx.state.todos().len(), 1);
+        assert!(
+            TodoWriteTool
+                .call(json!({"TodoList":[],"clear_reason":" "}), &ctx)
+                .await
+                .is_err()
+        );
+        assert_eq!(ctx.state.todos().len(), 1);
+        let cancelled = TodoWriteTool
+            .call(
+                json!({"TodoList":[],"clear_reason":"User cancelled the request"}),
+                &ctx,
+            )
+            .await
+            .unwrap();
+        assert!(text(&cancelled).contains("User cancelled"));
+        assert!(!text(&cancelled).contains("all todos are completed"));
+        assert!(ctx.state.todos().is_empty());
+        TodoWriteTool.call(pending, &ctx).await.unwrap();
+        let cleared = TodoWriteTool
+            .call(json!({"TodoList":[]}), &ctx)
+            .await
+            .unwrap();
+        assert!(!text(&cleared).contains("all todos are completed"));
+        assert!(text(&cleared).contains("without marking unfinished tasks completed"));
     }
 
     #[test]
@@ -297,7 +347,9 @@ mod tests {
         let output_text = text(&output);
         assert!(output_text.contains("all todos are completed"));
         assert!(output_text.contains("TodoList has been cleared"));
-        assert!(output_text.contains("spawn a verifier sub-agent"));
+        assert!(output_text.contains("using attached capabilities"));
+        assert!(output_text.contains("report that verification is unavailable"));
+        assert!(!output_text.contains("spawn_agent"));
         assert!(state.todos().is_empty());
     }
 

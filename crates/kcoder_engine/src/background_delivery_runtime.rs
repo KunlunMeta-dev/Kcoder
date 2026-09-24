@@ -117,7 +117,7 @@ impl QueryEngine {
         };
         match self
             .state
-            .deliver_background_notification(&identity, Message::user_text(text))
+            .deliver_background_notification(&identity, Message::runtime_text(text))
             .await
         {
             Ok(new_delivery) => {

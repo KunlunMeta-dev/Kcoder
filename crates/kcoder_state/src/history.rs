@@ -71,9 +71,12 @@ fn model_history_from_values(
             continue;
         }
         let is_compact_summary = is_compact_summary_record(value);
-        match serde_json::from_value(value.clone()) {
-            Ok(entry) => {
+        match serde_json::from_value::<HistoryEntry>(value.clone()) {
+            Ok(mut entry) => {
                 if is_compact_summary {
+                    entry.message = entry
+                        .message
+                        .with_origin(kcoder_types::MessageOrigin::Compaction);
                     entries.push(entry);
                     if let Some(preserved) = pending_preserved_segment.take() {
                         entries.extend(preserved);
@@ -1555,6 +1558,7 @@ mod resume_checkpoint_tests {
             entry(
                 "result",
                 Message::User {
+                    origin: kcoder_types::MessageOrigin::Unknown,
                     content: vec![kcoder_types::ContentBlock::ToolResult {
                         tool_use_id: "tool-1".into(),
                         content: vec![kcoder_types::ContentBlock::Text {

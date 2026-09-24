@@ -329,7 +329,7 @@ impl Tool for RecordTaskAcceptanceTool {
     }
 
     fn description(&self) -> String {
-        "Atomically record all four acceptance checks and trusted evidence references, then mark exactly one plan task complete using expected_revision CAS. This creates a new revision; when one verification wave supports multiple incomplete tasks, use RecordTaskAcceptances once so the remaining evidence does not become stale after the first checkbox update.".to_string()
+        "Atomically record all four acceptance checks and trusted evidence references, then mark exactly one plan task complete using expected_revision CAS. This creates a new revision; when one verification wave supports multiple incomplete tasks, prefer an attached batched acceptance control; otherwise obtain fresh revision-bound evidence for each acceptance because the previous evidence becomes stale.".to_string()
     }
 
     fn input_schema_is_stable(&self) -> bool {

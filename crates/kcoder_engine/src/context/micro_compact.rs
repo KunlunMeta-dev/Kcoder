@@ -115,7 +115,7 @@ pub fn apply_micro_compact(
         }
 
         let content = match msg {
-            Message::User { content } => content,
+            Message::User { content, .. } => content,
             Message::Assistant { content, .. } => content,
         };
 
@@ -210,7 +210,7 @@ pub fn apply_time_based_micro_compact(
 
     let mut result = MicroCompactResult::default();
     for message in messages.iter_mut() {
-        let Message::User { content } = message else {
+        let Message::User { content, .. } = message else {
             continue;
         };
         for block in content.iter_mut() {
@@ -257,6 +257,7 @@ mod tests {
 
     fn make_tool_result(id: &str, text: &str) -> Message {
         Message::User {
+            origin: kcoder_types::MessageOrigin::Unknown,
             content: vec![ContentBlock::ToolResult {
                 tool_use_id: id.into(),
                 content: vec![ContentBlock::Text { text: text.into() }],
@@ -278,7 +279,7 @@ mod tests {
         assert_eq!(result.cleared_tool_use_ids, vec!["call_1"]);
 
         match &messages[1] {
-            Message::User { content } => match &content[0] {
+            Message::User { content, .. } => match &content[0] {
                 ContentBlock::ToolResult { content: inner, .. } => match &inner[0] {
                     ContentBlock::Text { text } => {
                         assert_eq!(text, TOOL_RESULT_CLEARED_MESSAGE);

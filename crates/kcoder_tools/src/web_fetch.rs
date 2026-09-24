@@ -33,7 +33,8 @@ static URL_CACHE: OnceLock<Mutex<HashMap<String, CacheEntry>>> = OnceLock::new()
 pub struct WebFetchInput {
     /// The URL to fetch content from.
     pub url: String,
-    /// The prompt to run on the fetched content.
+    /// Extraction guidance for the calling model, returned with the source.
+    /// The fetcher does not execute this prompt or call a summarization model.
     pub prompt: String,
 }
 
@@ -44,8 +45,8 @@ impl Tool for WebFetchTool {
     }
 
     fn description(&self) -> String {
-        "Fetches content from a specified URL and processes it using the prompt as extraction guidance. \
-         Fetches URL content, converts HTML to readable text, and returns the relevant fetched content. \
+        "Fetch source content and HTTP metadata from a URL; prefer this for retrieving a document or cited page. The prompt is returned as guidance for the calling model, not executed by another model. \
+         Fetches URL content, converts HTML to readable text, and returns bounded source content. \
          The URL must be fully formed. HTTP URLs for public hosts are automatically upgraded to HTTPS; \
          localhost HTTP is preserved for local dev servers. Includes a self-cleaning 15-minute cache. \
          Same-host redirects are followed, while redirects to a different host are reported with the redirect URL. \

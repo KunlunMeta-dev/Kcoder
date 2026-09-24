@@ -144,7 +144,7 @@ impl ContextManager {
         messages
             .iter()
             .map(|msg| match msg {
-                Message::User { content } => {
+                Message::User { content, .. } => {
                     format!("User: {}", content_blocks_to_string(content))
                 }
                 Message::Assistant { content, .. } => {
@@ -162,7 +162,7 @@ impl ContextManager {
     pub fn truncate_long_tool_outputs(messages: &mut [Message], max_tool_output_chars: usize) {
         for msg in messages.iter_mut() {
             let content = match msg {
-                Message::User { content } | Message::Assistant { content, .. } => content,
+                Message::User { content, .. } | Message::Assistant { content, .. } => content,
             };
             for block in content.iter_mut() {
                 if let ContentBlock::ToolResult { content: inner, .. } = block {
@@ -397,6 +397,7 @@ mod tests {
     fn truncates_long_tool_output() {
         let long = "x".repeat(1000);
         let mut messages = vec![Message::User {
+            origin: kcoder_types::MessageOrigin::Unknown,
             content: vec![ContentBlock::ToolResult {
                 tool_use_id: "call_1".to_string(),
                 content: vec![ContentBlock::Text { text: long.clone() }],
@@ -404,7 +405,7 @@ mod tests {
             }],
         }];
         ContextManager::truncate_long_tool_outputs(&mut messages, 100);
-        if let Message::User { content } = &messages[0]
+        if let Message::User { content, .. } = &messages[0]
             && let ContentBlock::ToolResult { content: inner, .. } = &content[0]
             && let ContentBlock::Text { text } = &inner[0]
         {

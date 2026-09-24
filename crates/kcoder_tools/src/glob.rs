@@ -52,6 +52,7 @@ pub struct GlobInput {
     pub path: Option<String>,
     /// Maximum number of matches to return. Defaults to 100.
     /// Model-facing searches reject zero because an unbounded result set is not responsive.
+    #[schemars(range(min = 1, max = 2000))]
     pub limit: Option<usize>,
     /// Output mode. `paths` returns paths by default; `count` returns only the total
     /// matching-file count. Count mode ignores `limit` but still observes scan budgets, timeouts, and cancellation.
@@ -147,7 +148,7 @@ impl Tool for GlobTool {
     }
 
     fn description(&self) -> String {
-        "A file enumeration tool backed by ripgrep when available, with bounded and cancellable scans. Use it instead of shell `ls`, `find`, or glob expansion. Supports patterns like `**/*.rs` or `src/**/*.ts`; `output_mode: \"paths\"` returns file paths sorted by modification time, while `output_mode: \"count\"` scans and returns only an aggregate matched-file count. Path results are limited by `limit` (default 100) and may include a truncation notice; count results ignore `limit` but report whether the count is complete. Use grep for content search. Start with the default scan budget and select `expanded` or `large` only when a broader explicit path is required; `large` is the maximum budget."
+        "A file enumeration tool backed by ripgrep when available, with bounded and cancellable scans. Use it instead of shell `ls`, `find`, or glob expansion. Supports patterns like `**/*.rs` or `src/**/*.ts`; `output_mode: \"paths\"` returns file paths sorted by modification time, while `output_mode: \"count\"` scans and returns only an aggregate matched-file count. Path results are limited by `limit` (default 100) and may include a truncation notice; count results ignore `limit` but report whether the count is complete. This enumerates paths rather than searching file contents. Start with the default scan budget and select `expanded` or `large` only when a broader explicit path is required; `large` is the maximum budget."
             .to_string()
     }
 
@@ -173,6 +174,11 @@ impl Tool for GlobTool {
         }
 
         let input: GlobInput = parse_input(&input)?;
+        if input.limit.is_some_and(|limit| limit == 0 || limit > 2000) {
+            return Ok(ToolOutput::error(
+                "Unbounded glob results are disabled. limit must be in 1..=2000; use a positive limit or omit it. Count mode ignores a valid positive limit and reports the full scan count.",
+            ));
+        }
         let base = input
             .path
             .as_ref()
@@ -1031,6 +1037,35 @@ mod tests {
             assert!(is_top_level_search_root(Path::new("/root")));
             assert!(!is_top_level_search_root(Path::new("/root/project")));
         }
+    }
+
+    #[tokio::test]
+    async fn count_ignores_positive_limit_but_rejects_zero() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("one.txt"), "one").unwrap();
+        std::fs::write(dir.path().join("two.txt"), "two").unwrap();
+        let ctx = ToolContext::new(AppState::new(dir.path()));
+        let count = GlobTool
+            .call(
+                serde_json::json!({"pattern":"*.txt","output_mode":"count","limit":1}),
+                &ctx,
+            )
+            .await
+            .unwrap();
+        assert!(!count.is_error);
+        let kcoder_types::ContentBlock::Text { text } = &count.content[0] else {
+            panic!("text count");
+        };
+        assert!(text.contains("matched_files: 2"), "{text}");
+        assert!(text.contains("complete: true"), "{text}");
+        let invalid = GlobTool
+            .call(
+                serde_json::json!({"pattern":"*.txt","output_mode":"count","limit":0}),
+                &ctx,
+            )
+            .await
+            .unwrap();
+        assert!(invalid.is_error);
     }
 
     #[tokio::test]

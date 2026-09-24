@@ -160,7 +160,7 @@ impl Tool for MemoryTool {
     }
 
     fn description(&self) -> String {
-        "Store a durable fact into the structured long-term memory store (sqlite), retrievable in future sessions via memory_search/memory_get. Use it for user preferences, project constraints, decisions, and lessons that should outlive this session. Do NOT use it for scratch notes or the user's own curated notes: those belong to the user's ~/.kcoder/local-memory/ space, which is user-managed and read via LocalMemoryRecall instead.".to_string()
+        "Store a durable fact into the structured long-term memory store (sqlite), retrievable in future sessions via memory_search/memory_get. Use it for user preferences, project constraints, decisions, and lessons that should outlive this session. Do NOT use it for scratch notes or the user's own curated notes: those belong to the user's ~/.kcoder/local-memory/ space, which is user-managed and requires its own attached recall control.".to_string()
     }
 
     fn input_schema_is_stable(&self) -> bool {
@@ -219,7 +219,7 @@ impl Tool for MemorySearchTool {
     }
 
     fn description(&self) -> String {
-        "Search structured long-term memory observations and session summaries by content. Use scope=observations for fine-grained facts, scope=summaries for prior progress and conclusions, or scope=both (default). Fetch an exact hit or its observation timeline with memory_get. Use LocalMemoryRecall for the user's curated ~/.kcoder/local-memory/ notes, and remember to write a new durable fact."
+        "Search structured long-term memory observations and session summaries by content. Use scope=observations for fine-grained facts, scope=summaries for prior progress and conclusions, or scope=both (default). Fetching exact hits/timelines, accessing curated notes, and storing new facts require the corresponding attached controls."
             .to_string()
     }
 
@@ -320,7 +320,7 @@ impl Tool for MemoryGetTool {
     }
 
     fn description(&self) -> String {
-        "Fetch structured long-term memory by id. Use id/ids for exact observations or summaries (kind=summary); add before and/or after with one observation id to fetch its same-session timeline. Search by content with memory_search first. Use LocalMemoryRecall for the user's curated notes and remember to write a new durable fact."
+        "Fetch structured long-term memory by id. Use id/ids for exact observations or summaries (kind=summary); add before and/or after with one observation id to fetch its same-session timeline. Content search, curated-note access and storing new facts require the corresponding attached controls."
             .to_string()
     }
 

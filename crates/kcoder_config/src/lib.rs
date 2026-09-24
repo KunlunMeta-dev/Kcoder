@@ -53,7 +53,7 @@ pub use deployment::{
     default_providers, default_settings_document, merge_default_deployment_settings,
     migrate_deployment_settings,
 };
-pub use schema::ensure_user_settings_schema;
+pub use schema::{ensure_user_settings_schema, settings_schema_for_path};
 mod dotenv;
 mod endpoint_security;
 mod turn_file_changes;

@@ -207,7 +207,7 @@ impl TokenCounter {
     /// Estimate a single message from its content blocks.
     pub fn estimate_message(message: &Message) -> usize {
         let blocks = match message {
-            Message::User { content } => content,
+            Message::User { content, .. } => content,
             Message::Assistant { content, .. } => content,
         };
         blocks.iter().map(Self::estimate_block).sum::<usize>() + 4 // small role overhead

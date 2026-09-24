@@ -434,7 +434,7 @@ fn into_genai_messages(message: Message) -> Vec<ChatMessage> {
                 .collect::<Vec<_>>();
             vec![ChatMessage::assistant(MessageContent::from_parts(parts))]
         }
-        Message::User { content } => {
+        Message::User { content, .. } => {
             let mut result = Vec::new();
             let mut user_parts = Vec::new();
             for block in content {

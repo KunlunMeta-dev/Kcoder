@@ -31,7 +31,7 @@ fn parse_message_index(id: &str) -> Option<usize> {
 
 fn message_contains_tool_use(message: &Message) -> bool {
     let content = match message {
-        Message::User { content } => content,
+        Message::User { content, .. } => content,
         Message::Assistant { content, .. } => content,
     };
     content
@@ -45,7 +45,8 @@ fn message_contains_tool_use(message: &Message) -> bool {
 fn snip_message_content(message: &Message, reason: &str) -> Message {
     let placeholder = format!("[snipped: {reason}]");
     match message {
-        Message::User { content } => Message::User {
+        Message::User { content, origin } => Message::User {
+            origin: *origin,
             content: content
                 .iter()
                 .map(|block| match block {
@@ -194,7 +195,7 @@ mod tests {
 
     fn tool_result_message(id: &str, output: &str) -> Message {
         Message::User {
-            content: vec![ContentBlock::ToolResult {
+            origin: kcoder_types::MessageOrigin::Unknown, content: vec![ContentBlock::ToolResult {
                 tool_use_id: id.to_string(),
                 content: vec![ContentBlock::Text {
                     text: output.to_string(),
@@ -238,7 +239,7 @@ mod tests {
         assert!(!output.is_error, "snip should succeed: {output:?}");
         let messages = ctx.state.messages();
         // Plain user message replaced with the placeholder.
-        let Message::User { content } = &messages[0] else {
+        let Message::User { content, .. } = &messages[0] else {
             panic!("expected user message");
         };
         assert!(matches!(
@@ -246,7 +247,7 @@ mod tests {
             ContentBlock::Text { text } if text.contains("[snipped: test cleanup]")
         ));
         // tool_result keeps its tool_use_id wrapper with replaced content.
-        let Message::User { content } = &messages[2] else {
+        let Message::User { content, .. } = &messages[2] else {
             panic!("expected user message");
         };
         assert!(matches!(
@@ -295,7 +296,7 @@ mod tests {
         assert!(out_of_range.is_error);
         // Nothing changed.
         let messages = ctx.state.messages();
-        let Message::User { content } = &messages[0] else {
+        let Message::User { content, .. } = &messages[0] else {
             panic!("expected user message");
         };
         assert!(matches!(

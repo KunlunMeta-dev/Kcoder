@@ -104,7 +104,7 @@ fn yolo_system_prompt_explicitly_disables_user_elicitation() {
 
     assert!(prompt.contains("User elicitation is disabled in yolo mode"));
     assert!(prompt.contains("Do not ask follow-up questions"));
-    assert!(prompt.contains("Do not invoke user-question or plan-approval tools"));
+    assert!(prompt.contains("Do not request interactive input or approval"));
     assert!(prompt.contains("Make a reasonable assumption"));
 }
 
@@ -122,7 +122,9 @@ fn system_prompt_requires_todolist_final_review_after_todowrite() {
 
     assert!(prompt.contains("If you use TodoWrite during a task"));
     assert!(prompt.contains("review the active TodoList before your final response"));
-    assert!(prompt.contains("all todos are completed"));
+    assert!(prompt.contains("retain unfinished items"));
+    assert!(prompt.contains("clear_reason"));
+    assert!(!prompt.contains("then call TodoWrite with all items completed"));
 }
 
 #[test]
@@ -144,8 +146,13 @@ fn system_prompt_explains_persistent_bash_process_lifecycle() {
     assert!(prompt.contains("session ends"));
     assert!(prompt.contains("later health check"));
     assert!(prompt.contains("TaskOutput"));
-    assert!(prompt.contains("operating-system PID and process state"));
-    assert!(prompt.contains("stopped T/t"));
+    if cfg!(windows) {
+        assert!(prompt.contains("Windows process state"));
+        assert!(!prompt.contains("stopped T/t"));
+    } else {
+        assert!(prompt.contains("operating-system PID and process state"));
+        assert!(prompt.contains("stopped T/t"));
+    }
     assert!(prompt.contains("curl HTTP 000 alone does not prove"));
     assert!(prompt.contains("report the conflict"));
 }
@@ -163,6 +170,8 @@ fn system_prompt_explains_persistent_powershell_process_lifecycle() {
     );
 
     assert!(prompt.contains("PowerShell process lifecycle"));
+    assert!(prompt.contains("Windows process state"));
+    assert!(!prompt.contains("stopped T/t"));
     assert!(prompt.contains("run_in_background=true"));
     assert!(prompt.contains("Start-Job"));
     assert!(prompt.contains("Start-Sleep"));
@@ -369,7 +378,7 @@ async fn project_instructions_are_stable_leading_user_context_on_every_request()
     assert_eq!(requests.len(), 2);
     assert_eq!(requests[0].system, requests[1].system);
     for request in requests.iter() {
-        let Message::User { content } = &request.messages[0] else {
+        let Message::User { content, .. } = &request.messages[0] else {
             panic!("project context must be the leading user message");
         };
         let text = content.iter().find_map(|block| match block {
@@ -752,5 +761,27 @@ async fn yolo_arrangement_prompt_uses_post_filter_tool_definitions() {
             !prompt.contains(filtered),
             "arrangement prompt unexpectedly names filtered tool {filtered}"
         );
+    }
+}
+
+#[test]
+fn active_plan_without_controls_is_a_host_restriction_not_a_tool_grant() {
+    let dir = tempfile::tempdir().unwrap();
+    let prompt = build_system_prompt(dir.path(), "test", true, false, true, &tool_names(&["read"]));
+    assert!(prompt.contains("Plan mode is active"));
+    assert!(prompt.contains("Mode changes are controlled by the user or host"));
+    assert!(!prompt.contains("ExitPlanMode"));
+    assert!(!prompt.contains("AskUserQuestion"));
+    assert!(!prompt.contains("user-question or plan-approval tools"));
+}
+
+#[test]
+fn acceptance_guidance_checks_each_peer_instead_of_assuming_a_group() {
+    for names in [vec!["RecordTaskAcceptance"], vec!["RecordTaskAcceptances"], vec!["RecordTaskAcceptance", "RecordTaskAcceptances", "PlanProgress"]] {
+        let tools = tool_names(&names);
+        let prompt = arrangement_system_prompt(&tools, false, OrchestrateProvenance::Session);
+        assert!(prompt.contains("Acceptance has four questions"));
+        assert_eq!(prompt.contains("Call PlanProgress"), tools.contains("PlanProgress"));
+        assert_eq!(prompt.contains("with RecordTaskAcceptances"), tools.contains("RecordTaskAcceptances"));
     }
 }

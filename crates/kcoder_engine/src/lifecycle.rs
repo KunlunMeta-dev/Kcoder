@@ -309,7 +309,7 @@ impl QueryEngine {
                 )
                 .await;
             for context in effects.additional_context {
-                self.state.add_message(Message::user_text(format!(
+                self.state.add_message(Message::runtime_text(format!(
                     "[hook:{}] {}",
                     event.as_str(),
                     context

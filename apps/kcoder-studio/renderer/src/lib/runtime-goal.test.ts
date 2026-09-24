@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
-import type { RuntimeGoalContinuationPayload } from '@/types/api'
-import { updateRuntimeGoalContinuation } from './runtime-goal'
+import type { RuntimeGoal, RuntimeGoalContinuationPayload } from '@/types/api'
+import { updateRuntimeGoalContinuation, isVisibleRuntimeGoal } from './runtime-goal'
 
 const started: RuntimeGoalContinuationPayload = {
   taskId: 'task-1',
@@ -31,4 +31,10 @@ describe('runtime goal continuation', () => {
     ).toBeNull()
     expect(updateRuntimeGoalContinuation(started, { type: 'goal_inactive' })).toBeNull()
   })
+})
+
+test('hides explicitly cancelled goals while keeping blocked goals visible', () => {
+  const goal = { status: 'cancelled' } as RuntimeGoal
+  expect(isVisibleRuntimeGoal(goal)).toBe(false)
+  expect(isVisibleRuntimeGoal({ ...goal, status: 'blocked' })).toBe(true)
 })

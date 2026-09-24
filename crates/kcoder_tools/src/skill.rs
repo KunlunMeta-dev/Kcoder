@@ -43,9 +43,9 @@ impl Tool for SkillTool {
          legacy {\"name\":\"commit\",\"arguments\":[\"-m 'Fix bug'\"]} input is still accepted. \
          When a matching skill applies to the user's task, invoking it before acting is a blocking requirement. \
          Bundled skills may be addressed as either \"using-superpowers\" or \
-         \"superpowers:using-superpowers\". To create or edit skills use skill_manage; to install community skills use skill_hub; for lifecycle housekeeping (stale/archive/consolidate) use skill_curator. Activation updates the current \
+         \"superpowers:using-superpowers\". Creation, installation and lifecycle housekeeping are separate capabilities and require their own attached controls. Activation updates the current \
          conversation's active-skill state and usage telemetry, so calls are \
-         serialized. Use DiscoverSkills first if you are unsure which skill name to choose."
+         serialized. Choose an exact known skill name; discover candidates first when discovery is available."
             .to_string()
     }
 
@@ -93,7 +93,7 @@ impl Tool for SkillTool {
                 .get_active(&skill_name_input)
                 .ok_or_else(|| {
                     ToolError::Execution(format!(
-                        "Unknown skill: {skill_name_input}. Use DiscoverSkills to search available skills, then call skill with the exact skill name."
+                        "Unknown skill: {skill_name_input}. Use discovery if attached, then retry with the exact skill name."
                     ))
                 })?;
             (
@@ -173,7 +173,7 @@ impl Tool for SkillTool {
         let content_already_injected = {
             let marker = format!("<skill_content name=\"{}\">", skill_name);
             ctx.state.messages().iter().any(|message| match message {
-                kcoder_types::Message::User { content } => content.iter().any(
+                kcoder_types::Message::User { content, .. } => content.iter().any(
                     |block| matches!(block, ContentBlock::Text { text } if text.contains(&marker)),
                 ),
                 kcoder_types::Message::Assistant { .. } => false,
@@ -835,7 +835,7 @@ mod tests {
         // The engine appends the user_context as a user message after the
         // tool result; mirror that here.
         ctx.state.add_message(kcoder_types::Message::User {
-            content: first.user_context.clone(),
+            origin: kcoder_types::MessageOrigin::Unknown, content: first.user_context.clone(),
         });
 
         let second = SkillTool

@@ -100,6 +100,16 @@ pub use runtime_audit::{
 };
 use session_persistence::*;
 
+/// Opaque weak identity for owner-bound, in-memory read snapshots. It does not
+/// retain conversation payloads or expose the persistence lock.
+#[derive(Clone)]
+pub struct AppStateIdentity(std::sync::Weak<RwLock<AppStateInner>>);
+impl AppStateIdentity {
+    pub fn matches(&self, state: &AppState) -> bool {
+        std::sync::Weak::ptr_eq(&self.0, &Arc::downgrade(&state.inner))
+    }
+}
+
 /// Central application state shared across the REPL, engine, and tools.
 #[derive(Debug, Clone)]
 pub struct AppState {
@@ -222,6 +232,10 @@ impl AppState {
         Ok(ReservedSessionId(id))
     }
     /// Compare ownership without acquiring the state lock.
+    pub fn inspection_identity(&self) -> AppStateIdentity {
+        AppStateIdentity(Arc::downgrade(&self.inner))
+    }
+
     pub fn shares_state_with(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.inner, &other.inner)
     }
@@ -504,6 +518,7 @@ impl AppState {
         let range = ReadRangeKey::new(offset, limit);
         let (offset, limit) = range.stored_parts();
         let snapshot = FileReadSnapshot {
+            source_encoding_hint: None,
             content: content.map(Arc::<str>::from),
             modified,
             offset,
@@ -528,6 +543,19 @@ impl AppState {
         offset: Option<usize>,
         limit: Option<usize>,
     ) {
+        self.record_read_tool_snapshot_with_encoding(path, content, modified, offset, limit, "auto");
+    }
+
+    /// Record a decoder-bound read so cached text cannot cross encoding selections.
+    pub fn record_read_tool_snapshot_with_encoding(
+        &self,
+        path: impl Into<PathBuf>,
+        content: Option<String>,
+        modified: Option<SystemTime>,
+        offset: Option<usize>,
+        limit: Option<usize>,
+        source_encoding_hint: &str,
+    ) {
         let mut inner = self.write_inner();
         let path = normalize_read_snapshot_path(&path.into(), &inner.cwd);
         let range = ReadRangeKey::new(offset, limit);
@@ -540,6 +568,7 @@ impl AppState {
                     && previous.content == content
             });
         let snapshot = FileReadSnapshot {
+            source_encoding_hint: Some(source_encoding_hint.to_owned()),
             content,
             modified,
             offset,
@@ -822,7 +851,7 @@ impl AppState {
         let Some(drain_end) = (minimum_cut..inner.messages.len()).find(|&index| {
             matches!(
                 &inner.messages[index],
-                Message::User { content }
+                Message::User { content, .. }
                     if content.iter().any(|block| !matches!(block, ContentBlock::ToolResult { .. }))
             )
         }) else {
@@ -1351,7 +1380,7 @@ fn read_result_keys<'a>(
 ) -> HashSet<FileReadKey> {
     let mut keys = HashSet::new();
     for message in messages {
-        let Message::User { content } = message else {
+        let Message::User { content, .. } = message else {
             continue;
         };
         for block in content {
@@ -1576,7 +1605,7 @@ mod tests {
         let selected = state.find_latest_message_map(|message| {
             visited += 1;
             match message {
-                Message::User { content } => match &content[0] {
+                Message::User { content, .. } => match &content[0] {
                     ContentBlock::Text { text } => Some(text.clone()),
                     _ => None,
                 },
@@ -1650,6 +1679,7 @@ mod tests {
 
     fn read_tool_result(id: &str, text: &str) -> Message {
         Message::User {
+            origin: kcoder_types::MessageOrigin::Unknown,
             content: vec![ContentBlock::ToolResult {
                 tool_use_id: id.to_string(),
                 content: vec![ContentBlock::Text {
@@ -2216,6 +2246,7 @@ mod tests {
             usage: None,
         });
         state.add_message(Message::User {
+            origin: kcoder_types::MessageOrigin::Unknown,
             content: vec![ContentBlock::ToolResult {
                 tool_use_id: "tool-1".to_string(),
                 content: vec![ContentBlock::Text {

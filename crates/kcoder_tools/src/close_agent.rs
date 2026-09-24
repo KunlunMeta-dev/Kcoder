@@ -30,7 +30,7 @@ impl Tool for CloseAgentTool {
 
     fn description(&self) -> String {
         "Close a sub-agent by removing its tracking state and making that agent_id no longer \
-         resumable with SendMessage. Completed or failed sub-agents are already no longer running \
+         resumable through an attached follow-up control. Completed or failed sub-agents are already no longer running \
          and do not occupy the running sub-agent cap; close_agent is not required to free a \
          concurrency slot. Do not close pending or running sub-agents; wait for completion or send \
          them follow-up instructions first. Returns the agent's previous status before closing."
@@ -73,7 +73,7 @@ impl Tool for CloseAgentTool {
                     "closed": false,
                     "error": "not_a_subagent",
                     "next_action": format!(
-                        "`{id}` is a background command task, not a sub-agent. Use TaskOutput to inspect it or TaskStop to cancel it."
+                        "`{id}` is a background command task, not a sub-agent. Inspection or cancellation requires attached managed-job controls or the host."
                     ),
                 })
                 .to_string(),
@@ -88,7 +88,7 @@ impl Tool for CloseAgentTool {
                         "closed": false,
                         "error": "agent_still_running",
                         "next_action": format!(
-                            "`{id}` is still running. Use wait only when the result is on the critical path, or SendMessage to add instructions; close_agent is only for completed, failed, or cancelled sub-agents."
+                            "`{id}` is still running. Use attached completion/follow-up controls or the host when needed; close_agent is only for completed, failed, or cancelled sub-agents."
                         ),
                     })
                     .to_string(),
@@ -206,7 +206,7 @@ mod tests {
         let value: serde_json::Value = serde_json::from_str(&text).unwrap();
         assert_eq!(value["closed"], false);
         assert_eq!(value["error"], "not_a_subagent");
-        assert!(value["next_action"].as_str().unwrap().contains("TaskStop"));
+        assert!(value["next_action"].as_str().unwrap().contains("cancellation"));
         assert!(state.task("job-shell").is_some());
     }
 

@@ -17,6 +17,7 @@ mod context;
 pub mod control_agent;
 pub mod cron;
 pub mod ctx_inspect;
+pub mod session_inspect;
 pub mod discover_skills;
 pub mod edit;
 pub mod file;
@@ -32,8 +33,11 @@ pub mod ocr;
 pub mod orchestrate;
 pub mod os_sandbox;
 pub mod plan;
+mod peer_guidance;
+pub use peer_guidance::project_builtin_peer_guidance;
 pub mod powershell;
 mod process;
+mod pdf_read;
 mod registry;
 pub mod repl;
 pub mod review_vote;
@@ -366,6 +370,8 @@ pub struct ToolDescriptionContext {
     pub permission_mode: ToolPermissionMode,
     pub is_non_interactive: bool,
     pub active_skills: Vec<String>,
+    /// Final names attached to this request, after mode/permission/terminal filtering.
+    pub available_tools: std::collections::HashSet<String>,
 }
 
 #[async_trait]
@@ -642,6 +648,7 @@ fn core_registry_for_platform(platform: ToolPlatform) -> ToolRegistry {
 
 fn nano_registry_for_platform(platform: ToolPlatform) -> ToolRegistry {
     let registry = ToolRegistry::new()
+        .register(CtxInspectTool)
         .register(FileReadTool)
         .register(FileWriteTool)
         .register(FileEditTool)
@@ -1272,6 +1279,7 @@ mod tests {
             permission_mode: ToolPermissionMode::Ask,
             is_non_interactive: false,
             active_skills: Vec::new(),
+            available_tools: Default::default(),
         };
 
         assert_eq!(
@@ -1373,18 +1381,13 @@ mod tests {
     }
 
     #[test]
-    fn description_with_input_shape_lists_required_fields_and_array_paths() {
+    fn description_with_input_shape_leaves_structural_contract_in_schema() {
         let tool = AskUserQuestionTool;
-        let description = description_with_input_shape("Ask the user.", &tool.input_schema());
-
-        assert!(description.contains("Input format:"));
-        assert!(description.contains("JSON shape example:"));
-        assert!(description.contains("\"questions\":["));
-        assert!(description.contains("Required fields:"));
-        assert!(description.contains("$.questions"));
-        assert!(description.contains("$.questions[].options"));
-        assert!(description.contains("Array fields must use JSON arrays"));
-        assert!(description.contains("Do not wrap arrays"));
+        let schema = tool.input_schema();
+        assert_eq!(description_with_input_shape("  Ask the user.  ", &schema), "Ask the user.");
+        assert_eq!(schema["type"], "object");
+        assert!(schema["required"].as_array().unwrap().contains(&serde_json::json!("questions")));
+        assert_eq!(schema["properties"]["questions"]["type"], "array");
     }
 
     #[test]
@@ -1404,7 +1407,8 @@ mod tests {
             .unwrap();
         assert!(options_description.contains("2-4 option objects"));
         assert!(options_description.contains("do not include an `Other` option"));
-        assert!(options_description.contains("Use a real JSON array"));
+        assert_eq!(question_properties["options"]["type"], "array");
+        assert!(!options_description.contains("Use a real JSON array"));
 
         let option_properties = schema["definitions"]["QuestionOptionInput"]["properties"]
             .as_object()
@@ -1426,7 +1430,8 @@ mod tests {
             .as_str()
             .unwrap();
         assert!(todos_description.contains("Complete replacement TodoList"));
-        assert!(todos_description.contains("Use a real JSON array"));
+        assert_eq!(schema["properties"]["TodoList"]["type"], "array");
+        assert!(!todos_description.contains("numeric-key object"));
         assert!(todos_description.contains("placeholder strings"));
         assert!(todos_description.contains("{\"TodoList\":[\"\"]}"));
         assert!(todos_description.contains("Do not send `null`"));
@@ -1517,11 +1522,11 @@ mod tests {
             Value::from(crate::write::MAX_WRITE_CONTENT_BYTES)
         );
         assert!(write.description().contains("256 KiB"));
-        assert!(write.description().contains("Prefer edit"));
+        assert!(write.description().contains("Prefer an attached targeted-edit tool"));
         assert!(write.description().contains("README.md"));
         assert!(content_description.contains("256 KiB"));
         assert!(content_description.contains("do not send huge generated files"));
-        assert!(content_description.contains("Prefer `edit`"));
+        assert!(content_description.contains("Prefer an attached targeted-edit tool"));
         assert!(content_description.contains("README.md"));
 
         let edit = FileEditTool;
@@ -1561,14 +1566,14 @@ mod tests {
             .as_str()
             .unwrap();
 
-        assert!(bash.description().contains("Use dedicated tools"));
+        assert!(bash.description().contains("specialized file tools"));
         assert!(
             bash.description()
                 .contains("Do not prefix commands with `cd`")
         );
         assert!(bash.description().contains("run_in_background"));
         assert!(bash_command.contains("Do not prefix with `cd`"));
-        assert!(bash_command.contains("dedicated tools"));
+        assert!(bash_command.contains("specialized file tools"));
         assert!(bash_command.contains("Quote file paths"));
         assert!(bash_background.contains("Do not append `&`"));
         assert!(bash_background.contains("persistent server or watcher"));
@@ -1593,11 +1598,11 @@ mod tests {
             .as_str()
             .unwrap();
 
-        assert!(powershell.description().contains("Prefer dedicated tools"));
+        assert!(powershell.description().contains("specialized file tools"));
         assert!(powershell.description().contains("Set-Location"));
         assert!(powershell.description().contains("Start-Sleep"));
         assert!(powershell_command.contains("Set-Location"));
-        assert!(powershell_command.contains("dedicated tools"));
+        assert!(powershell_command.contains("specialized file tools"));
         assert!(powershell_background.contains("Start-Job"));
         assert!(powershell_background.contains("Start-Sleep"));
         assert!(powershell_timeout.contains("300000"));
@@ -1621,7 +1626,7 @@ mod tests {
         assert!(ocr.description().contains("background task id"));
         assert!(preview.contains("inspect the review scope"));
         assert!(foreground.contains("Defaults to 60"));
-        assert!(foreground.contains("TaskOutput"));
+        assert!(foreground.contains("attached managed-output control"));
         assert!(timeout.contains("not the foreground progress timeout"));
     }
 
@@ -1660,7 +1665,7 @@ mod tests {
         assert!(
             browser
                 .description()
-                .contains("does not execute JavaScript")
+                .contains("No JavaScript execution")
         );
         assert!(url.contains("server-rendered HTML"));
         assert!(action.contains("text snapshot"));

@@ -99,7 +99,7 @@ pub(super) fn count_memory_prompt_candidates(messages: &[Message]) -> u64 {
     messages
         .iter()
         .filter(|message| match message {
-            Message::User { content } => {
+            Message::User { content, .. } => {
                 let has_tool_result = content
                     .iter()
                     .any(|block| matches!(block, ContentBlock::ToolResult { .. }));

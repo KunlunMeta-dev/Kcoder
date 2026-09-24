@@ -36,7 +36,6 @@ fn subagent_model_detail_due(last_emit: std::time::Instant, now: std::time::Inst
 }
 
 #[allow(unused_imports)]
-pub(crate) use context_projection::is_synthetic_parent_text;
 #[allow(unused_imports)]
 use context_projection::project_parent_messages;
 pub use context_projection::{CacheSafeParams, is_real_user_message};
@@ -109,7 +108,7 @@ fn transcript_messages_sha256(messages: &[Message]) -> Result<String, AgentError
 fn is_exact_delivery_message(message: &Message, body: &str) -> bool {
     matches!(
         message,
-        Message::User { content }
+        Message::User { content, .. }
             if matches!(content.as_slice(), [ContentBlock::Text { text }] if text == body)
     )
 }
@@ -638,7 +637,7 @@ fn acknowledge_persisted_breaker_steer(
     };
     let marker = format!("[system][breaker_steer id=\"{}\"]", steer.steer_id);
     let persisted = messages.iter().any(|message| match message {
-        Message::User { content } => content
+        Message::User { content, .. } => content
             .iter()
             .any(|block| matches!(block, ContentBlock::Text { text } if text.starts_with(&marker))),
         Message::Assistant { .. } => false,
@@ -1675,7 +1674,7 @@ pub(super) fn unmatched_tool_use_ids(messages: &[Message]) -> Vec<String> {
         let following_tool_results = messages
             .get(index + 1)
             .and_then(|message| match message {
-                Message::User { content } => Some(
+                Message::User { content, .. } => Some(
                     content
                         .iter()
                         .filter_map(|block| match block {

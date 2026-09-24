@@ -176,9 +176,9 @@ pub fn build_session_memory_compaction_plan(
     }
 
     let mut compacted = Vec::with_capacity(suffix.len() - recent_start + 1);
-    compacted.push(Message::user_text(format_session_memory_compact_summary(
-        summary,
-    )));
+    compacted.push(Message::compaction_text(
+        format_session_memory_compact_summary(summary),
+    ));
     compacted.extend(strip_assistant_usage(&suffix[recent_start..]));
     Some(SessionMemoryCompactionPlan {
         messages: compacted,
@@ -230,7 +230,7 @@ fn latest_summary_suffix_start(messages: &[Message]) -> usize {
         .enumerate()
         .rev()
         .find_map(|(index, message)| {
-            let Message::User { content } = message else {
+            let Message::User { content, .. } = message else {
                 return None;
             };
             let ContentBlock::Text { text } = content.first()? else {
@@ -298,44 +298,7 @@ fn expand_start_to_user_turn_boundary(messages: &[Message], start: usize) -> usi
 }
 
 fn is_real_user_request_message(message: &Message) -> bool {
-    let Message::User { content } = message else {
-        return false;
-    };
-    if content
-        .iter()
-        .any(|block| matches!(block, ContentBlock::ToolResult { .. }))
-    {
-        return false;
-    }
-
-    content.iter().any(|block| match block {
-        ContentBlock::Text { text } => {
-            let text = text.trim_start();
-            !text.trim().is_empty() && !is_internal_context_text(text)
-        }
-        ContentBlock::Image { .. } => true,
-        _ => false,
-    })
-}
-
-fn is_internal_context_text(text: &str) -> bool {
-    const INTERNAL_PREFIXES: &[&str] = &[
-        COMPACT_SUMMARY_PREFIX,
-        LEGACY_COMPACT_SUMMARY_PREFIX,
-        "Project instructions (",
-        "Project instructions:",
-        "Additional instructions after compaction:",
-        "Additional instructions:",
-        "Relevant memories:",
-        "Active skills:",
-        "You are currently in plan mode:",
-        "Recent file read retained after compaction (",
-        "Available tools after compaction:",
-    ];
-
-    INTERNAL_PREFIXES
-        .iter()
-        .any(|prefix| text.starts_with(prefix))
+    kcoder_types::is_real_user_message(message)
 }
 
 fn tool_results_requiring_prior_uses(messages: &[Message]) -> HashSet<String> {
@@ -351,7 +314,7 @@ fn tool_results_requiring_prior_uses(messages: &[Message]) -> HashSet<String> {
                     }
                 }
             }
-            Message::User { content } => {
+            Message::User { content, .. } => {
                 for block in content {
                     if let ContentBlock::ToolResult { tool_use_id, .. } = block
                         && !seen_uses.contains(tool_use_id)
@@ -391,7 +354,7 @@ pub(crate) fn strip_assistant_usage(messages: &[Message]) -> Vec<Message> {
 
 fn message_has_visible_text(message: &Message) -> bool {
     let blocks = match message {
-        Message::User { content } => content,
+        Message::User { content, .. } => content,
         Message::Assistant { content, .. } => content,
     };
     blocks
@@ -401,7 +364,7 @@ fn message_has_visible_text(message: &Message) -> bool {
 
 fn message_to_session_memory_transcript(message: &Message) -> String {
     match message {
-        Message::User { content } => format!("User: {}", content_blocks_for_memory(content)),
+        Message::User { content, .. } => format!("User: {}", content_blocks_for_memory(content)),
         Message::Assistant { content, .. } => {
             format!("Assistant: {}", content_blocks_for_memory(content))
         }
@@ -580,6 +543,7 @@ mod tests {
                 usage: None,
             },
             Message::User {
+                origin: kcoder_types::MessageOrigin::Unknown,
                 content: vec![ContentBlock::ToolResult {
                     tool_use_id: "tool-1".to_string(),
                     content: vec![ContentBlock::Text {
@@ -626,7 +590,7 @@ mod tests {
         let messages = vec![
             Message::user_text("real user request"),
             Message::assistant_text("assistant response"),
-            Message::user_text("Project instructions (KCODER.md):\n# Project Instructions"),
+            Message::runtime_text("Project instructions (KCODER.md):\n# Project Instructions"),
         ];
 
         let start = select_recent_window_start(&messages, &settings);
@@ -655,7 +619,7 @@ mod tests {
             let messages = vec![
                 Message::user_text("real user request"),
                 Message::assistant_text("assistant response"),
-                Message::user_text(attachment),
+                Message::runtime_text(attachment),
             ];
 
             let start = select_recent_window_start(&messages, &settings);

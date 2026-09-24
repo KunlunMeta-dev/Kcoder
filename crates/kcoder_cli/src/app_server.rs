@@ -3290,11 +3290,20 @@ async fn run_background_followup_turn(
             background_followup_nudge(&summary)
         };
         let committed = if followup_runs.is_empty() {
-            append_background_followup_message(&engine, &followups, nudge)
+            append_background_followup_message(
+                &engine,
+                &followups,
+                nudge,
+                if summary.starts_with("[scheduled task ") {
+                    kcoder_types::MessageOrigin::User
+                } else {
+                    kcoder_types::MessageOrigin::Runtime
+                },
+            )
         } else {
             match engine
                 .state
-                .commit_message_with_uuid(kcoder_types::Message::user_text(nudge), &turn_id)
+                .commit_message_with_uuid(kcoder_types::Message::runtime_text(nudge), &turn_id)
                 .await
             {
                 Ok(()) => engine
@@ -3489,8 +3498,9 @@ fn append_background_followup_message(
     engine: &QueryEngine,
     followups: &BackgroundFollowupState,
     text: String,
+    origin: kcoder_types::MessageOrigin,
 ) -> Result<()> {
-    let message = kcoder_types::Message::user_text(text);
+    let message = kcoder_types::Message::user_text(text).with_origin(origin);
     if kcoder_engine::agent::is_real_user_message(&message) {
         followups.client_turn_count.increment()?;
     }
@@ -4029,6 +4039,7 @@ fn server_capabilities(thread_resume: bool) -> ServerCapabilities {
         thread_resume,
         experimental: BTreeMap::from([
             ("toolPathPreviewV1".to_string(), true),
+            (kcoder_app_protocol::CAPABILITY_GOAL_CANCELLATION_V1.to_string(), true),
             (
                 kcoder_app_protocol::CAPABILITY_THREAD_RUN_SUMMARY_V1.to_string(),
                 true,
@@ -6925,6 +6936,10 @@ pub async fn run(
                     Some(state) => Some(state.activity_gate.lock().await),
                     None => None,
                 };
+                let goal_turn_cancel = match goal_turn_state.as_ref() {
+                    Some(state) => state.active_turn.lock().await.as_ref().map(|turn| turn.cancel.clone()),
+                    None => None,
+                };
                 let result = serde_json::from_value::<ThreadGoalSetParams>(params)
                     .context("invalid thread/goal/set params")
                     .and_then(|params| {
@@ -7023,6 +7038,11 @@ pub async fn run(
                             };
                             match status {
                                 Some(GoalStatus::Active) | None => goal,
+                                Some(GoalStatus::Cancelled) => {
+                                    lifecycle.invalidate();
+                                    target_engine.cancel_goal_execution(goal_turn_cancel.as_ref());
+                                    target_engine.state.cancel_goal_by_user()?.context("goal cannot be cancelled")?
+                                }
                                 Some(status) => target_engine
                                     .state
                                     .update_goal_status(status)
@@ -7052,6 +7072,11 @@ pub async fn run(
                                 )
                             }
                             match status {
+                                Some(GoalStatus::Cancelled) => {
+                                    lifecycle.invalidate();
+                                    target_engine.cancel_goal_execution(goal_turn_cancel.as_ref());
+                                    target_engine.state.cancel_goal_by_user()?.context("goal cannot be cancelled")?
+                                }
                                 Some(status) if status != existing.status => target_engine
                                     .state
                                     .update_goal_status(status)
@@ -7065,6 +7090,7 @@ pub async fn run(
                                 .update_goal_token_budget(params.token_budget)
                                 .context("goal disappeared while updating token budget")?;
                         }
+                        if goal.status == GoalStatus::Cancelled { target_engine.cancel_goal_execution(goal_turn_cancel.as_ref()); }
                         if resume_requested { lifecycle.resume(&target_engine); } else { lifecycle.invalidate(); }
                         followups.notify.notify_one();
                         Ok(ThreadGoalSetResult {
@@ -7127,6 +7153,10 @@ pub async fn run(
                     Some(state) => Some(state.activity_gate.lock().await),
                     None => None,
                 };
+                let goal_turn_cancel = match goal_turn_state.as_ref() {
+                    Some(state) => state.active_turn.lock().await.as_ref().map(|turn| turn.cancel.clone()),
+                    None => None,
+                };
                 let result = serde_json::from_value::<ThreadGoalParams>(params)
                     .context("invalid thread/goal/clear params")
                     .and_then(|params| {
@@ -7151,9 +7181,13 @@ pub async fn run(
                         let mut lifecycle = followups.goals.lock().unwrap();
                         lifecycle.invalidate();
                         followups.notify.notify_one();
+                        if current_goal.as_ref().is_some_and(|goal| goal.status.is_unfinished() || goal.status.is_user_resumable()) {
+                            target_engine.cancel_goal_execution(goal_turn_cancel.as_ref());
+                        }
+                        let removed = target_engine.state.clear_goal_by_user()?;
                         Ok(ThreadGoalClearResult {
                             thread_id: params.thread_id,
-                            cleared: target_engine.state.clear_goal().is_some(),
+                            cleared: removed.is_some(),
                         })
                     });
                 match result {
@@ -11851,6 +11885,7 @@ fn parse_goal_status(value: &str) -> Result<GoalStatus> {
         "usageLimited" | "usage_limited" => Ok(GoalStatus::UsageLimited),
         "budgetLimited" | "budget_limited" => Ok(GoalStatus::BudgetLimited),
         "complete" => Ok(GoalStatus::Complete),
+        "cancelled" => Ok(GoalStatus::Cancelled),
         other => anyhow::bail!("unsupported goal status: {other}"),
     }
 }
@@ -11905,6 +11940,7 @@ fn thread_goal(thread_id: &str, goal: &Goal) -> ThreadGoal {
         GoalStatus::UsageLimited => "usageLimited",
         GoalStatus::BudgetLimited => "budgetLimited",
         GoalStatus::Complete => "complete",
+        GoalStatus::Cancelled => "cancelled",
     };
     ThreadGoal {
         thread_id: thread_id.to_string(),
@@ -11918,6 +11954,9 @@ fn thread_goal(thread_id: &str, goal: &Goal) -> ThreadGoal {
         tokens_used: goal.tokens_used,
         time_used_seconds: goal.time_used_seconds,
         turn_count: goal.turn_count,
+        blocked_candidate_count: goal.blocked_candidate_count,
+        blocker_id: goal.blocked_candidate_id.clone(),
+        blocker_reason: goal.blocked_candidate_reason.clone(),
         created_at: goal.created_at_ms,
         updated_at: goal.updated_at_ms,
         revision: goal.revision,
@@ -13244,7 +13283,7 @@ fn input_context_hash(messages: &[kcoder_types::Message]) -> Result<String> {
     let inputs = messages
         .iter()
         .filter(|message| match message {
-            Message::User { content } => content.iter().any(|block| {
+            Message::User { content, .. } => content.iter().any(|block| {
                 matches!(
                     block,
                     ContentBlock::Text { .. } | ContentBlock::Image { .. }
@@ -13707,7 +13746,13 @@ fn history_entry_thread_message(
         match block.get("type").and_then(Value::as_str) {
             Some("text") => {
                 if let Some(text) = block.get("text").and_then(Value::as_str) {
-                    if role == "user" && kcoder_types::is_hidden_runtime_user_text(text) {
+                    if role == "user"
+                        && matches!(
+                            entry.message.origin(),
+                            kcoder_types::MessageOrigin::Runtime
+                                | kcoder_types::MessageOrigin::Compaction
+                        )
+                    {
                         continue;
                     }
                     tool_result_only = false;
@@ -13902,7 +13947,7 @@ fn extend_transcript_tool_contexts(
     for (entry_index, entry) in entries.iter().enumerate() {
         let entry_index = offset + entry_index;
         let blocks = match &entry.message {
-            Message::User { content } | Message::Assistant { content, .. } => content,
+            Message::User { content, .. } | Message::Assistant { content, .. } => content,
         };
         for block in blocks {
             match block {

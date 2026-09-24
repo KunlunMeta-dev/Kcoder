@@ -8,7 +8,7 @@ pub(super) fn context_hash(messages: &[Message]) -> Result<String> {
     let mut pending = HashSet::new();
     for message in messages {
         let content = match message {
-            Message::User { content } | Message::Assistant { content, .. } => content,
+            Message::User { content, .. } | Message::Assistant { content, .. } => content,
         };
         for block in content {
             match block {

@@ -300,6 +300,11 @@ impl HeadlessOutcome {
                 "goal_usage_limited",
                 "goal stopped at its usage limit".to_string(),
             ),
+            Some(GoalStatus::Cancelled) => {
+                self.run_status = RunStatus::Cancelled;
+                self.task_status = TaskOutcomeStatus::Cancelled;
+                self.termination_reason = "goal_cancelled";
+            },
             Some(GoalStatus::Complete) | None => {}
         }
 

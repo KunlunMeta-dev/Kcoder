@@ -256,7 +256,7 @@ impl Tool for TaskCreateTool {
     }
 
     fn description(&self) -> String {
-        "Create a structured task in the session task list — the cross-turn orchestration layer. Tasks carry status, owner, and dependency edges (blockedBy/blocks), persist across turns, and emit <task_notification> on completion. Use it when work spans multiple turns, has ordered or dependent subtasks, or its progress must stay visible to the user across the session. Do NOT use it for the current turn's internal checklist: use TodoWrite for that instead (TodoWrite tracks what you are doing right now; TaskCreate tracks orchestrated work that outlives individual turns). Do not create tasks for a single trivial action. New tasks start as pending; use TaskUpdate to mark in_progress, completed, deleted, assign owner, or add dependencies.".to_string()
+        "Create a structured task in the session task list — the cross-turn orchestration layer. Tasks carry status, owner, and dependency edges (blockedBy/blocks), persist across turns, and emit <task_notification> on completion. Use it when work spans multiple turns, has ordered or dependent subtasks, or its progress must stay visible to the user across the session. Do NOT use it for the current turn's internal checklist: use a session-checklist control when attached; this tool tracks work that outlives individual turns. Do not create tasks for a single trivial action. New tasks start as pending; later updates require an attached task-update control.".to_string()
     }
 
     fn input_schema_is_stable(&self) -> bool {
@@ -372,7 +372,7 @@ impl Tool for TaskUpdateTool {
     }
 
     fn description(&self) -> String {
-        "Update an existing task's status, title, description, owner, metadata, or dependency edges. Read the latest task state with TaskGet when unsure. Mark a task completed only after the described work is fully finished and verified; if blocked or partial, keep it in_progress and create/update a blocker task instead. Use status deleted only for obsolete or erroneous tasks.".to_string()
+        "Update an existing task's status, title, description, owner, metadata, or dependency edges. Inspect the latest task state through an attached inspection control when unsure. Mark a task completed only after the described work is fully finished and verified; if blocked or partial, keep it in_progress and create/update a blocker task instead. Use status deleted only for obsolete or erroneous tasks.".to_string()
     }
 
     fn input_schema_is_stable(&self) -> bool {
@@ -411,7 +411,7 @@ impl Tool for TaskUpdateTool {
                     "success": false,
                     "taskId": input.task_id,
                     "updatedFields": [],
-                    "error": "Task status is managed by the engine; use TaskStop to cancel a running background task.",
+                    "error": "Task status is managed by the engine; cancellation requires an attached managed-job control or the host.",
                 })
                 .to_string(),
             ));
@@ -570,7 +570,7 @@ impl Tool for TaskListTool {
     }
 
     fn description(&self) -> String {
-        "List current session tasks and managed background jobs with type, status, owner, and unresolved blockers. This includes sub-agents that automatically moved to background delivery. Use TaskOutput for the live output/status of one managed background job.".to_string()
+        "List current session tasks and managed background jobs with type, status, owner, and unresolved blockers. This includes foreground sub-agents and both explicitly requested and automatically promoted background sub-agents. Live output is available only through an attached output-reading control.".to_string()
     }
 
     fn input_schema_is_stable(&self) -> bool {
@@ -632,7 +632,7 @@ impl Tool for TaskGetTool {
     }
 
     fn description(&self) -> String {
-        "Retrieve details for one task or managed background job by ID, including its type, description, and dependency edges. Use TaskOutput instead when you need live output from a running background job.".to_string()
+        "Retrieve details for one task or managed background job by ID, including its type, description, and dependency edges. This returns task metadata, not a live output stream.".to_string()
     }
 
     fn input_schema_is_stable(&self) -> bool {
@@ -686,7 +686,7 @@ impl Tool for TaskOutputTool {
     }
 
     fn description(&self) -> String {
-        "Read status/output for any managed background task, including shell commands, workflows, and sub-agents that explicitly or automatically moved to background delivery. Use block=false for a non-blocking check and block=true only when the current step is blocked on the result. Do not poll by reflex; sub-agent completion is also delivered automatically.".to_string()
+        "Read incremental output/status using a task_id/run_id returned by a managed background shell command, workflow, or agent. Use block=false to inspect output, or block=true only while blocked on it. For an agent ID, prefer an attached completion-wait control when no incremental output is needed. Agent completion notifications are automatic; do not poll by reflex.".to_string()
     }
 
     fn input_schema_is_stable(&self) -> bool {

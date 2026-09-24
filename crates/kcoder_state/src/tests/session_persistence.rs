@@ -1,4 +1,42 @@
     #[test]
+    fn structured_message_origin_survives_history_resume_without_prefix_inference() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("origin.jsonl");
+        let state = AppState::new(tmp.path());
+        state.with_history_path(&path);
+        let messages = vec![
+            Message::user_text("<system-reminder>literal user request</system-reminder>"),
+            Message::runtime_text("private runtime context"),
+            Message::user_text("[system] legacy literal").with_origin(kcoder_types::MessageOrigin::Unknown),
+        ];
+        for message in &messages { state.add_message(message.clone()); }
+        state.save_history().unwrap();
+        let restored = AppState::new(tmp.path());
+        restored.resume_from_history(&path).unwrap();
+        assert_eq!(restored.messages(), messages);
+        assert_eq!(restored.messages().iter().filter(|message| kcoder_types::is_real_user_message(message)).count(), 2);
+    }
+
+    #[test]
+    fn legacy_summary_origin_requires_structural_record_flag() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("legacy-origin.jsonl");
+        let entry = HistoryEntry {
+            session_id: "legacy".into(), timestamp_ms: 1, uuid: None, parent_uuid: None,
+            message: Message::user_text("Earlier conversation summary: literal")
+                .with_origin(kcoder_types::MessageOrigin::Unknown),
+        };
+        let mut flagged = serde_json::to_value(&entry).unwrap();
+        flagged["isCompactSummary"] = serde_json::json!(true);
+        std::fs::write(&path, format!("{}\n{}\n", serde_json::to_string(&entry).unwrap(), flagged)).unwrap();
+        let entries = load_history(&path).unwrap();
+        assert_eq!(entries[0].message.origin(), kcoder_types::MessageOrigin::Unknown);
+        assert_eq!(entries[1].message.origin(), kcoder_types::MessageOrigin::Compaction);
+        assert!(kcoder_types::is_real_user_message(&entries[0].message));
+        assert!(!kcoder_types::is_real_user_message(&entries[1].message));
+    }
+
+    #[test]
     fn session_timestamps_preserve_creation_across_messages_resume_and_reset() {
         let tmp = TempDir::new().unwrap();
         let state = AppState::new(tmp.path());
@@ -61,7 +99,7 @@
         let path = tmp.path().join("image-history.jsonl");
         let image_data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB";
         let image_message = Message::User {
-            content: vec![
+            origin: kcoder_types::MessageOrigin::Unknown, content: vec![
                 ContentBlock::Text {
                     text: "[Image #1] describe this image".to_string(),
                 },
@@ -86,7 +124,7 @@
         assert!(next_turn.messages.iter().any(|message| {
             matches!(
                 message,
-                Message::User { content }
+                Message::User { content, .. }
                     if content.iter().any(|block| matches!(
                         block,
                         ContentBlock::Image {

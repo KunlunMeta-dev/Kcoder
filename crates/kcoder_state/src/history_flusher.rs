@@ -458,6 +458,7 @@ pub(super) fn append_compaction_transcript_records(
             "type": "text",
             "text": compact_user_summary_message(event, path),
         }],
+        "origin": "compaction",
         "isCompactSummary": true,
         "isVisibleInTranscriptOnly": true,
     });
@@ -596,7 +597,16 @@ fn preserved_history_ids_for_compacted_messages(
 
 fn messages_equivalent_for_transcript(a: &Message, b: &Message) -> bool {
     match (a, b) {
-        (Message::User { content: left }, Message::User { content: right }) => left == right,
+        (
+            Message::User {
+                content: left,
+                origin: lo,
+            },
+            Message::User {
+                content: right,
+                origin: ro,
+            },
+        ) => left == right && lo == ro,
         (Message::Assistant { content: left, .. }, Message::Assistant { content: right, .. }) => {
             left == right
         }

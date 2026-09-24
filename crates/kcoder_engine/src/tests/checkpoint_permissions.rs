@@ -113,7 +113,7 @@ fn user_request_turn_previews_number_only_genuine_requests() {
         .add_message(Message::assistant_text("first answer"));
     // Tool-result-only user messages do not count as prompt turns.
     engine.state.add_message(Message::User {
-        content: vec![kcoder_types::ContentBlock::ToolResult {
+        origin: kcoder_types::MessageOrigin::Unknown, content: vec![kcoder_types::ContentBlock::ToolResult {
             tool_use_id: "t-1".to_string(),
             content: vec![kcoder_types::ContentBlock::Text {
                 text: "tool output".to_string(),

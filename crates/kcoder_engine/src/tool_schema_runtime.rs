@@ -134,7 +134,7 @@ fn description_is_non_interactive(
 pub(super) fn format_schema_example_for_prompt(schema: &Value) -> Option<String> {
     let example = kcoder_tools::example_input_for_schema(schema)?;
     let raw = serde_json::to_string(&example).ok()?;
-    Some(truncate_chars(&raw, 900))
+    (raw.chars().count() <= 900).then_some(raw)
 }
 
 impl QueryEngine {
@@ -157,13 +157,17 @@ impl QueryEngine {
     }
 
     pub(super) async fn tool_definitions_for_model(&self) -> Vec<kcoder_types::ToolDefinition> {
+        self.tool_definitions_for_request(false).await
+    }
+
+    pub(super) async fn tool_definitions_for_request(&self, terminal_verdict_only: bool) -> Vec<kcoder_types::ToolDefinition> {
         if !recover_read_lock(&self.settings, "settings")
             .model_capabilities
             .tools
         {
             return Vec::new();
         }
-        let ctx = self.tool_description_context();
+        let mut ctx = self.tool_description_context();
         let (goal_enabled, suppress_user_elicitation) = {
             let settings = recover_read_lock(&self.settings, "settings");
             (
@@ -175,19 +179,18 @@ impl QueryEngine {
         // deliberately not consulted here.
         let file_edit_surface = self.file_edit_surface;
         let arrangement_mode = self.is_arrangement_mode_active();
+        let active_tools = self.active_tool_registry();
+        ctx.available_tools = active_tools.names().into_iter().filter(|name| {
+            (goal_enabled || !is_goal_tool_name(name))
+                && (!suppress_user_elicitation || !is_user_elicitation_tool_name(name))
+                && !edit_surface_is_hidden(file_edit_surface, name)
+                && (!terminal_verdict_only || name == kcoder_tools::VERIFIER_VOTE_TOOL_NAME)
+        }).collect();
         if arrangement_mode || self.tools.revision() != self.tool_schema_revision {
             let mut definitions = Vec::new();
-            for tool in self.active_tool_registry().all() {
+            for tool in active_tools.all() {
                 let name = tool.name();
-                if !goal_enabled && is_goal_tool_name(&name) {
-                    continue;
-                }
-                if suppress_user_elicitation && is_user_elicitation_tool_name(&name) {
-                    continue;
-                }
-                if edit_surface_is_hidden(file_edit_surface, &name) {
-                    continue;
-                }
+                if !ctx.available_tools.contains(&name) { continue; }
                 let input_schema = tool.input_schema();
                 let input_format = tool.input_format();
                 let input_schema = if arrangement_mode {
@@ -201,28 +204,19 @@ impl QueryEngine {
                     &input_schema,
                     &input_format,
                 );
-                definitions.push(kcoder_types::ToolDefinition {
-                    name,
-                    description,
-                    input_schema,
-                });
+                let mut definition = kcoder_types::ToolDefinition { name, description, input_schema };
+                if matches!(tool.source(), kcoder_tools::ToolSource::Builtin) {
+                    kcoder_tools::project_builtin_peer_guidance(&mut definition, &ctx);
+                }
+                definitions.push(definition);
             }
             return definitions;
         }
 
-        let active_tools = self.active_tool_registry();
         let registry_revision = self.tools.revision();
         let mut definitions = Vec::new();
         for cached in self.tool_definitions.as_ref() {
-            if !goal_enabled && is_goal_tool_name(&cached.name) {
-                continue;
-            }
-            if suppress_user_elicitation && is_user_elicitation_tool_name(&cached.name) {
-                continue;
-            }
-            if edit_surface_is_hidden(file_edit_surface, &cached.name) {
-                continue;
-            }
+            if !ctx.available_tools.contains(&cached.name) { continue; }
             let Some(tool) = active_tools.get(&cached.name) else {
                 continue;
             };
@@ -252,11 +246,13 @@ impl QueryEngine {
                 );
                 (input_schema, description)
             };
-            definitions.push(kcoder_types::ToolDefinition {
-                name: cached.name.clone(),
-                description,
-                input_schema,
-            });
+            let mut definition = kcoder_types::ToolDefinition {
+                name: cached.name.clone(), description, input_schema,
+            };
+            if matches!(tool.source(), kcoder_tools::ToolSource::Builtin) {
+                kcoder_tools::project_builtin_peer_guidance(&mut definition, &ctx);
+            }
+            definitions.push(definition);
         }
         definitions
     }
@@ -275,6 +271,7 @@ impl QueryEngine {
                 || std::io::stdin().is_terminal(),
             ),
             active_skills,
+            available_tools: Default::default(),
         }
     }
 

@@ -239,7 +239,7 @@ impl Tool for WriteReportTool {
     }
 
     fn description(&self) -> String {
-        "Create or overwrite an Arrangement report artifact under .kcoder/arrangement/reports/. Use this for main-orchestrator supervision records, review summaries, verification summaries, handoff reports, acceptance decisions, residual-risk reports, and final task reports. Do not use it to write implementation files or plans; use PlanAgent/WritePlan for plans and implementer sub-agents for code/config/test/script edits.".to_string()
+        "Create or overwrite an Arrangement report artifact under .kcoder/arrangement/reports/. Use this for main-orchestrator supervision records, review summaries, verification summaries, handoff reports, acceptance decisions, residual-risk reports, and final task reports. Do not use it to write implementation files or plans; plans and implementation edits require their corresponding attached, scoped authoring or delegation capabilities.".to_string()
     }
 
     fn input_schema_is_stable(&self) -> bool {

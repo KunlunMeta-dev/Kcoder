@@ -1,6 +1,6 @@
 {
   "name": "@kcoder/studio",
-  "version": "0.1.48",
+  "version": "0.1.49",
   "description": "Multi-server KCoder desktop client",
   "author": "KCoder contributors",
   "private": true,
@@ -183,6 +183,10 @@
         {
           "from": "../../target/packages/kcoder-studio/windows-input/bin/chrome",
           "to": "bin/chrome"
+        },
+        {
+          "from": "../../target/packages/kcoder-studio/windows-input/bin/pdf",
+          "to": "bin/pdf"
         }
       ]
     },

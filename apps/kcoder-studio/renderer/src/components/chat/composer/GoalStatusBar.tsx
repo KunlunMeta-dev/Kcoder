@@ -16,6 +16,7 @@ const goalStatusLabelKeys: Record<RuntimeGoalStatus, { key: string; fallback: st
   active: { key: 'workbench.goal_status_active', fallback: '进行中的目标' },
   paused: { key: 'workbench.goal_status_paused', fallback: '已暂停的目标' },
   blocked: { key: 'workbench.goal_status_blocked', fallback: '受阻的目标' },
+  cancelled: { key: 'workbench.goal_status_cancelled', fallback: '已取消的目标' },
   complete: { key: 'workbench.goal_status_complete', fallback: '已完成的目标' },
   usageLimited: { key: 'workbench.goal_status_usage_limited', fallback: '用量受限的目标' },
   budgetLimited: { key: 'workbench.goal_status_budget_limited', fallback: '预算受限的目标' },

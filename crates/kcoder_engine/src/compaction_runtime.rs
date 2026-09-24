@@ -1034,7 +1034,7 @@ impl QueryEngine {
         let Some(transcript_path) = self.state.history_path() else {
             return;
         };
-        let Some(Message::User { content }) = messages.first_mut() else {
+        let Some(Message::User { content, .. }) = messages.first_mut() else {
             return;
         };
         let Some(ContentBlock::Text { text }) = content.first_mut() else {

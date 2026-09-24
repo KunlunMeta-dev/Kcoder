@@ -86,7 +86,7 @@ async fn side_question_is_toolless_and_does_not_mutate_main_history() {
         .messages
         .last()
         .map(|message| match message {
-            Message::User { content } | Message::Assistant { content, .. } => {
+            Message::User { content, .. } | Message::Assistant { content, .. } => {
                 content_blocks_plain_text(content)
             }
         })

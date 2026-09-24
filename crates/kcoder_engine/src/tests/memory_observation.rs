@@ -631,7 +631,7 @@ fn memory_query_projection_preserves_latest_real_user_text_selection() {
         Message::user_text("<relevant-memories>injected"),
         Message::user_text("<skill_content name=\"test\">injected"),
         Message::User {
-            content: vec![
+            origin: kcoder_types::MessageOrigin::Unknown, content: vec![
                 ContentBlock::Text {
                     text: "tool wrapper text".into(),
                 },
@@ -650,7 +650,7 @@ fn memory_query_projection_preserves_latest_real_user_text_selection() {
         );
     }
     state.add_message(Message::User {
-        content: vec![
+        origin: kcoder_types::MessageOrigin::Unknown, content: vec![
             ContentBlock::Text {
                 text: "<relevant-memories>skip block".into(),
             },

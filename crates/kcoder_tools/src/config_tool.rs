@@ -128,29 +128,26 @@ const SUPPORTED_CONFIG_SETTINGS: &[&str] = &[
     "skills.guard.block_medium_risk_for_community",
 ];
 
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ConfigAction {
+    /// Read or write a value using the existing omit-value/read convention.
+    #[default]
+    Value,
+    /// Discover the authoritative type, enum, and nested property schema.
+    Describe,
+    /// List supported tool settings, optionally filtered by setting prefix.
+    List,
+}
+
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct ConfigInput {
-    /// The setting key. Supported keys include "model", "permission_mode",
-    /// "permissions.defaultMode", "model_reasoning_effort",
-    /// "summary_provider", "summary_profile", "summary_model", "summary_max_tokens",
-    /// "goal_pro.verifier_profile", "goal_pro.verifier_provider", "goal_pro.verifier_model",
-    /// "goal_pro.verifier_max_turns", "goal_pro.completion_rejection_limit",
-    /// "goal_pro.verification",
-    /// "context_window_tokens",
-    /// "tui.alternate_screen",
-    /// "auto_memory_enabled", "auto_tool_memory_enabled", "goal_enabled", "allowed_tools",
-    /// "permission_rules", "mcp_servers", "tools.luna.allowed", and
-    /// "tools.coerce.semantic_boolean".
+    #[serde(default)]
+    pub action: ConfigAction,
+    /// Dotted setting path; optional prefix for list. Required for value/describe.
+    #[serde(default)]
     pub setting: String,
-    /// The new JSON value. Omit this field to read the current value.
-    /// Strings are accepted for string settings; booleans for flags; numbers or
-    /// numeric strings for token/count settings; arrays of strings for
-    /// allowed_tools and denied_tools; objects for permission_rules and
-    /// mcp_servers/tools.coerce. `memory.skip_tools` accepts an array of strings.
-    /// For summary_provider, summary_profile, or summary_model, pass an empty string to clear the
-    /// override and fall back to the active provider/model. For
-    /// model_reasoning_effort, pass null, "default", or an empty string to clear
-    /// the override.
+    /// New value for action=value. Omit to read; explicit null retains clear semantics.
     pub value: Option<Value>,
 }
 
@@ -161,24 +158,7 @@ impl Tool for ConfigTool {
     }
 
     fn description(&self) -> String {
-        format!(
-            "Get or set KCoder configuration settings. Use this tool when \
-             the user asks about current settings or wants configuration \
-             changed. Input must be a JSON object. Omit the value \
-             parameter to read, for example {{\"setting\":\"model\"}}. To write, \
-             include value, for example \
-             {{\"setting\":\"permissions.defaultMode\",\"value\":\"yolo\"}} \
-             or {{\"setting\":\"summary_max_tokens\",\"value\":20000}}. \
-             Supported settings: {}. Value formats: use a string for \
-             model/model_reasoning_effort/summary_provider/summary_model/code_theme/tui.alternate_screen; pass an \
-             empty string for summary_provider, summary_model, or model_reasoning_effort to clear \
-             it; use true/false for boolean settings; \
-             use a number or numeric string for token/count/timeout settings; \
-             use string arrays for allowed_tools and denied_tools; use JSON \
-             objects for permission_rules/permissions.rules, \
-             mcp_servers, tools.coerce, and tool_limits.",
-            supported_settings_list()
-        )
+        "Read or update configuration. Omit the value parameter to read, e.g. {\"setting\":\"model\"}; write with {\"setting\":\"permissions.defaultMode\",\"value\":\"yolo\"}. Use action=list to discover supported paths, or action=describe with a setting path to inspect enums, nested properties and write restrictions before changing it. Discovery does not read credentials or change configuration.".into()
     }
 
     fn input_schema_is_stable(&self) -> bool {
@@ -208,6 +188,21 @@ impl Tool for ConfigTool {
             .cloned();
         let input: ConfigInput = parse_input(&input)?;
         let setting = input.setting;
+        if matches!(input.action, ConfigAction::Value)
+            && setting.is_empty()
+            && requested_value.is_none()
+        {
+            return config_discovery(&ConfigAction::List, "");
+        }
+
+        if !matches!(input.action, ConfigAction::Value) {
+            if requested_value.is_some() {
+                return Err(ToolError::InvalidInput(
+                    "Config discovery does not accept value".into(),
+                ));
+            }
+            return config_discovery(&input.action, &setting);
+        }
 
         let debug_value = requested_value
             .as_ref()
@@ -325,6 +320,44 @@ impl Tool for ConfigTool {
             pretty_json(&redact_config_value_for_display(&setting, &value))
         )))
     }
+}
+
+fn config_discovery(action: &ConfigAction, setting: &str) -> Result<ToolOutput, ToolError> {
+    let settings: Vec<_> = SUPPORTED_CONFIG_SETTINGS
+        .iter()
+        .filter(|key| {
+            setting.is_empty() || **key == setting || key.starts_with(&format!("{setting}."))
+        })
+        .copied()
+        .collect();
+    if matches!(action, ConfigAction::List) {
+        return Ok(ToolOutput::text(pretty_json(
+            &serde_json::json!({"settings": settings}),
+        )));
+    }
+    if !SUPPORTED_CONFIG_SETTINGS.contains(&setting) {
+        return Ok(unknown_setting_output(setting));
+    }
+    let canonical = canonical_persistence_key(setting);
+    let startup_only = setting == "auto_skill_review_enabled";
+    let schema = if startup_only {
+        Some(
+            serde_json::json!({"type":"boolean", "description":"Runtime startup switch, not a persisted settings key. Set with --skill-review when starting KCoder."}),
+        )
+    } else {
+        kcoder_config::settings_schema_for_path(canonical)
+    };
+    let Some(schema) = schema else {
+        return Ok(ToolOutput::error(format!(
+            "Schema unavailable for {setting}; no shape has been inferred"
+        )));
+    };
+    Ok(ToolOutput::text(pretty_json(&serde_json::json!({
+        "setting": setting, "canonical_setting": canonical, "schema": schema,
+        "writable_in_current_session": !startup_only && setting != "tools.file_edit_tool" && !is_secret_setting(setting),
+        "schema_source": if startup_only { "startup_flag" } else { "settings.schema.jsonc" },
+        "note": "Schema describes persisted values, not current values. Parent objects may contain fields outside this tool's supported individual paths; writes still undergo runtime validation."
+    }))))
 }
 
 fn canonical_persistence_key(setting: &str) -> &str {
@@ -1494,7 +1527,10 @@ mod tests {
         assert!(text.contains("model_reasoning_effort"));
         assert!(text.contains("high"));
         assert!(supported_settings_list().contains("model_reasoning_effort"));
-        assert!(ConfigTool.description().contains("model_reasoning_effort"));
+        assert!(
+            output_text(&config_discovery(&ConfigAction::List, "").unwrap())
+                .contains("model_reasoning_effort")
+        );
     }
 
     #[test]
@@ -1510,10 +1546,16 @@ mod tests {
         assert!(text.contains("goal_enabled"));
         assert!(text.contains("false"));
         assert!(supported_settings_list().contains("goal_enabled"));
-        assert!(ConfigTool.description().contains("goal_enabled"));
+        assert!(
+            output_text(&config_discovery(&ConfigAction::List, "").unwrap())
+                .contains("goal_enabled")
+        );
         let removed_setting = format!("{}_enabled", ["lo", "op"].concat());
         assert!(!supported_settings_list().contains(&removed_setting));
-        assert!(!ConfigTool.description().contains(&removed_setting));
+        assert!(
+            !output_text(&config_discovery(&ConfigAction::List, "").unwrap())
+                .contains(&removed_setting)
+        );
     }
 
     #[test]
@@ -1568,7 +1610,10 @@ mod tests {
         assert!(alternate_screen.contains("tui.alternate_screen"));
         assert!(alternate_screen.contains("auto"));
         assert!(supported_settings_list().contains("tui.alternate_screen"));
-        assert!(ConfigTool.description().contains("tui.alternate_screen"));
+        assert!(
+            output_text(&config_discovery(&ConfigAction::List, "").unwrap())
+                .contains("tui.alternate_screen")
+        );
         assert_eq!(
             coerce_tui_alt_screen_mode(&Value::String("always".to_string())).unwrap(),
             TuiAltScreenMode::Always
@@ -1655,7 +1700,7 @@ mod tests {
         ] {
             assert!(supported_settings_list().contains(key), "missing {key}");
             assert!(
-                ConfigTool.description().contains(key),
+                output_text(&config_discovery(&ConfigAction::List, "").unwrap()).contains(key),
                 "description missing {key}"
             );
         }
@@ -1671,7 +1716,10 @@ mod tests {
         assert!(text.contains("tools.coerce.semantic_boolean"));
         assert!(text.contains("true"));
         assert!(supported_settings_list().contains("tools.coerce.semantic_boolean"));
-        assert!(ConfigTool.description().contains("tools.coerce"));
+        assert!(
+            output_text(&config_discovery(&ConfigAction::List, "").unwrap())
+                .contains("tools.coerce")
+        );
     }
 
     #[test]
@@ -1685,7 +1733,10 @@ mod tests {
         assert!(text.contains("read"));
         assert!(text.contains("grep"));
         assert!(supported_settings_list().contains("tools.luna.allowed"));
-        assert!(ConfigTool.description().contains("tools.luna.allowed"));
+        assert!(
+            output_text(&config_discovery(&ConfigAction::List, "").unwrap())
+                .contains("tools.luna.allowed")
+        );
     }
 
     #[test]
@@ -1710,7 +1761,7 @@ mod tests {
         ] {
             assert!(supported_settings_list().contains(key), "missing {key}");
             assert!(
-                ConfigTool.description().contains(key),
+                output_text(&config_discovery(&ConfigAction::List, "").unwrap()).contains(key),
                 "description missing {key}"
             );
         }
@@ -1732,8 +1783,7 @@ mod tests {
         assert!(text.contains("true"));
         assert!(supported_settings_list().contains("skills.auto_lessons_learned"));
         assert!(
-            ConfigTool
-                .description()
+            output_text(&config_discovery(&ConfigAction::List, "").unwrap())
                 .contains("skills.auto_lessons_learned")
         );
     }
@@ -1761,8 +1811,7 @@ mod tests {
         assert!(supported_settings_list().contains("skills.auto_skill_review_enabled"));
         assert!(supported_settings_list().contains("skills.auto_skill_review_interval"));
         assert!(
-            ConfigTool
-                .description()
+            output_text(&config_discovery(&ConfigAction::List, "").unwrap())
                 .contains("skills.auto_skill_review_enabled")
         );
     }
@@ -1829,7 +1878,7 @@ mod tests {
         ] {
             assert!(supported_settings_list().contains(key), "missing {key}");
             assert!(
-                ConfigTool.description().contains(key),
+                output_text(&config_discovery(&ConfigAction::List, "").unwrap()).contains(key),
                 "description missing {key}"
             );
         }
@@ -1861,7 +1910,7 @@ mod tests {
 
         assert!(description.contains(r#"{"setting":"model"}"#));
         assert!(description.contains(r#"{"setting":"permissions.defaultMode","value":"yolo"}"#));
-        assert!(description.contains("mcp_servers"));
+        assert!(description.contains("action=describe"));
         assert!(description.contains("Omit the value parameter"));
     }
 
@@ -2316,5 +2365,91 @@ mod tests {
 
         assert!(!output.is_error, "{text}");
         assert!(text.contains("apply_patch"), "{text}");
+    }
+}
+
+#[cfg(test)]
+mod discovery_tests {
+    use super::*;
+    fn json(output: ToolOutput) -> Value {
+        let text = output
+            .content
+            .iter()
+            .filter_map(|b| {
+                if let kcoder_types::ContentBlock::Text { text } = b {
+                    Some(text.as_str())
+                } else {
+                    None
+                }
+            })
+            .collect::<String>();
+        serde_json::from_str(&text).unwrap()
+    }
+    #[test]
+    fn discovers_enums_and_nested_shapes_without_runtime_settings() {
+        let permission =
+            json(config_discovery(&ConfigAction::Describe, "permissions.defaultMode").unwrap());
+        assert_eq!(permission["canonical_setting"], "permission_mode");
+        assert!(
+            permission["schema"]["enum"]
+                .as_array()
+                .unwrap()
+                .contains(&serde_json::json!("ask"))
+        );
+        let verification =
+            json(config_discovery(&ConfigAction::Describe, "goal_pro.verification").unwrap());
+        assert_eq!(
+            verification["schema"]["properties"]["require_tests"]["type"],
+            "boolean"
+        );
+        assert!(verification["schema"]["properties"]["minimum_test_scope"].is_object());
+        let pinned =
+            json(config_discovery(&ConfigAction::Describe, "tools.file_edit_tool").unwrap());
+        assert_eq!(pinned["writable_in_current_session"], false);
+    }
+    #[test]
+    fn every_supported_setting_is_describable() {
+        for setting in SUPPORTED_CONFIG_SETTINGS {
+            let result = config_discovery(&ConfigAction::Describe, setting).unwrap();
+            assert!(!result.is_error, "{setting}");
+            assert!(json(result)["schema"].is_object(), "{setting}");
+        }
+    }
+    #[tokio::test]
+    async fn discovery_works_without_runtime_or_mutation_access() {
+        let temp = tempfile::tempdir().unwrap();
+        let ctx = ToolContext::new(kcoder_state::AppState::new(temp.path()));
+        let listed = ConfigTool.call(serde_json::json!({}), &ctx).await.unwrap();
+        assert!(json(listed)["settings"].as_array().unwrap().len() > 10);
+        let result = ConfigTool
+            .call(
+                serde_json::json!({"action":"describe","setting":"permission_mode"}),
+                &ctx,
+            )
+            .await
+            .unwrap();
+        assert!(json(result)["schema"]["enum"].is_array());
+        assert!(matches!(
+            ConfigTool
+                .call(serde_json::json!({"action":"list","value":true}), &ctx)
+                .await,
+            Err(ToolError::InvalidInput(_))
+        ));
+    }
+    #[test]
+    fn lists_only_supported_paths_and_rejects_unknown_descriptions() {
+        let result = json(config_discovery(&ConfigAction::List, "goal_pro.verification").unwrap());
+        assert!(
+            result["settings"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|s| s.as_str().unwrap().starts_with("goal_pro.verification"))
+        );
+        assert!(
+            config_discovery(&ConfigAction::Describe, "providers.arbitrary.password")
+                .unwrap()
+                .is_error
+        );
     }
 }

@@ -735,7 +735,7 @@ pub(super) fn clone_fork_attachments_between(
         let mut copied = HashMap::<PathBuf, PathBuf>::new();
         let mut next_index = 0usize;
         for message in messages {
-            let kcoder_types::Message::User { content } = message else {
+            let kcoder_types::Message::User { content, .. } = message else {
                 continue;
             };
             for block in content {
@@ -762,7 +762,7 @@ pub(super) fn clone_fork_attachments_between(
 
 fn message_has_attachments(message: &kcoder_types::Message) -> bool {
     match message {
-        kcoder_types::Message::User { content } => content.iter().any(|block| {
+        kcoder_types::Message::User { content, .. } => content.iter().any(|block| {
             matches!(block, kcoder_types::ContentBlock::Text { text } if text.rfind(KCODER_ATTACHMENTS_OPEN).is_some() && text.ends_with(KCODER_ATTACHMENTS_CLOSE))
         }),
         kcoder_types::Message::Assistant { .. } => false,
@@ -1381,7 +1381,7 @@ mod tests {
         let message = model_message_from_materialized_prompt(&rewritten)
             .unwrap()
             .expect("image attachment should produce structured model content");
-        let Message::User { content } = message else {
+        let Message::User { content, .. } = message else {
             panic!("attachment model message must be a user message");
         };
         assert!(content.iter().any(|block| matches!(

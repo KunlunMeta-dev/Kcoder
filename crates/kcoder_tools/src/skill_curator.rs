@@ -135,7 +135,7 @@ impl Tool for SkillCuratorTool {
          into one new umbrella skill and archive the originals (one operation; different from \
          archiving each and recreating by hand), and \
          `review_and_patch` to apply an audited exact-string skill patch after \
-         reviewer/sub-agent analysis. To create/edit skills use skill_manage; to invoke a skill use skill; bundled synchronization belongs to skill_hub."
+         reviewer/sub-agent analysis. Authoring, activation, and bundled synchronization require separate attached controls."
             .to_string()
     }
 

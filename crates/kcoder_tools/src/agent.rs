@@ -17,8 +17,15 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio_util::sync::CancellationToken;
 
-const SYNTHETIC_CONTEXT_ORIGIN_NOTE: &str = "Origin boundary: parent Message records currently have no structural origin tag, so semantic/recent identify KCoder-generated user-role blocks by reserved leading wrappers after whitespace. The reserved prefixes are continuation summaries ('This session is being continued...' and 'Earlier conversation summary:'), <project-instructions>, <skill_content, <relevant-memories>, <subagent_notification, <task_notification, <workflow_notification, <system-reminder, 'Project instructions', 'Additional instructions', 'Relevant memories', 'Active skills', 'You are currently in plan mode:', 'Recent file read retained after compaction', 'Available tools after compaction', '[system]', and 'TodoList maintenance reminder:'. A genuine user text beginning with one of these reserved wrappers can therefore be treated as generated; rephrase that leading text or choose full when byte-for-byte retention is required. Continuation-summary text is retained by semantic cleanup but does not consume a recent-turn count.";
-const BACKGROUND_PARENT_COORDINATION_GUIDANCE: &str = "If this background result contributes to the requested final answer, keep the parent task open and wait for every relevant background sub-agent to reach a terminal state before final synthesis. Continue only non-overlapping work while agents run. Do not repeat work already delegated to a running agent. To redirect one running tracked agent, use SendMessage with its canonical agent_id; the durable instruction is applied at that agent's next protocol-safe model/tool boundary without cancelling its siblings. A queued delivery is not a completed result, so do not poll reflexively. Do not produce the final aggregation from partial results or while required evidence is still missing; inspect each relevant completion or failure first, resolve material gaps, and then synthesize once.";
+/// One context contract per tool schema; descriptions refer to the parameter.
+fn context_mode_description(auto: &str) -> String {
+    format!(
+        "First child turn only. auto: {auto}. Explicit modes are honored in Arrangement. none: no parent messages; delegated request, project instructions, role prompt, cwd and tools remain. semantic: user text/images, compact summaries and assistant text-only messages; drop entire mixed ToolUse messages, reasoning/signatures, tool results and generated instructions, task/workflow/sub-agent notifications and reminders. recent: semantic cleanup of the last context_turns real user turns. Structured origin distinguishes generated content from literal user text; unknown legacy text is retained. Summaries do not count as user turns. full: complete compacted, tool-sequence-repaired snapshot, including reasoning and tool traffic; only for exact continuity. Rejected if provider or model changed after capture or during an active MoA aggregator turn; a later normal turn restores a compatible snapshot. Does not change model, role, permissions, tools or system prompt. A later follow-up appends to the child's saved transcript and never re-applies parent context."
+    )
+}
+
+const CONTEXT_TURNS_DESCRIPTION: &str = "Real parent user turns retained by recent (including auto when it resolves to recent); ignored by none/semantic/full. Generated messages, summaries and tool results do not consume the count.";
+const BACKGROUND_PARENT_COORDINATION_GUIDANCE: &str = "If this background result contributes to the requested final answer, keep the parent task open and wait for every relevant background sub-agent to reach a terminal state before final synthesis. Continue only non-overlapping work while agents run. Do not repeat work already delegated to a running agent. When a follow-up control is attached, redirect a tracked agent with its canonical agent_id; the durable instruction is applied at that agent's next protocol-safe model/tool boundary without cancelling its siblings. A queued delivery is not a completed result, so do not poll reflexively. Do not produce the final aggregation from partial results or while required evidence is still missing; inspect each relevant completion or failure first, resolve material gaps, and then synthesize once.";
 
 /// First-class role for a delegated sub-agent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -237,7 +244,7 @@ pub struct AgentInput {
     pub message: String,
     /// Optional specialized role. Prefer `plan`, `review`, `implementer`,
     /// `verifier`, or `tool_agent` when the task fits; omit for `general`. Use
-    /// the dedicated `explore_agent` tool for read-only reconnaissance.
+    /// a dedicated exploration tool, when attached, for read-only reconnaissance.
     #[serde(default)]
     pub agent_type: Option<String>,
     /// Maximum number of turns for the sub-agent. Use a JSON integer and omit
@@ -250,7 +257,7 @@ pub struct AgentInput {
     /// with no ToolUse; it drops mixed ToolUse messages, reasoning, and tool
     /// results. `recent` applies that projection to the last
     /// `context_turns` user turns; `full` copies the complete compacted parent
-    /// snapshot. SendMessage continuations always use the child transcript.
+    /// snapshot. Later continuations always use the child transcript.
     #[serde(default)]
     pub context_mode: SubagentContextMode,
     /// Number of parent user turns kept only when `context_mode` is `recent`.
@@ -1061,7 +1068,7 @@ impl Tool for PlanAgentTool {
                 serde_json::json!({
                     "type": "string",
                     "enum": ["auto", "none", "semantic", "recent", "full"],
-                    "description": format!("Controls parent-conversation inheritance for the first PlanAgent turn only. Decision guide: auto (recommended) — recent outside Arrangement, none in Arrangement; context_turns is used only when auto resolves to recent. none — only the supplied planning request/context_paths, project instructions, Plan role prompt, cwd, and role-filtered tools. semantic — parent user intent, compact summaries, and assistant text-only messages; ToolUse, thinking, tool results, and generated blocks (task/workflow/sub-agent notifications, system/todo reminders) are removed. recent — semantic cleanup over the last context_turns real user turns. full — the entire snapshot including reasoning and tool traffic; use only for exact continuity, and it is rejected when the parent's provider or model changed since the snapshot or during a MoA aggregator turn. An explicitly supplied non-auto mode is honored in Arrangement. This field never selects the child's model, permissions, role, tools, or system prompt. SendMessage later appends to this child's saved transcript and never re-applies parent context. {}", SYNTHETIC_CONTEXT_ORIGIN_NOTE)
+                    "description": context_mode_description("recent outside Arrangement; none in Arrangement")
                 }),
             );
             props.insert(
@@ -1070,7 +1077,7 @@ impl Tool for PlanAgentTool {
                     "type": "integer",
                     "minimum": 1,
                     "default": 2,
-                    "description": "Number of real parent user turns retained by recent mode; PlanAgent auto uses it only outside Arrangement, where auto resolves to recent. In Arrangement, PlanAgent auto resolves to none, so this value is ignored unless context_mode is explicitly recent. Tool-result messages and engine-generated compact summaries, project/skill/memory blocks, task/workflow/sub-agent notifications, system reminders, and todo reminders do not consume the count. Defaults to 2. After configured tool-input coercion it must be an integer >= 1; zero and negative values fail schema validation before the tool runs. Default semantic coercion may convert an integer-valued string such as \"2\"; strict/disabled coercion requires a JSON integer. none/semantic/full ignore this field."
+                    "description": CONTEXT_TURNS_DESCRIPTION
                 }),
             );
             props.insert(
@@ -1504,12 +1511,12 @@ async fn spawn_agent_with_kind(
     if run_in_background {
         let next_action = format!(
             "Sub-agent `{id}` is now running in the background (max {max_turns} internal turns). \
-         `{output_file_text}` is a live path, not an immutable terminal result. Use the final notification or TaskOutput for the completed run's output path. \
+         `{output_file_text}` is a live path, not an immutable terminal result. Use the final notification or an attached output-reading control for the completed run's output path. \
          Continue doing other useful work; do not poll reflexively. When the sub-agent \
          finishes you will automatically receive a `<subagent_notification id=\"{id}\" \
          status=\"completed\"|\"failed\" .../>` system reminder and the main loop will run a \
          follow-up turn. If you need the result right now for the next critical-path step, \
-         call TaskOutput once with block=true and a short timeout (15000 or less); otherwise just \
+         use an attached output-reading control with a short wait if available; otherwise just \
          acknowledge and move on. If this result contributes to the final answer, keep that answer \
          pending and wait for every relevant background sub-agent before synthesizing. Do not repeat its \
          delegated work while it is running, and do not produce the final aggregation from partial \
@@ -1563,7 +1570,7 @@ async fn spawn_agent_with_kind(
         ForegroundWaitOutcome::TimedOut => {
             guard.promote_to_background()?;
             let next_action = format!(
-                "Sub-agent `{id}` is still running after the {foreground_timeout_ms} ms foreground budget, so KCoder kept the same run alive in the background. `{output_file_text}` is a live path; use the final notification or TaskOutput for the completed run's immutable output path. Continue only non-overlapping useful work; use TaskOutput with task_id `{id}` for status/output, or TaskStop to cancel it. Completion will also arrive as a `<subagent_notification .../>`. If this result contributes to the final answer, keep that answer pending and wait for every relevant background sub-agent before synthesizing. Do not repeat its delegated work while it is running, and do not produce the final aggregation from partial results or missing evidence."
+                "Sub-agent `{id}` is still running after the {foreground_timeout_ms} ms foreground budget, so KCoder kept the same run alive in the background. `{output_file_text}` is a live path; use the final notification or an attached output-reading control for the completed run's immutable output path. Continue only non-overlapping useful work; use attached job controls for task_id `{id}` when status/output or cancellation is needed. Completion will also arrive as a `<subagent_notification .../>`. If this result contributes to the final answer, keep that answer pending and wait for every relevant background sub-agent before synthesizing. Do not repeat its delegated work while it is running, and do not produce the final aggregation from partial results or missing evidence."
             );
             return Ok(ToolOutput::text(
                 serde_json::to_string(&SpawnAgentResult {
@@ -1637,7 +1644,7 @@ async fn spawn_agent_with_kind(
     };
     if let (Some(path), Some(branch)) = (&worktree_path_text, &worktree_branch_text) {
         next_action.push_str(&format!(
-            " This agent ran in isolation worktree `{path}` on branch `{branch}`; review the changes there (git diff/log), merge or cherry-pick what you need into the parent workspace, then remove the worktree with WorktreeRemove when it is no longer needed."
+            " This agent ran in isolation worktree `{path}` on branch `{branch}`; review the changes there (git diff/log), merge or cherry-pick what you need into the parent workspace, then remove the worktree through an attached cleanup control or host workflow when it is no longer needed."
         ));
     }
     let payload = serde_json::to_string(&SpawnAgentResult {
@@ -1706,7 +1713,7 @@ impl Tool for AgentTool {
     }
 
     fn description(&self) -> String {
-        format!(
+        String::from(
             "Spawn a sub-agent for a well-scoped, self-contained task. \
          By default this tool blocks until the sub-agent completes. A small result is returned inline; a large result is returned as a bounded head/tail preview with `result_truncated=true`, while the complete text remains at `output_file`. \
          Concurrency is role-aware. Multiple foreground `review` or `tool_agent` calls emitted in \
@@ -1718,15 +1725,8 @@ impl Tool for AgentTool {
          progress independently. Set `run_in_background=true` to skip the foreground wait when the result is not required for the \
          immediate next step; this does not make the result optional when it is required for final aggregation. Background completion is delivered as a \
          `<subagent_notification .../>` system reminder and triggers a follow-up turn. \
-         `TaskOutput` is only for a call that returned `status=\"running\"`; `TaskStop` cancels such a run, and `close_agent` releases a finished agent when it is no longer needed.\n\n\
-         Parent-context inheritance (`context_mode`, first child turn only):\n\
-         - `auto` (recommended default): selects a role-aware safe policy. Normal `general` uses `semantic`; `plan`, `review`, and `explore_agent` use `recent` with the requested `context_turns` (default 2); `implementer`, `verifier`, and `tool_agent` use `none`. Every Arrangement role defaults to `none`.\n\
-         - `none`: send no parent conversation. The child still receives project instructions, its role system prompt, cwd, tools, and the self-contained delegated `message`. Prefer this for implementers and verifiers when the task contract already carries all required context.\n\
-         - `semantic`: inherit stable parent user requests and assistant text-only messages containing no ToolUse. Any assistant message containing a ToolUse is dropped as a whole, including adjacent narration; thinking/reasoning, signatures, and tool-result messages are also removed. Prefer this when the child needs overall intent without execution noise.\n\
-         - `recent`: like `semantic`, but only for the last `context_turns` real user turns. Prefer this for focused exploration, planning, or review of the current topic. Tool-result messages and engine-generated compact summaries, project/skill/memory blocks, sub-agent notifications, system reminders, and todo reminders do not consume the turn count.\n\
-         - `full`: copy the complete compacted and tool-sequence-repaired parent snapshot, including reasoning and tool traffic. Because reasoning signatures and protocol blocks can be provider/model-specific, the call is rejected if the live parent changed provider or model after that snapshot. It is also rejected throughout an active MoA aggregator turn because the snapshot may contain mixed-runtime blocks; a later normal parent turn restores availability by capturing a clean compatible snapshot. This is the most expensive and least isolated mode; use it only when exact operational continuity is essential and semantic/recent context is insufficient.\n\
-         Explicit modes are honored in Arrangement mode. `context_turns` is used only by `recent`, defaults to 2, and is ignored by other modes. SendMessage does not re-inherit the parent: it always appends to the selected child's own saved transcript.\n\
-         {}\n\n\
+         Use only attached job controls for running output or cancellation; finished agents may be released when a release control is available.\n\n\
+         Parent-context options are documented in `context_mode`.\n\n\
          Guidelines:\n\
          - Delegation is limited to one level: the main conversation is depth 0 and may create \
            direct children at depth 1; a child cannot create another sub-agent. Calls beyond \
@@ -1740,13 +1740,13 @@ impl Tool for AgentTool {
            so edits never collide; the parent merges or discards each branch afterwards.\n\
          - Prefer the default blocking foreground call when the parent needs the result before answering.\n\
          - If background results contribute to the requested final answer, keep the parent task open and wait for every relevant background sub-agent to finish or fail before final synthesis. Continue only non-overlapping work, do not repeat work already delegated to a running agent, and do not produce the final aggregation from partial results or missing required evidence.\n\
-         - Use TaskOutput only when the call returned status=running; do not poll reflexively.\n\
+         - Inspect managed output only when the call returned status=running; do not poll reflexively.\n\
          - Do not redo delegated work yourself; focus on integrating results or tackling \
            non-overlapping work.\n\
          - Set `agent_type` when a specialized role fits: `plan` for read-only implementation \
            planning, `review` for read-only bug review, `implementer` for bounded edits, \
            `verifier` for tests/builds, and `tool_agent` for quick tool-heavy execution. \
-           Use `explore_agent`, not `spawn_agent`, for read-only codebase reconnaissance. \
+           Prefer a dedicated exploration tool when attached for read-only codebase reconnaissance. \
            Supply only a canonical `agent_type` value shown in the input schema; unknown values \
            and compatibility aliases are rejected by model-call schema validation.\n\
          - In Arrangement mode, `general`, `plan`, and `review` are read-only report roles. \
@@ -1759,8 +1759,7 @@ impl Tool for AgentTool {
            delegate literal `allowed_shell_prefixes` such as an exact `docker exec <container>` \
            prefix; use the narrowest target and never include shell control syntax. Never use \
            `spawn_agent(agent_type=\"explore\")`; \
-           that value is rejected and `explore_agent` should be used instead.",
-            SYNTHETIC_CONTEXT_ORIGIN_NOTE
+           that value is rejected; dedicated exploration requires a separately attached tool.",
         )
     }
 
@@ -1778,23 +1777,23 @@ impl Tool for AgentTool {
                     serde_json::json!({
                         "type": "string",
                         "enum": ["auto", "none", "semantic", "recent", "full"],
-                        "description": format!("Controls parent-conversation inheritance for the first child turn only. Decision guide: auto (recommended) — role-aware default (general=semantic, plan/review=recent, implementer/verifier/tool_agent=none; every Arrangement role=none). none — only the delegated message, project instructions, role prompt, cwd, and role tools; best for self-contained work. semantic — parent user intent, compact summaries, and assistant text-only messages; ToolUse, thinking, tool results, and generated blocks (task/workflow/sub-agent notifications, system/todo reminders) are removed; use when the child needs overall intent without execution noise. recent — semantic cleanup over the last context_turns real user turns; use for a focused follow-up on the current topic. full — the entire snapshot including reasoning and tool traffic; use only for exact continuity, and it is rejected when the parent's provider or model changed since the snapshot or during a MoA aggregator turn. An explicitly supplied non-auto mode is honored in Arrangement. context_turns applies only to recent. This field never selects the child's model, permissions, role, tools, or system prompt. SendMessage appends to the child's saved transcript and never re-applies parent context. {}", SYNTHETIC_CONTEXT_ORIGIN_NOTE)
+                        "description": context_mode_description("general=semantic; plan/review=recent; implementer/verifier/tool_agent=none; all Arrangement roles=none")
                     }),
                 );
             props.insert(
-                    "context_turns".to_string(),
-                    serde_json::json!({
-                        "type": "integer",
-                        "minimum": 1,
-                        "default": 2,
-                        "description": "How many real parent user turns to retain when context_mode=recent. Tool-result messages and engine-generated compact summaries, project/skill/memory blocks, sub-agent notifications, system reminders, and todo reminders do not consume this count. Defaults to 2. After configured tool-input coercion it must be an integer >= 1; zero and negative values fail schema validation before the tool runs. Default semantic coercion may convert an integer-valued string such as \"2\"; strict/disabled coercion requires a JSON integer. Used by auto only when the selected role resolves auto to recent; ignored by none/semantic/full."
-                    }),
-                );
+                "context_turns".to_string(),
+                serde_json::json!({
+                    "type": "integer",
+                    "minimum": 1,
+                    "default": 2,
+                    "description": CONTEXT_TURNS_DESCRIPTION
+                }),
+            );
             props.insert(
                     "run_in_background".to_string(),
                     serde_json::json!({
                         "type": "boolean",
-                        "description": format!("Return immediately and deliver completion asynchronously. Defaults to false, which blocks until completion. Background calls return status=running without a result; wait for the automatic subagent_notification, or call TaskOutput once only when the result is immediately required. {}", BACKGROUND_PARENT_COORDINATION_GUIDANCE)
+                        "description": format!("Return immediately and deliver completion asynchronously. Defaults to false, which blocks until completion. Background calls return status=running without a result; wait for the automatic subagent_notification, or inspect it through an attached output-reading control when immediately required. {}", BACKGROUND_PARENT_COORDINATION_GUIDANCE)
                     }),
                 );
             props.insert(
@@ -1812,7 +1811,7 @@ impl Tool for AgentTool {
                     serde_json::json!({
                         "type": "string",
                         "enum": AgentKind::spawn_agent_schema_values(),
-                        "description": "Specialized sub-agent role. Omit for general, or supply exactly one canonical enum value shown by this schema. Role guide: plan = read-only implementation planning; review = read-only code/bug review; implementer = bounded edits (in Arrangement it requires allowed_write_paths); verifier = tests/builds/validation; tool_agent = quick tool-heavy execution; general = anything that does not fit these. explore is NOT a valid value here — use the dedicated explore_agent tool for read-only codebase reconnaissance. In Arrangement mode, general/plan/review are read-only, implementer performs bounded edits, verifier performs validation, and only implementer/verifier may receive allowed_write_paths."
+                        "description": "Specialized sub-agent role. Omit for general, or supply exactly one canonical enum value shown by this schema. Role guide: plan = read-only implementation planning; review = read-only code/bug review; implementer = bounded edits (in Arrangement it requires allowed_write_paths); verifier = tests/builds/validation; tool_agent = quick tool-heavy execution; general = anything that does not fit these. explore is NOT a valid value here — use a dedicated exploration tool only when one is attached. In Arrangement mode, general/plan/review are read-only, implementer performs bounded edits, verifier performs validation, and only implementer/verifier may receive allowed_write_paths."
                     }),
                 );
             props.insert(
@@ -1918,7 +1917,7 @@ impl Tool for AgentTool {
         let (agent_kind, persona) = resolve_agent_request(ctx, input.agent_type.as_deref())?;
         if agent_kind == AgentKind::Explore && persona.is_none() {
             return Err(ToolError::InvalidInput(
-                "spawn_agent no longer accepts agent_type=explore; use the dedicated explore_agent tool for read-only reconnaissance".to_string(),
+                "spawn_agent no longer accepts agent_type=explore; use a dedicated exploration tool when one is attached".to_string(),
             ));
         }
         spawn_agent_with_kind(ctx, agent_kind, persona, input).await
@@ -1942,15 +1941,8 @@ impl Tool for ExploreAgentTool {
          immediate next step; this does not make it optional for final aggregation. If background exploration contributes to the requested final answer, keep the parent task open and wait for every relevant background sub-agent to finish or fail before final synthesis. Continue only non-overlapping work, do not repeat work already delegated to a running agent, and do not produce the final aggregation from partial results or missing required evidence. Never keep more than 4 sub-agents running \
          at the same time; if 4 are already running, wait for one to finish before spawning \
          another. Do not use it for edits, tests that require mutation, or final verification; \
-         use implementer/verifier roles through `spawn_agent` when those are needed.\n\n\
-         Input format:\n\
-         - `message`: string, required. A self-contained read-only investigation request. \
-         Include concrete paths, symbols, questions, expected output, and constraints.\n\
-         - `context_mode`: optional `auto|none|semantic|recent|full`, default `auto`. For Explore, auto resolves to recent outside Arrangement and none in Arrangement; an explicit non-auto value is honored. none receives no parent transcript; semantic keeps user intent/images, compact summaries, and assistant text-only messages with no ToolUse, while dropping mixed ToolUse messages, reasoning, tool results, and duplicate engine reminders; recent applies that cleanup to the current topic; full copies the repaired compacted execution snapshot and is only for exact continuity. full is rejected after a provider/model switch and throughout an active MoA aggregator turn; a later normal parent turn captures a clean compatible snapshot and restores it. None of these values changes the read-only role, model, tools, permissions, or system prompt.\n\
-         - `context_turns`: integer, optional, default 2. Used only by recent (including Explore auto outside Arrangement). Tool results and engine-generated summaries/reminders do not consume the count. After configured input coercion it must be >= 1; default semantic coercion can convert an integer-valued string, while strict coercion requires a JSON integer.\n\
-         - `max_turns`: integer, optional. When omitted, uses `default_subagent_max_turns` from settings.json (60 by default). Explicit values must be in 60..=180; out-of-range values fail validation before Explore runs. Default semantic coercion can convert an integer-valued string, while strict coercion requires a JSON integer.\n\
-         - `run_in_background`: boolean, optional. Defaults to false.\n\
-         - `foreground_timeout_ms`: integer, optional. Defaults to 0, which waits until completion without automatic background delivery; set a positive value to permit automatic background delivery after that budget."
+         use an attached implementation/verification delegation tool when those are needed.\n\n\
+         Supply a self-contained investigation message with concrete paths, symbols, questions, constraints and expected path:line evidence. Parent-context options are documented in `context_mode`."
             .to_string()
     }
 
@@ -1968,18 +1960,18 @@ impl Tool for ExploreAgentTool {
                     serde_json::json!({
                         "type": "string",
                         "enum": ["auto", "none", "semantic", "recent", "full"],
-                        "description": format!("Controls parent-conversation inheritance for the first Explore turn only. auto (recommended) resolves to recent outside Arrangement and to none in Arrangement; context_turns is used only when auto resolves to recent. none copies zero parent messages: Explore still receives the self-contained investigation message, project instructions, Explore role system prompt, cwd, and read-only role-filtered tools. semantic keeps real parent user text/images, compact-summary text, and assistant text-only messages containing no ToolUse. Any assistant message containing a ToolUse is dropped as a whole, including adjacent narration; thinking/reasoning, signatures, ToolResult messages, usage metadata, and duplicate engine-generated project/skill/memory/notification/reminder messages are also removed. recent finds the suffix beginning at the context_turns-th last real user turn and applies that semantic cleanup; only non-synthetic user messages containing text or an image consume the count. full copies the complete compacted, tool-sequence-repaired snapshot including reasoning and tool traffic and is rejected if the live provider or model changed after capture. full is also rejected throughout an active MoA aggregator turn because that snapshot may contain mixed-runtime blocks; a later normal parent turn captures a clean compatible snapshot and restores it. Use full only for exact operational continuity that recent/semantic cannot provide. An explicitly supplied non-auto mode is honored in Arrangement. This field does not change the child's model, role, permissions, tools, or system prompt. SendMessage appends to the child's saved transcript and never re-applies parent context. {}", SYNTHETIC_CONTEXT_ORIGIN_NOTE)
+                        "description": context_mode_description("recent outside Arrangement; none in Arrangement")
                     }),
                 );
             props.insert(
-                    "context_turns".to_string(),
-                    serde_json::json!({
-                        "type": "integer",
-                        "minimum": 1,
-                        "default": 2,
-                        "description": "Number of real parent user turns retained by recent mode; Explore auto uses it only outside Arrangement, where auto resolves to recent. In Arrangement, Explore auto resolves to none, so this value is ignored unless context_mode is explicitly recent. Tool-result messages and engine-generated compact summaries, project/skill/memory blocks, task/workflow/sub-agent notifications, system reminders, and todo reminders do not consume the count. Defaults to 2. After configured tool-input coercion it must be an integer >= 1; zero and negative values fail schema validation before the tool runs. Default semantic coercion may convert an integer-valued string such as \"2\"; strict/disabled coercion requires a JSON integer. none/semantic/full ignore this field."
-                    }),
-                );
+                "context_turns".to_string(),
+                serde_json::json!({
+                    "type": "integer",
+                    "minimum": 1,
+                    "default": 2,
+                    "description": CONTEXT_TURNS_DESCRIPTION
+                }),
+            );
             props.insert(
                     "run_in_background".to_string(),
                     serde_json::json!({

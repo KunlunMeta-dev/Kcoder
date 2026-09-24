@@ -17,7 +17,7 @@ pub struct SendMessageTool;
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct SendMessageInput {
-    /// Agent id returned by `spawn_agent` or `explore_agent`.
+    /// Existing tracked sub-agent ID owned by this parent session.
     pub agent_id: String,
     /// New user message to deliver to that sub-agent.
     pub message: String,
@@ -189,7 +189,7 @@ impl Tool for SendMessageTool {
          parent switched provider or model, switch back before continuing or spawn a fresh \
          sub-agent; KCoder will not replay old reasoning signatures into a different protocol. \
          Cancelled, closed, \
-         or missing sub-agents cannot be resumed; spawn a fresh sub-agent instead. Inspect the \
+         or missing sub-agents cannot be resumed; a fresh sub-agent requires an attached delegation control. Inspect the \
          sub-agent output_file or wait result before accepting, retrying, or closing a result \
          that matters. Do not use this for background command tasks."
             .to_string()
@@ -208,7 +208,7 @@ impl Tool for SendMessageTool {
                     "agent_id".to_string(),
                     serde_json::json!({
                         "type": "string",
-                        "description": "Exact agent_id returned by spawn_agent, explore_agent, or PlanAgent in this same parent session. The id must still exist and must not be cancelled or closed. A persisted id without its original parent-session owner, canonical role, Arrangement/write-scope capability profile, or provider/model identity cannot be resumed; KCoder never infers these from the mutable task description. If the live parent provider or model changed since this child's transcript was written, switch back or create a new agent; old reasoning signatures are never replayed into a different runtime."
+                        "description": "Exact tracked sub-agent ID owned by this same parent session. The id must still exist and must not be cancelled or closed. A persisted id without its original parent-session owner, canonical role, Arrangement/write-scope capability profile, or provider/model identity cannot be resumed; KCoder never infers these from the mutable task description. If the live parent provider or model changed since this child's transcript was written, switch back or create a new agent; old reasoning signatures are never replayed into a different runtime."
                     }),
                 );
                 properties.insert(
@@ -270,7 +270,7 @@ impl Tool for SendMessageTool {
                     "agent_id": id,
                     "status": "not_a_subagent",
                     "queued": false,
-                    "next_action": "Use TaskOutput/TaskStop for background command tasks; SendMessage only works with sub-agents."
+                    "next_action": "Use attached managed-job inspection/cancellation controls or the host for background command tasks; SendMessage only works with sub-agents."
                 })
                 .to_string(),
             ));
@@ -508,7 +508,7 @@ impl Tool for SendMessageTool {
                     output_file,
                     next_action: blocked_head.map_or_else(
                         || "The message is durable and will be applied at this agent's next protocol-safe model/tool boundary. Do other useful work and wait for automatic notifications instead of polling.".to_string(),
-                        |message_id| format!("The new delivery is durable but cannot pass blocked FIFO head {message_id}. Resolve that message explicitly with ControlAgent retry_message or discard_message."),
+                        |message_id| format!("The new delivery is durable but cannot pass blocked FIFO head {message_id}. Resolve that queued message explicitly through an attached agent-control capability or host workflow."),
                     ),
                 }, &task)?));
             }
@@ -526,7 +526,7 @@ impl Tool for SendMessageTool {
                             "status": "paused_queue_closed",
                             "queued": false,
                             "output_file": output_file,
-                            "next_action": "The paused agent no longer accepts deliveries; inspect AgentFleet and use ControlAgent or spawn a fresh agent."
+                            "next_action": "The paused agent no longer accepts deliveries; inspect its current state through attached controls or the host; resumption or a fresh agent requires an available control."
                         })
                         .to_string(),
                     ));
@@ -545,8 +545,8 @@ impl Tool for SendMessageTool {
                     queue_position: Some(receipt.queue_position),
                     output_file,
                     next_action: blocked_head.map_or_else(
-                        || "The delivery is durable. Use ControlAgent action=resume with the current control revision when the agent may continue.".to_string(),
-                        |message_id| format!("The delivery is durable behind blocked message {message_id}. Resolve it with ControlAgent retry_message or discard_message before resuming."),
+                        || "The delivery is durable. Resume through an attached agent-control capability or host workflow using the current control revision.".to_string(),
+                        |message_id| format!("The delivery is durable behind blocked message {message_id}. Resolve that queued message through an attached agent-control capability or host workflow before resuming."),
                     ),
                 }, &task)?));
             }
@@ -692,7 +692,7 @@ impl Tool for SendMessageTool {
                     queue_position: Some(queue_position),
                     output_file,
                     next_action: format!(
-                        "The delivery is durable behind blocked FIFO head {blocked_message_id}; no worker was started. Resolve the head with ControlAgent retry_message or discard_message."
+                        "The delivery is durable behind blocked FIFO head {blocked_message_id}; no worker was started. Resolve the queued head through an attached agent-control capability or host workflow."
                     ),
                 },
                 &task,
@@ -742,7 +742,7 @@ impl Tool for SendMessageTool {
             queued: true,
             queue_position: Some(queue_position),
             output_file,
-            next_action: "The sub-agent has been resumed in the background. Use wait only if this result is on the critical path; otherwise rely on the automatic subagent notification. output_file is a live path; use the terminal notification or TaskOutput for the completed run's immutable result path.".to_string(),
+            next_action: "The sub-agent has been resumed in the background. Use an attached completion-wait control only if this result is on the critical path; otherwise rely on the automatic subagent notification. output_file is a live path; use the terminal notification or an attached output control for the completed run's immutable result path.".to_string(),
         }, &resumed_task)?))
     }
 }

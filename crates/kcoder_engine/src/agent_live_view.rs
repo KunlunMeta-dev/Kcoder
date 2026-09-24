@@ -78,20 +78,19 @@ impl AgentLiveWriter {
                 view.phase = if matches!(event, EngineEvent::AssistantMessageStarted) {
                     "Receiving model response".to_string()
                 } else {
-                    let pending = view
-                        .messages
-                        .last()
-                        .into_iter()
-                        .flat_map(|m| match m {
-                            Message::Assistant { content, .. } | Message::User { content } => {
-                                content.iter()
-                            }
-                        })
-                        .filter_map(|block| match block {
-                            ContentBlock::ToolUse { name, .. } => Some(name.as_str()),
-                            _ => None,
-                        })
-                        .collect::<Vec<_>>();
+                    let pending =
+                        view.messages
+                            .last()
+                            .into_iter()
+                            .flat_map(|m| match m {
+                                Message::Assistant { content, .. }
+                                | Message::User { content, .. } => content.iter(),
+                            })
+                            .filter_map(|block| match block {
+                                ContentBlock::ToolUse { name, .. } => Some(name.as_str()),
+                                _ => None,
+                            })
+                            .collect::<Vec<_>>();
                     if pending.is_empty() {
                         "Planning next step".into()
                     } else {
@@ -118,6 +117,7 @@ impl AgentLiveWriter {
                 // Results arrive before the engine commits the entire tool batch.
                 // This presentation-only copy may contain incomplete tool protocol.
                 Arc::make_mut(&mut view.messages).push(Message::User {
+                    origin: kcoder_types::MessageOrigin::Unknown,
                     content: vec![ContentBlock::ToolResult {
                         tool_use_id: id.clone(),
                         content: output.content.clone(),

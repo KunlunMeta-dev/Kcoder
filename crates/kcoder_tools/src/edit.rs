@@ -1,6 +1,6 @@
 use crate::{
     Tool, ToolContext, ToolError, ToolOutput, parse_input,
-    text_file::{LineEndings, TextEncoding, read_text_file, resolve_path, write_text_file},
+    text_file::{LineEndings, resolve_path, write_text_file},
 };
 use async_trait::async_trait;
 use schemars::JsonSchema;
@@ -20,6 +20,10 @@ pub const MAX_EDIT_FILE_SIZE_BYTES: u64 = 1024 * 1024 * 1024;
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct FileEditInput {
+    /// Known source encoding for existing text files; auto accepts UTF-8/BOM Unicode.
+    /// Use gbk/gb18030 explicitly for Chinese legacy files. New files use this encoding.
+    #[serde(default)]
+    pub encoding: crate::text_file::TextEncodingHint,
     /// Absolute path, workspace-relative path, or ~/... path to the existing
     /// file to modify.
     pub file_path: String,
@@ -57,16 +61,16 @@ impl Tool for FileEditTool {
     fn description(&self) -> String {
         "Make an exact-string replacement in an existing file. \
          Use this tool whenever you need to modify part of a file. \
-         Always prefer editing existing files over rewriting them with write. \
+         Prefer targeted edits over complete file replacement. \
          Before calling edit, read the target file first, or at least read the relevant line range, \
          so old_string is copied from the current file contents with exact whitespace and indentation. \
          When copying from Read output, do not include the line number prefix in old_string or new_string; \
          only include the actual file content after the prefix. \
-         UTF-8 and UTF-16LE text files are supported; CRLF files can be matched with the LF-normalized text shown by Read and are written back with their original line ending style. \
+         UTF-8, UTF-16LE and explicit gbk/gb18030 are supported; use the same known encoding as read, never guess. Unrepresentable writes fail before modifying the file; CRLF files can be matched with the LF-normalized text shown by Read and are written back with their original line ending style. \
          The edit fails if old_string is not unique unless replace_all is true. \
          Use replace_all for deliberate renames or whole-file string replacements. \
          Do not add emojis to files unless the user explicitly requested emojis. \
-         If old_string is empty, edit creates a missing file or fills an empty file."
+         Prefer an attached file-creation tool for new files. Legacy empty old_string creation is accepted only for missing or empty files."
             .to_string()
     }
 
@@ -119,7 +123,7 @@ impl Tool for FileEditTool {
                 write_text_file(
                     &path,
                     &input.new_string,
-                    TextEncoding::Utf8 { bom: false },
+                    input.encoding.new_file_encoding(),
                     LineEndings::Lf,
                 )
                 .await
@@ -173,10 +177,10 @@ impl Tool for FileEditTool {
             ));
         }
 
-        let text_file = read_text_file(&path).await.map_err(|e| {
+        let text_file = crate::text_file::read_text_file_with_encoding(&path, input.encoding).await.map_err(|e| {
             if e.kind() == std::io::ErrorKind::InvalidData {
                 ToolError::Execution(format!(
-                    "This tool cannot edit binary, non-UTF-8, or non-UTF-16LE files as text: {}",
+                    "This tool cannot edit binary, unknown-encoding files as text; specify the known encoding explicitly: {} ({e})",
                     path.display()
                 ))
             } else {

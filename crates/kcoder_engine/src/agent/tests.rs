@@ -518,6 +518,7 @@ fn matched_tool_use_sequence_is_not_reported_as_unmatched() {
             usage: None,
         },
         Message::User {
+            origin: kcoder_types::MessageOrigin::Unknown,
             content: vec![ContentBlock::ToolResult {
                 tool_use_id: "tool-1".to_string(),
                 content: vec![ContentBlock::Text {
@@ -551,6 +552,7 @@ fn unmatched_tool_use_sequence_reports_missing_ids() {
             usage: None,
         },
         Message::User {
+            origin: kcoder_types::MessageOrigin::Unknown,
             content: vec![ContentBlock::ToolResult {
                 tool_use_id: "tool-1".to_string(),
                 content: vec![ContentBlock::Text {
@@ -593,6 +595,7 @@ fn semantic_context_removes_tool_traffic_and_reasoning() {
             }),
         },
         Message::User {
+            origin: kcoder_types::MessageOrigin::Unknown,
             content: vec![ContentBlock::ToolResult {
                 tool_use_id: "tool-1".to_string(),
                 content: vec![ContentBlock::Text {
@@ -633,9 +636,12 @@ fn recent_window_matches_forward_index_oracle() {
     let variants = [
         Message::user_text("real user"),
         Message::assistant_text("answer"),
-        Message::user_text("<subagent_notification id=\"child\"/>"),
-        Message::user_text("Earlier conversation summary:\nsummary"),
-        Message::User { content: vec![] },
+        Message::runtime_text("<subagent_notification id=\"child\"/>"),
+        Message::compaction_text("Earlier conversation summary:\nsummary"),
+        Message::User {
+            origin: kcoder_types::MessageOrigin::Unknown,
+            content: vec![],
+        },
     ];
     for len in 0..=5u32 {
         for mut pattern in 0..variants.len().pow(len) {
@@ -679,8 +685,8 @@ fn recent_context_counts_user_turns_not_tool_results() {
         Message::user_text("first request"),
         Message::assistant_text("first answer"),
         Message::user_text("second request"),
-        Message::user_text("<subagent_notification id=\"child\" status=\"completed\"/>"),
-        Message::user_text("TodoList maintenance reminder: update the current task"),
+        Message::runtime_text("<subagent_notification id=\"child\" status=\"completed\"/>"),
+        Message::runtime_text("TodoList maintenance reminder: update the current task"),
         Message::Assistant {
             content: vec![ContentBlock::ToolUse {
                 id: "tool-2".to_string(),
@@ -690,6 +696,7 @@ fn recent_context_counts_user_turns_not_tool_results() {
             usage: None,
         },
         Message::User {
+            origin: kcoder_types::MessageOrigin::Unknown,
             content: vec![ContentBlock::ToolResult {
                 tool_use_id: "tool-2".to_string(),
                 content: vec![ContentBlock::Text {
@@ -719,9 +726,9 @@ fn recent_context_counts_user_turns_not_tool_results() {
 fn semantic_context_keeps_compact_summary_but_drops_engine_reminders() {
     let compact = "This session is being continued from a previous conversation that ran out of context.\n\nImportant decision";
     let messages = vec![
-        Message::user_text(compact),
-        Message::user_text("<project-instructions>duplicated</project-instructions>"),
-        Message::user_text("[system] Continue the loop"),
+        Message::compaction_text(compact),
+        Message::runtime_text("<project-instructions>duplicated</project-instructions>"),
+        Message::runtime_text("[system] Continue the loop"),
         Message::user_text("actual request"),
     ];
 
@@ -749,7 +756,7 @@ fn production_attachment_formats_are_synthetic_and_do_not_consume_recent_turns()
         "<workflow_notification id=\"workflow-1\" status=\"completed\"/>",
     ];
     let mut messages = vec![Message::user_text("older real request")];
-    messages.extend(attachments.into_iter().map(Message::user_text));
+    messages.extend(attachments.into_iter().map(Message::runtime_text));
     messages.push(Message::user_text("latest real request"));
 
     let semantic = project_parent_messages(&messages, SubagentContextMode::Semantic, 1);
@@ -765,26 +772,37 @@ fn production_attachment_formats_are_synthetic_and_do_not_consume_recent_turns()
 }
 
 #[test]
-fn reserved_generated_prefixes_are_an_explicit_context_origin_boundary() {
-    let messages = vec![
-        Message::user_text("Project instructions: this text was typed by a user"),
-        Message::user_text("Please discuss the phrase Project instructions: literally"),
-    ];
-
-    let semantic = project_parent_messages(&messages, SubagentContextMode::Semantic, 2);
-    assert_eq!(
-        semantic,
-        vec![Message::user_text(
-            "Please discuss the phrase Project instructions: literally"
-        )]
-    );
+fn literal_generated_prefixes_and_unknown_legacy_messages_are_preserved() {
+    for prefix in [
+        "Project instructions:",
+        "[system]",
+        "<system-reminder>",
+        "Earlier conversation summary:",
+    ] {
+        let literal = Message::user_text(format!("{prefix} literal user input"));
+        let unknown = literal
+            .clone()
+            .with_origin(kcoder_types::MessageOrigin::Unknown);
+        let generated = literal
+            .clone()
+            .with_origin(kcoder_types::MessageOrigin::Runtime);
+        let messages = vec![literal.clone(), unknown.clone(), generated];
+        assert_eq!(
+            project_parent_messages(&messages, SubagentContextMode::Semantic, 2),
+            vec![literal, unknown.clone()]
+        );
+        assert_eq!(
+            project_parent_messages(&messages, SubagentContextMode::Recent, 1),
+            vec![unknown]
+        );
+    }
 }
 
 #[test]
 fn recent_large_window_starts_at_first_real_user_not_startup_summary() {
     let summary = "This session is being continued from a previous conversation that ran out of context.\nstartup summary";
     let messages = vec![
-        Message::user_text(summary),
+        Message::compaction_text(summary),
         Message::user_text("only real request"),
         Message::assistant_text("answer"),
     ];
@@ -802,8 +820,8 @@ fn recent_large_window_starts_at_first_real_user_not_startup_summary() {
 #[test]
 fn recent_context_without_real_user_turns_is_empty() {
     let messages = vec![
-        Message::user_text("Earlier conversation summary:\nsummary only"),
-        Message::user_text("<system-reminder>generated</system-reminder>"),
+        Message::compaction_text("Earlier conversation summary:\nsummary only"),
+        Message::runtime_text("<system-reminder>generated</system-reminder>"),
     ];
 
     assert!(project_parent_messages(&messages, SubagentContextMode::Recent, 2).is_empty());
@@ -922,6 +940,7 @@ fn completed_delivery_recovery_uses_terminal_assistant_without_new_provider_turn
             usage: None,
         },
         Message::User {
+            origin: kcoder_types::MessageOrigin::Unknown,
             content: vec![ContentBlock::ToolResult {
                 tool_use_id: "tool-1".to_string(),
                 content: vec![ContentBlock::Text {
@@ -1410,6 +1429,7 @@ fn vote_transcript(include_vote: bool) -> Vec<Message> {
             usage: None,
         },
         Message::User {
+            origin: kcoder_types::MessageOrigin::Unknown,
             content: vec![ContentBlock::ToolResult {
                 tool_use_id: "vote-1".to_string(),
                 content: vec![ContentBlock::Text {

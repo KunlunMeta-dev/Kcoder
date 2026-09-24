@@ -1532,7 +1532,8 @@ fn runtime_injections_are_hidden_per_block_without_losing_user_or_tool_content()
         "Earlier conversation summary:\nhidden",
         "<task_notification id=\"x\" status=\"completed\"/>",
     ] {
-        assert!(project(Message::user_text(text)).is_none(), "{text}");
+        assert!(project(Message::runtime_text(text)).is_none(), "{text}");
+        assert_eq!(project(Message::user_text(text)).unwrap().content, text);
         let mixed = project(Message::user_content(vec![
             ContentBlock::Text {
                 text: "介绍你自己".into(),
@@ -1540,7 +1541,8 @@ fn runtime_injections_are_hidden_per_block_without_losing_user_or_tool_content()
             ContentBlock::Text { text: text.into() },
         ]))
         .unwrap();
-        assert_eq!(mixed.content, "介绍你自己");
+        assert!(mixed.content.contains("介绍你自己"));
+        assert!(mixed.content.contains(text));
         assert_eq!(
             project(Message::assistant_text(text)).unwrap().content,
             text
@@ -1557,7 +1559,7 @@ fn runtime_injections_are_hidden_per_block_without_losing_user_or_tool_content()
             }],
             is_error: None,
         },
-    ]))
+    ]).with_origin(kcoder_types::MessageOrigin::Runtime))
     .unwrap();
     assert_eq!(result.role, "assistant");
     assert_eq!(result.blocks.len(), 1);

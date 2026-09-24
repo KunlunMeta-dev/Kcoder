@@ -158,7 +158,7 @@ impl Tool for SkillHubTool {
          from inline `content`, a raw/local `url`, or `source=github` with `repo` + `path` (use `repo`/`path` when you have the \
          GitHub coordinates, `url` when you have a direct link; `ref` pins a branch/tag/commit when needed); every install is scanned with skill_guard first. Community \
          installs block medium/high risk by default, trusted installs block high \
-         risk, and provenance is recorded as HubInstalled. Bundled sync preserves local edits through `.bundled_manifest`. For skills you write yourself use skill_manage; to run a skill use skill; for telemetry and archive/stale housekeeping use skill_curator."
+         risk, and provenance is recorded as HubInstalled. Bundled sync preserves local edits through `.bundled_manifest`. Authoring, activation, and lifecycle housekeeping require separate attached controls."
             .to_string()
     }
 

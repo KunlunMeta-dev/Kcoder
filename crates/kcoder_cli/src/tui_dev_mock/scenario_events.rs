@@ -963,7 +963,7 @@ fn latest_user_has_tool_result(request: &MessagesRequest, tool_use_id: &str) -> 
         .iter()
         .rev()
         .find_map(|message| match message {
-            Message::User { content } => Some(content.iter().any(|block| {
+            Message::User { content, .. } => Some(content.iter().any(|block| {
                 matches!(
                     block,
                     ContentBlock::ToolResult {
@@ -1028,7 +1028,7 @@ fn latest_user_has_any_tool_result(request: &MessagesRequest, tool_use_ids: &[&s
 
 fn latest_tool_result_text(request: &MessagesRequest, tool_use_id: &str) -> Option<String> {
     request.messages.iter().rev().find_map(|message| {
-        let Message::User { content } = message else {
+        let Message::User { content, .. } = message else {
             return None;
         };
         content.iter().find_map(|block| {
@@ -1071,7 +1071,7 @@ fn last_plain_user_text<'a>(
 ) -> Option<String> {
     let mut latest_internal_preview = None;
     for message in messages.into_iter().rev() {
-        let Message::User { content } = message else {
+        let Message::User { content, .. } = message else {
             continue;
         };
         let text = content
@@ -1107,7 +1107,7 @@ fn is_generated_user_text(text: &str) -> bool {
 
 pub(super) fn request_has_subagent_notification(request: &MessagesRequest) -> bool {
     request.messages.iter().any(|message| {
-        let Message::User { content } = message else {
+        let Message::User { content, .. } = message else {
             return false;
         };
         content.iter().any(|block| {
@@ -1208,7 +1208,7 @@ pub(super) fn is_targeted_steer_worker(request: &MessagesRequest) -> bool {
 
 fn message_content(message: &Message) -> &[ContentBlock] {
     match message {
-        Message::User { content } | Message::Assistant { content, .. } => content,
+        Message::User { content, .. } | Message::Assistant { content, .. } => content,
     }
 }
 

@@ -4,7 +4,6 @@ use crate::markdown::{
     render_markdown_hyperlink_lines_with_theme,
     render_markdown_hyperlink_lines_with_theme_and_width, render_markdown_with_theme,
 };
-use crate::message_blocks::content_blocks_text;
 use crate::render;
 use crate::render::highlight::highlight_code_to_styled_spans_with_theme;
 use crate::render_cache::ToolRailPos;
@@ -148,79 +147,14 @@ pub(super) fn compact_goal_summary(goal: &Goal) -> String {
 }
 
 pub(super) fn message_is_hidden_internal_context(message: &Message) -> bool {
-    let (raw, is_user) = match message {
-        Message::User { content } => (content_blocks_text(content), true),
-        Message::Assistant { content, .. } => (content_blocks_text(content), false),
-    };
-    display_text_is_hidden_internal_context(&raw, is_user)
+    matches!(message, Message::User { origin: kcoder_types::MessageOrigin::Runtime | kcoder_types::MessageOrigin::Compaction, content } if !content.iter().any(|block| matches!(block, kcoder_types::ContentBlock::ToolResult { .. })))
 }
 
-pub(super) fn display_text_is_hidden_internal_context(text: &str, is_user: bool) -> bool {
-    let text = text.trim_start();
-    if text.is_empty() {
-        return false;
-    }
-    compact_context_attachment_text(text)
-        || internal_followup_context_text(text)
-        || (is_user && model_only_user_context_text(text))
-}
-
-fn compact_context_attachment_text(text: &str) -> bool {
-    text.starts_with("Project instructions (KCODER.md):\n")
-        || text.starts_with("Additional instructions after compaction:\n")
-        || text.starts_with("Relevant memories:\n")
-        || text.starts_with("You are currently in plan mode:\n")
-        || text.starts_with("Recent file read retained after compaction (")
-        || text.starts_with("Available tools after compaction: ")
-        || (text.starts_with("Active skills: ")
-            && text.ends_with(". You may continue to use them via the skill tool."))
-}
-
-fn internal_followup_context_text(text: &str) -> bool {
-    text.starts_with("[system] Continue working toward the active `/goal` objective.")
-        || text.starts_with("[system] Continue working toward the active `/goal-pro` objective.")
-        || text.starts_with("[system] Continue working toward the active `/ultgoal` objective.")
-        || text.starts_with("[system] All tracked background sub-agents have finished.")
-        || text
-            .starts_with("[system] A background sub-agent run just completed while you were idle.")
-}
-
-fn model_only_user_context_text(text: &str) -> bool {
-    text.starts_with("[system] Trusted Orchestrate fleet delta ")
-        || complete_notification_tag(text, "workflow")
-        || complete_notification_tag(text, "subagent")
-        || complete_notification_tag(text, "task")
-        || complete_skill_content_block(text)
-        || engine_injected_user_context_text(text)
-}
-
-/// User-role context blocks the engine injects into the session itself
-/// (memories, reminders, project instructions). They are model context, not
-/// conversation, and must stay out of the visible transcript — including
-/// after a resume or /rewind rebuild, where they would otherwise flood the
-/// display. Matching requires the whole message to be the wrapped block so
-/// prose that merely leads with a similar tag stays visible.
-fn engine_injected_user_context_text(text: &str) -> bool {
-    complete_wrapped_block(text, "<system-reminder", "</system-reminder>")
-        || complete_wrapped_block(text, "<relevant-memories>", "</relevant-memories>")
-        || complete_wrapped_block(text, "<project-instructions>", "</project-instructions>")
-}
-
-fn complete_wrapped_block(text: &str, open: &str, close: &str) -> bool {
-    text.starts_with(open) && text.trim_end().ends_with(close)
-}
-
-fn complete_notification_tag(text: &str, kind: &str) -> bool {
-    !text.contains('\n')
-        && text.starts_with(&format!("<{kind}_notification id=\""))
-        && text.contains("\" status=\"")
-        && text.ends_with("/>")
-}
-
-fn complete_skill_content_block(text: &str) -> bool {
-    ((text.starts_with("<skill_content name=\"") && text.contains("\">"))
-        || text.starts_with("<skill_content>"))
-        && text.ends_with("</skill_content>")
+/// DisplayMessage contains visible text only; it has no provenance. Runtime
+/// context must be filtered at the structured Message boundary above. Neither
+/// human input nor assistant explanations can be hidden by their text spelling.
+pub(super) fn display_text_is_hidden_internal_context(_text: &str, _is_user: bool) -> bool {
+    false
 }
 
 pub(super) fn truncate_display_text(text: &str, max_width: usize) -> String {

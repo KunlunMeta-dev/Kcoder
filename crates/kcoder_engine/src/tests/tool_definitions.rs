@@ -109,6 +109,7 @@ async fn tool_definition_for_model(tool: &dyn kcoder_tools::Tool) -> kcoder_type
         permission_mode: ToolPermissionMode::Ask,
         is_non_interactive: false,
         active_skills: Vec::new(),
+        available_tools: Default::default(),
     };
     let description = tool.description_for_model(None, &ctx).await;
     let description =
@@ -137,24 +138,18 @@ fn messages_request_serializes_tools() {
 }
 
 #[tokio::test]
-async fn tool_definition_for_model_includes_input_shape_guidance() {
+async fn tool_definition_for_model_uses_schema_without_repeating_shape_guidance() {
     let registry = kcoder_tools::default_registry();
     let tool = registry.get("TodoWrite").unwrap();
     let definition = tool_definition_for_model(tool.as_ref()).await;
 
     assert_eq!(definition.name, "TodoWrite");
-    assert!(definition.description.contains("Input format:"));
-    assert!(definition.description.contains("JSON shape example:"));
-    assert!(definition.description.contains("\"TodoList\":["));
+    assert!(!definition.description.contains("Input format:"));
+    assert!(!definition.description.contains("JSON shape example:"));
+    assert!(!definition.description.contains("Required fields:"));
     assert!(definition.description.contains("placeholder strings"));
-    assert!(definition.description.contains("{\"TodoList\":[\"\"]}"));
-    assert!(definition.description.contains("Required fields:"));
-    assert!(definition.description.contains("$.TodoList"));
-    assert!(
-        definition
-            .description
-            .contains("Array fields must use JSON arrays")
-    );
+    assert_eq!(definition.input_schema["properties"]["TodoList"]["type"], "array");
+    assert!(definition.input_schema["required"].as_array().unwrap().contains(&serde_json::json!("TodoList")));
     assert!(
         definition.input_schema["properties"]["TodoList"]["description"]
             .as_str()

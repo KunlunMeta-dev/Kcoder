@@ -67,6 +67,30 @@ pub fn normalize_tool_input(tool_name: &str, input: &mut Value) {
     if tool_name == "TodoWrite" {
         normalize_todo_write_input(input);
     }
+    let Some(root) = input.as_object_mut() else {
+        return;
+    };
+    match tool_name {
+        "grep" => {
+            if let Some(alias) = root.get("-C").cloned() {
+                match root.get("context") {
+                    None => {
+                        root.insert("context".into(), alias);
+                        root.remove("-C");
+                    }
+                    Some(canonical) if canonical == &alias => {
+                        root.remove("-C");
+                    }
+                    // Preserve conflicting input for additionalProperties validation.
+                    Some(_) => {}
+                }
+            }
+        }
+        "WebBrowser" if root.get("action").and_then(Value::as_str) == Some("screenshot") => {
+            root.insert("action".into(), Value::String("snapshot".into()));
+        }
+        _ => {}
+    }
 }
 
 fn normalize_todo_write_input(input: &mut Value) {
@@ -436,55 +460,27 @@ pub fn validate_input_against_schema(input: &Value, schema: &Value) -> Result<()
 /// Build a compact, model-facing example input from a tool JSON schema.
 ///
 /// The result is intentionally conservative: it prefers required properties,
-/// follows `$ref`/union schemas, and includes one item for array fields so the
-/// model can see where `[...]` is required.
+/// follows `$ref`/union schemas, omits optional fields, honors supported bounds,
+/// and returns None rather than guessing unsupported constraints. Placeholder
+/// paths/text still require real task-specific values before execution.
 pub fn example_input_for_schema(schema: &Value) -> Option<Value> {
-    example_value_for_schema(schema, schema, None)
+    example_value_for_schema(schema, schema, None, 0, &mut 512)
 }
 
-/// Append a compact schema-derived input guide to a tool description.
+/// Keep model-facing descriptions focused on behavior. JSON Schema already
+/// supplies input types, required fields and array shapes; repeating them for
+/// every tool adds request cost without adding a contract.
 ///
-/// The API already receives the full JSON Schema separately, but smaller
-/// models often follow the natural-language description more reliably than the
-/// schema object. This keeps every tool's description concrete without
-/// hand-writing parameter examples for dozens of tools.
-pub fn description_with_input_shape(description: &str, schema: &Value) -> String {
-    let mut output = description.trim().to_string();
-    output.push_str("\n\nInput format: send exactly one JSON object as the tool input.");
-
-    if let Some(example) =
-        example_input_for_schema(schema).and_then(|example| serde_json::to_string(&example).ok())
-    {
-        output.push_str(" JSON shape example: ");
-        output.push_str(&truncate_for_description(&example, 900));
-        output.push('.');
-    }
-
-    let required = required_schema_paths(schema);
-    if !required.is_empty() {
-        output.push_str(" Required fields: ");
-        output.push_str(&required.join(", "));
-        output.push('.');
-    }
-
-    let arrays = array_schema_paths(schema);
-    if !arrays.is_empty() {
-        output.push_str(" Array fields must use JSON arrays `[...]`: ");
-        output.push_str(&arrays.join(", "));
-        output.push('.');
-    }
-
-    output.push_str(
-        " Do not use string values for booleans or numbers when real JSON booleans/numbers are expected. Do not wrap arrays in objects like {\"item\":[...]} unless the schema explicitly says so.",
-    );
-    output
+/// Retained as a compatibility entry point for model definition callers.
+pub fn description_with_input_shape(description: &str, _schema: &Value) -> String {
+    description.trim().to_string()
 }
 
 /// Return a clone of `schema` with richer parameter descriptions for the model.
 ///
 /// The generated JSON Schema already captures the machine-readable shape. This
-/// pass enriches the human-readable parameter descriptions with exact JSON
-/// shapes, array syntax, aliases, defaults, and common mistakes. Validation
+/// pass adds tool-specific behavior and constraints not expressed by types.
+/// Generic JSON syntax is intentionally not repeated on each parameter. Validation
 /// semantics are intentionally unchanged.
 pub fn schema_with_parameter_guidance(tool_name: &str, schema: &Value) -> Value {
     let mut schema = schema.clone();
@@ -636,15 +632,15 @@ fn enrich_schema_descriptions(tool_name: &str, schema: &mut Value, path: &str) {
             let field_path = schema_child_path(path, field);
             if let Some(description) =
                 specific_parameter_description(tool_name, field, property_schema, &field_path)
-                    .or_else(|| generic_parameter_description(field, property_schema))
+                    .or_else(|| {
+                        property_schema
+                            .get("description")
+                            .is_none()
+                            .then(|| generic_parameter_description(field))
+                            .flatten()
+                    })
             {
                 merge_schema_description(property_schema, &description);
-            }
-            if schema_type_for_description(property_schema) == Some("array") {
-                merge_schema_description(
-                    property_schema,
-                    "Use a real JSON array `[...]`; do not pass a single object, numeric-key object, or wrapper like {\"item\":[...]}.",
-                );
             }
             enrich_schema_descriptions(tool_name, property_schema, &field_path);
         }
@@ -713,7 +709,7 @@ fn specific_parameter_description(
                 .to_string(),
         ),
         ("TodoWrite", "TodoList") | ("TodoWrite", "todos") => Some(
-            "Complete replacement TodoList for the current session checklist. Must be a real JSON array of todo objects; include every still-relevant item, not just the changed one. Do not send placeholder strings such as `{\"TodoList\":[\"\"]}`; if there is no concrete checklist to track, skip TodoWrite instead. Do not send `null` for this field, and do not include null-valued fields inside todo objects. If every item has status `completed`, TodoWrite clears the stored TodoList and returns `all todos are completed`."
+            "Complete replacement TodoList for the current session checklist. Must be a real JSON array of todo objects; include every still-relevant item, not just the changed one. Do not send placeholder strings such as `{\"TodoList\":[\"\"]}`; if there is no concrete checklist to track, skip TodoWrite instead. Do not send `null` for this field, and do not include null-valued fields inside todo objects. An empty list clears without claiming completion; clear_reason can record cancellation. If a non-empty list has every item status `completed`, TodoWrite clears the stored TodoList and returns `all todos are completed`."
                 .to_string(),
         ),
         ("TodoWrite", "content") => Some(
@@ -741,7 +737,7 @@ fn specific_parameter_description(
                 .to_string(),
         ),
         ("read", "pages") => Some(
-            "Optional PDF page range such as `1-5`. The Rust tool currently reports an explicit unsupported-PDF error instead of reading raw PDF bytes."
+            "Optional 1-based PDF page range such as `1-5` for text extraction. Scanned pages require OCR; extracted text is not a visual screenshot."
                 .to_string(),
         ),
         ("glob", "pattern") => Some(
@@ -753,7 +749,7 @@ fn specific_parameter_description(
                 .to_string(),
         ),
         ("glob", "limit") => Some(
-            "Optional maximum number of paths. Omit for 100 paths sorted by modification time. Ignored by `output_mode: \"count\"`. Must be positive for path output; unbounded `0` results are disabled."
+            "Optional maximum number of paths. Omit for 100 paths sorted by modification time. Ignored by `output_mode: \"count\"`. Must be 1..=2000 when supplied, including count mode; unbounded `0` results are disabled."
                 .to_string(),
         ),
         ("glob", "output_mode") => Some(
@@ -805,7 +801,7 @@ fn specific_parameter_description(
                 .to_string(),
         ),
         ("grep", "head_limit") => Some(
-            "Optional maximum output lines/entries after sorting/filtering. Omit for 250; pass `0` only when an unbounded result is intentional."
+            "Maximum displayed lines/entries, 1..=10000; omit for 250. Zero is rejected. Count aggregates include all matches before pagination."
                 .to_string(),
         ),
         ("grep", "offset") => Some(
@@ -817,7 +813,7 @@ fn specific_parameter_description(
                 .to_string(),
         ),
         ("bash", "command") => Some(
-            "Unix shell command to execute in the current working directory. Pass the exact command text. Do not prefix with `cd`; use paths relative to the session cwd or absolute paths. Use dedicated tools for file enumeration (`glob`), content search (`grep`), reading (`read`), editing (`edit`), and writing (`write`) instead of shell `ls`, `find`, glob expansion, `grep`, or `rg`. Quote file paths that contain spaces."
+            "Unix shell command to execute in the current working directory. Pass the exact command text. Do not prefix with `cd`; use paths relative to the session cwd or absolute paths. Prefer specialized file tools when attached; otherwise keep shell file operations bounded and within permissions. Quote file paths that contain spaces."
                 .to_string(),
         ),
         ("bash", "description") => Some(
@@ -837,7 +833,7 @@ fn specific_parameter_description(
                 .to_string(),
         ),
         ("ocr", "foregroundTimeoutSeconds") | ("ocr", "foreground_timeout_seconds") => Some(
-            "Seconds to keep OCR in the foreground before KCoder moves the still-running review to a background task. Defaults to 60. Use TaskOutput to inspect the returned task_id."
+            "Seconds to keep OCR in the foreground before KCoder moves the still-running review to a background task. Defaults to 60. Inspect the returned task_id through an attached managed-output control."
                 .to_string(),
         ),
         ("ocr", "timeoutMinutes") | ("ocr", "timeout_minutes") => Some(
@@ -845,7 +841,7 @@ fn specific_parameter_description(
                 .to_string(),
         ),
         ("PowerShell", "command") => Some(
-            "PowerShell command to execute in the current working directory. Pass the exact command text. Do not prefix with `cd` or `Set-Location`; use paths relative to the session cwd or absolute paths. Prefer dedicated tools for file search (`glob`), content search (`grep`), reading (`read`), editing (`edit`), and writing (`write`). Quote paths with spaces using double quotes."
+            "PowerShell command to execute in the current working directory. Pass the exact command text. Do not prefix with `cd` or `Set-Location`; use paths relative to the session cwd or absolute paths. Prefer specialized file tools when attached; otherwise keep shell file operations bounded and within permissions. Quote paths with spaces using double quotes."
                 .to_string(),
         ),
         ("PowerShell", "description") => Some(
@@ -857,7 +853,7 @@ fn specific_parameter_description(
                 .to_string(),
         ),
         ("PowerShell", "run_in_background") => Some(
-            "JSON boolean. Set true only for long-running commands when you can continue useful work before checking TaskOutput. Do not wrap with Start-Job, do not poll with Start-Sleep, and do not check output immediately unless you need it."
+            "JSON boolean. Set true only for long-running commands when you can continue useful work before checking managed output. Do not wrap with Start-Job, do not poll with Start-Sleep, and do not check output immediately unless you need it."
                 .to_string(),
         ),
         ("WebFetch", "url") => Some(
@@ -865,7 +861,7 @@ fn specific_parameter_description(
                 .to_string(),
         ),
         ("WebFetch", "prompt") => Some(
-            "Instruction describing what to extract or focus on from the fetched page. Keep it specific, e.g. `Extract installation requirements and version constraints`."
+            "Extraction guidance returned alongside the source for the calling model; this tool does not run a summarization model. E.g. `Extract installation requirements and version constraints`."
                 .to_string(),
         ),
         ("WebBrowser", "url") => Some(
@@ -873,16 +869,16 @@ fn specific_parameter_description(
                 .to_string(),
         ),
         ("WebBrowser", "action") => Some(
-            "Action enum string. Use `navigate` to fetch title/text content, or `screenshot` only when a text snapshot is acceptable. Visual screenshots require a full browser runtime."
+            "Use `navigate` to fetch title/text content or `snapshot` for a text snapshot. Neither returns an image; visual screenshots require a full browser runtime."
                 .to_string(),
         ),
         ("write", "content") => Some(format!(
-            "Complete replacement content for the file. One `write` call accepts at most {} KiB / {} UTF-8 bytes; do not send huge generated files in a single call. Prefer `edit` for targeted changes to existing files; use `write` for new files or deliberate complete rewrites. Do not create README.md, other documentation files, or emoji-containing content unless the user explicitly requested them. Existing UTF-16LE files keep their encoding; new files are UTF-8.",
+            "Complete replacement content for the file. One `write` call accepts at most {} KiB / {} UTF-8 bytes; do not send huge generated files in a single call. Prefer an attached targeted-edit tool for small changes; this tool creates or completely replaces files. Do not create README.md, other documentation files, or emoji-containing content unless the user explicitly requested them. Existing files are strictly decoded using their source encoding and preserve it; specify encoding=gbk or gb18030 for legacy text. New files default to UTF-8 unless encoding is specified.",
             crate::write::MAX_WRITE_CONTENT_BYTES / 1024,
             crate::write::MAX_WRITE_CONTENT_BYTES
         )),
         ("edit", "old_string") => Some(
-            "Exact existing text to find. Read the target file or relevant line range first, then copy this from the current file content with whitespace preserved exactly. When copying from Read output, omit the line number prefix and include only actual file content. For CRLF files, use the LF-normalized text shown by Read; Edit writes the original line ending style back. It must be unique unless replace_all=true; use an empty string only to create a missing file or fill an empty file."
+            "Exact existing text to find. Read the target file or relevant line range first, then copy this from the current file content with whitespace preserved exactly. When copying from Read output, omit the line number prefix and include only actual file content. For CRLF files, use the LF-normalized text shown by Read; Edit writes the original line ending style back. It must be unique unless replace_all=true; prefer an attached file-creation tool to create or fill an empty file. Empty old_string remains a compatibility path for creating a missing file or filling an empty file."
                 .to_string(),
         ),
         ("edit", "new_string") => Some(
@@ -898,7 +894,7 @@ fn specific_parameter_description(
                 .to_string(),
         ),
         ("spawn_agent", "agent_type") => Some(
-            "Specialized sub-agent role. Prefer `plan`, `review`, `implementer`, `verifier`, or `tool_agent` when the task fits; omit for `general`. Use `explore_agent` for read-only reconnaissance."
+            "Specialized sub-agent role. Prefer `plan`, `review`, `implementer`, `verifier`, or `tool_agent` when the task fits; omit for `general`. Dedicated read-only reconnaissance requires an attached exploration tool."
                 .to_string(),
         ),
         ("spawn_agent", "max_turns") => Some(
@@ -987,7 +983,7 @@ fn specific_parameter_description(
                 .to_string(),
         ),
         ("skill", "skill") => Some(
-            "Exact skill name string, e.g. `commit`, `review-pr`, `pdf`, or `plugin-name:skill`. A leading slash is accepted but not required. Use DiscoverSkills first if unsure."
+            "Exact skill name string, e.g. `commit`, `review-pr`, `pdf`, or `plugin-name:skill`. A leading slash is accepted but not required. Use an attached discovery control first if unsure."
                 .to_string(),
         ),
         ("skill", "args") => Some(
@@ -1071,7 +1067,7 @@ fn specific_parameter_description(
                 .to_string(),
         ),
         ("TaskUpdate", "taskId") | ("TaskUpdate", "task_id") => Some(
-            "Task ID returned by TaskCreate/TaskList. Use TaskGet first when you need the latest state before updating."
+            "Existing task ID. Inspect its latest state through an attached task-reading control before updating when needed."
                 .to_string(),
         ),
         ("TaskUpdate", "status") => Some(
@@ -1103,7 +1099,7 @@ fn specific_parameter_description(
                 .to_string(),
         ),
         ("TaskStop", "task_id") => Some(
-            "ID of the running background task to stop. Use TaskOutput or TaskList first if unsure."
+            "ID of the running background task to stop. Use an attached task-inspection control first if unsure."
                 .to_string(),
         ),
         ("TaskStop", "shell_id") => Some(
@@ -1154,8 +1150,7 @@ fn spec_parameter_description(field: &str, _schema: &Value, _path: &str) -> Opti
     }
 }
 
-fn generic_parameter_description(field: &str, schema: &Value) -> Option<String> {
-    let typ = schema_type_for_description(schema);
+fn generic_parameter_description(field: &str) -> Option<String> {
     let description = match field {
         "file_path" => {
             "Path to the target file. Prefer an absolute path; workspace-relative paths are resolved against the current working directory."
@@ -1243,44 +1238,9 @@ fn generic_parameter_description(field: &str, schema: &Value) -> Option<String> 
         }
         "value" => "Value to write or set.",
         "file_content" => "Full content for the supporting file being written.",
-        _ => return generic_type_description(field, typ),
+        _ => return None,
     };
     Some(description.to_string())
-}
-
-fn generic_type_description(field: &str, typ: Option<&str>) -> Option<String> {
-    match typ {
-        Some("array") => Some(format!(
-            "`{field}` must be a JSON array. Use `[]` for empty and `[...]` for one or more items."
-        )),
-        Some("boolean") => Some(format!(
-            "`{field}` must be a JSON boolean (`true` or `false`), not a string."
-        )),
-        Some("integer") => Some(format!(
-            "`{field}` must be a JSON integer, not a quoted string."
-        )),
-        Some("number") => Some(format!(
-            "`{field}` must be a JSON number, not a quoted string."
-        )),
-        _ => None,
-    }
-}
-
-fn schema_type_for_description(schema: &Value) -> Option<&str> {
-    let schema = first_non_null_union_branch(schema).unwrap_or(schema);
-    schema_primary_type(schema)
-}
-
-fn first_non_null_union_branch(schema: &Value) -> Option<&Value> {
-    schema
-        .get("anyOf")
-        .or_else(|| schema.get("oneOf"))
-        .and_then(|v| v.as_array())
-        .and_then(|options| {
-            options
-                .iter()
-                .find(|option| schema_primary_type(option) != Some("null"))
-        })
 }
 
 fn merge_schema_description(schema: &mut Value, addition: &str) {
@@ -1364,233 +1324,234 @@ fn example_value_for_schema(
     schema: &Value,
     root: &Value,
     field_name: Option<&str>,
+    depth: usize,
+    remaining_nodes: &mut usize,
 ) -> Option<Value> {
-    let schema = resolve_schema(root, schema);
-    if let Some(default) = schema.get("default") {
-        return Some(default.clone());
+    if depth > 24 || *remaining_nodes == 0 {
+        return None;
     }
-    if let Some(values) = schema.get("enum").and_then(|values| values.as_array()) {
+    *remaining_nodes -= 1;
+    let schema = resolve_schema(root, schema);
+    // Schemars wraps a referenced field with annotations in a single allOf.
+    // This is a reference wrapper, not a general intersection of constraints.
+    if let Some(parts) = schema.get("allOf").and_then(Value::as_array) {
+        if parts.len() == 1
+            && schema.as_object()?.keys().all(|key| {
+                matches!(
+                    key.as_str(),
+                    "allOf" | "description" | "title" | "default" | "examples"
+                )
+            })
+        {
+            return example_value_for_schema(
+                &parts[0],
+                root,
+                field_name,
+                depth + 1,
+                remaining_nodes,
+            );
+        }
+        return None;
+    }
+    // Do not invent examples for constraints this small generator cannot satisfy.
+    if [
+        "pattern",
+        "const",
+        "minProperties",
+        "maxProperties",
+        "propertyNames",
+        "dependentSchemas",
+        "unevaluatedProperties",
+        "prefixItems",
+        "format",
+        "not",
+        "if",
+        "dependentRequired",
+        "dependencies",
+        "contains",
+        "uniqueItems",
+        "allOf",
+        "oneOf",
+    ]
+    .iter()
+    .any(|key| schema.get(*key).is_some())
+    {
+        return None;
+    }
+    if let Some(options) = schema
+        .get("anyOf")
+        .or_else(|| schema.get("oneOf"))
+        .and_then(Value::as_array)
+    {
+        return options
+            .iter()
+            .filter(|option| schema_primary_type(option) != Some("null"))
+            .find_map(|option| {
+                example_value_for_schema(option, root, field_name, depth + 1, remaining_nodes)
+            });
+    }
+    if let Some(values) = schema.get("enum").and_then(Value::as_array) {
+        // Combined enum constraints need a full validator, not a first-value guess.
+        if [
+            "minimum",
+            "maximum",
+            "exclusiveMinimum",
+            "exclusiveMaximum",
+            "multipleOf",
+            "minLength",
+            "maxLength",
+            "minItems",
+            "maxItems",
+        ]
+        .iter()
+        .any(|key| schema.get(*key).is_some())
+        {
+            return None;
+        }
         return values
             .iter()
             .find(|value| !value.is_null())
             .or_else(|| values.first())
             .cloned();
     }
-    if let Some(options) = schema
-        .get("anyOf")
-        .or_else(|| schema.get("oneOf"))
-        .and_then(|v| v.as_array())
-    {
-        return options
-            .iter()
-            .map(|option| resolve_schema(root, option))
-            .filter(|option| schema_primary_type(option) != Some("null"))
-            .find_map(|option| example_value_for_schema(option, root, field_name));
-    }
-
-    let expected_type = schema_primary_type(schema)?;
-    match expected_type {
-        "object" => Some(example_object_for_schema(schema, root)),
-        "array" => {
-            let item = schema
-                .get("items")
-                .and_then(|items| example_value_for_schema(items, root, field_name))
-                .unwrap_or(Value::Null);
-            Some(Value::Array(vec![item]))
+    match schema_primary_type(schema)? {
+        "object" => {
+            let mut object = serde_json::Map::new();
+            if let Some(required) = schema.get("required").and_then(Value::as_array) {
+                for field in required.iter().filter_map(Value::as_str) {
+                    let property = schema.get("properties")?.get(field)?;
+                    object.insert(
+                        field.to_string(),
+                        example_value_for_schema(
+                            property,
+                            root,
+                            Some(field),
+                            depth + 1,
+                            remaining_nodes,
+                        )?,
+                    );
+                }
+            }
+            Some(Value::Object(object))
         }
-        "string" => Some(Value::String(string_example_for_field(field_name))),
+        "array" => {
+            let minimum = schema.get("minItems").and_then(Value::as_u64).unwrap_or(0);
+            let maximum = schema.get("maxItems").and_then(Value::as_u64).unwrap_or(8);
+            let preferred = if field_name == Some("options") { 2 } else { 1 };
+            let count = minimum.max(preferred.min(maximum));
+            if count > maximum || count > 8 {
+                return None;
+            }
+            let mut items = Vec::new();
+            for index in 0..count {
+                let mut item = example_value_for_schema(
+                    schema.get("items")?,
+                    root,
+                    field_name,
+                    depth + 1,
+                    remaining_nodes,
+                )?;
+                let label_is_free_text = schema
+                    .get("items")
+                    .map(|items| resolve_schema(root, items))
+                    .and_then(|items| items.get("properties"))
+                    .and_then(|properties| properties.get("label"))
+                    .map(|label| resolve_schema(root, label))
+                    .is_some_and(|label| label.get("enum").is_none());
+                if field_name == Some("options") && index > 0 && label_is_free_text {
+                    if let Some(label) = item.get_mut("label") {
+                        *label = Value::String(format!("Option {}", (b'A' + index as u8) as char));
+                    }
+                }
+                items.push(item);
+            }
+            Some(Value::Array(items))
+        }
+        "string" => {
+            let mut text = string_example_for_field(field_name);
+            let minimum = schema.get("minLength").and_then(Value::as_u64).unwrap_or(0) as usize;
+            let maximum = schema
+                .get("maxLength")
+                .and_then(Value::as_u64)
+                .unwrap_or(256) as usize;
+            if minimum > maximum || minimum > 256 {
+                return None;
+            }
+            text = text.chars().take(maximum).collect();
+            while text.chars().count() < minimum {
+                text.push('x');
+            }
+            Some(Value::String(text))
+        }
+        "integer" | "number" => {
+            let integer = schema_primary_type(schema) == Some("integer");
+            let mut lower = schema.get("minimum").and_then(Value::as_f64).unwrap_or(1.0);
+            if let Some(exclusive) = schema.get("exclusiveMinimum").and_then(Value::as_f64) {
+                lower = lower.max(exclusive + 1.0);
+            }
+            let upper = schema
+                .get("maximum")
+                .and_then(Value::as_f64)
+                .unwrap_or(f64::MAX);
+            let mut value = lower.min(upper);
+            if schema
+                .get("minimum")
+                .and_then(Value::as_f64)
+                .is_some_and(|min| value < min)
+            {
+                return None;
+            }
+            if integer {
+                value = value.ceil();
+            }
+            if let Some(step) = schema.get("multipleOf").and_then(Value::as_f64) {
+                if step <= 0.0 {
+                    return None;
+                }
+                value = (value / step).ceil() * step;
+            }
+            if value > upper
+                || schema
+                    .get("exclusiveMaximum")
+                    .and_then(Value::as_f64)
+                    .is_some_and(|max| value >= max)
+                || schema
+                    .get("exclusiveMinimum")
+                    .and_then(Value::as_f64)
+                    .is_some_and(|min| value <= min)
+            {
+                return None;
+            }
+            if integer {
+                if value.fract() != 0.0 || value < i64::MIN as f64 || value >= i64::MAX as f64 {
+                    return None;
+                }
+                Some(Value::from(value as i64))
+            } else {
+                serde_json::Number::from_f64(value).map(Value::Number)
+            }
+        }
         "boolean" => Some(Value::Bool(false)),
-        "integer" => Some(Value::Number(0.into())),
-        "number" => serde_json::Number::from_f64(0.0).map(Value::Number),
         "null" => Some(Value::Null),
         _ => None,
     }
-}
-
-fn example_object_for_schema(schema: &Value, root: &Value) -> Value {
-    let Some(properties) = schema.get("properties").and_then(|props| props.as_object()) else {
-        return Value::Object(serde_json::Map::new());
-    };
-    let mut fields: Vec<&str> = schema
-        .get("required")
-        .and_then(|required| required.as_array())
-        .map(|required| {
-            required
-                .iter()
-                .filter_map(|field| field.as_str())
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-    for key in properties.keys().map(String::as_str) {
-        if fields.len() >= 8 {
-            break;
-        }
-        if !fields.contains(&key) {
-            fields.push(key);
-        }
-    }
-
-    let mut object = serde_json::Map::new();
-    for field in fields {
-        let Some(prop_schema) = properties.get(field) else {
-            continue;
-        };
-        let value = example_value_for_schema(prop_schema, root, Some(field))
-            .unwrap_or_else(|| fallback_example_for_field(field));
-        object.insert(field.to_string(), value);
-    }
-    Value::Object(object)
-}
-
-fn fallback_example_for_field(field_name: &str) -> Value {
-    Value::String(string_example_for_field(Some(field_name)))
 }
 
 fn string_example_for_field(field_name: Option<&str>) -> String {
     match field_name.unwrap_or_default() {
         "absolute_path" | "file_path" | "path" => "/absolute/path/to/file".to_string(),
         "command" | "cmd" => "echo hello".to_string(),
-        "description" => "What happens if selected".to_string(),
+        "description" => "Describe the operation".to_string(),
         "header" => "choice".to_string(),
         "id" | "task_id" | "tool_call_id" => "id".to_string(),
         "label" => "Option A".to_string(),
-        "pattern" | "query" => "search terms".to_string(),
+        "pattern" => "README".to_string(),
+        "query" => "search terms".to_string(),
+        "pages" => "1-5".to_string(),
         "question" => "Which option should I choose?".to_string(),
         "status" => "pending".to_string(),
         "url" => "https://example.com".to_string(),
         _ => "string".to_string(),
-    }
-}
-
-fn required_schema_paths(schema: &Value) -> Vec<String> {
-    let mut paths = Vec::new();
-    collect_required_schema_paths(schema, schema, "$", 0, &mut paths);
-    paths.truncate(16);
-    paths
-}
-
-fn collect_required_schema_paths(
-    schema: &Value,
-    root: &Value,
-    path: &str,
-    depth: usize,
-    paths: &mut Vec<String>,
-) {
-    if depth > 5 || paths.len() >= 16 {
-        return;
-    }
-    let schema = resolve_schema(root, schema);
-    if let Some(options) = schema
-        .get("anyOf")
-        .or_else(|| schema.get("oneOf"))
-        .and_then(|v| v.as_array())
-    {
-        if let Some(option) = options
-            .iter()
-            .map(|option| resolve_schema(root, option))
-            .find(|option| schema_primary_type(option) != Some("null"))
-        {
-            collect_required_schema_paths(option, root, path, depth + 1, paths);
-        }
-        return;
-    }
-
-    match schema_primary_type(schema) {
-        Some("object") => {
-            if let Some(required) = schema
-                .get("required")
-                .and_then(|required| required.as_array())
-            {
-                for field in required.iter().filter_map(|field| field.as_str()) {
-                    let field_path = schema_child_path(path, field);
-                    if !paths.contains(&field_path) {
-                        paths.push(field_path);
-                    }
-                }
-            }
-            if let Some(properties) = schema.get("properties").and_then(|props| props.as_object()) {
-                for (field, child_schema) in properties {
-                    collect_required_schema_paths(
-                        child_schema,
-                        root,
-                        &schema_child_path(path, field),
-                        depth + 1,
-                        paths,
-                    );
-                    if paths.len() >= 16 {
-                        break;
-                    }
-                }
-            }
-        }
-        Some("array") => {
-            if let Some(items) = schema.get("items") {
-                collect_required_schema_paths(items, root, &format!("{path}[]"), depth + 1, paths);
-            }
-        }
-        _ => {}
-    }
-}
-
-fn array_schema_paths(schema: &Value) -> Vec<String> {
-    let mut paths = Vec::new();
-    collect_array_schema_paths(schema, schema, "$", 0, &mut paths);
-    paths.truncate(16);
-    paths
-}
-
-fn collect_array_schema_paths(
-    schema: &Value,
-    root: &Value,
-    path: &str,
-    depth: usize,
-    paths: &mut Vec<String>,
-) {
-    if depth > 5 || paths.len() >= 16 {
-        return;
-    }
-    let schema = resolve_schema(root, schema);
-    if let Some(options) = schema
-        .get("anyOf")
-        .or_else(|| schema.get("oneOf"))
-        .and_then(|v| v.as_array())
-    {
-        if let Some(option) = options
-            .iter()
-            .map(|option| resolve_schema(root, option))
-            .find(|option| schema_primary_type(option) != Some("null"))
-        {
-            collect_array_schema_paths(option, root, path, depth + 1, paths);
-        }
-        return;
-    }
-
-    match schema_primary_type(schema) {
-        Some("array") => {
-            if !paths.contains(&path.to_string()) {
-                paths.push(path.to_string());
-            }
-            if let Some(items) = schema.get("items") {
-                collect_array_schema_paths(items, root, &format!("{path}[]"), depth + 1, paths);
-            }
-        }
-        Some("object") => {
-            if let Some(properties) = schema.get("properties").and_then(|props| props.as_object()) {
-                for (field, child_schema) in properties {
-                    collect_array_schema_paths(
-                        child_schema,
-                        root,
-                        &schema_child_path(path, field),
-                        depth + 1,
-                        paths,
-                    );
-                    if paths.len() >= 16 {
-                        break;
-                    }
-                }
-            }
-        }
-        _ => {}
     }
 }
 
@@ -1600,16 +1561,6 @@ fn schema_child_path(parent: &str, field: &str) -> String {
     } else {
         format!("{parent}.{field}")
     }
-}
-
-fn truncate_for_description(value: &str, max_chars: usize) -> String {
-    if value.chars().count() <= max_chars {
-        return value.to_string();
-    }
-    let keep = max_chars.saturating_sub(3);
-    let mut truncated = value.chars().take(keep).collect::<String>();
-    truncated.push_str("...");
-    truncated
 }
 
 fn validate_object_value(
@@ -2014,6 +1965,119 @@ fn pascal_or_camel_to_snake_case(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn examples_omit_optional_values_and_honor_supported_bounds() {
+        let required_strings = serde_json::json!({"type":"object","properties":{
+            "description":{"type":"string"},"pattern":{"type":"string"},"pages":{"type":"string"}
+        },"required":["description","pattern","pages"]});
+        let example = super::example_input_for_schema(&required_strings).unwrap();
+        assert_eq!(example["description"], "Describe the operation");
+        assert_eq!(example["pattern"], "README");
+        assert_eq!(example["pages"], "1-5");
+        let schema = serde_json::json!({"type":"object","properties":{
+            "max_turns":{"type":"integer","minimum":60,"maximum":180},
+            "context_turns":{"type":"integer","minimum":1},
+            "items":{"type":"array","minItems":2,"maxItems":3,"items":{"type":"integer","minimum":5}}
+        },"required":["context_turns","items"]});
+        let example = super::example_input_for_schema(&schema).unwrap();
+        assert!(example.get("max_turns").is_none());
+        assert_eq!(example["context_turns"], 1);
+        assert_eq!(example["items"], serde_json::json!([5, 5]));
+        assert_eq!(
+            super::example_input_for_schema(
+                &serde_json::json!({"type":"integer","minimum":60,"maximum":180})
+            ),
+            Some(serde_json::json!(60))
+        );
+        assert!(
+            super::example_input_for_schema(&serde_json::json!({"type":"string","pattern":"^x$"}))
+                .is_none()
+        );
+        let schema = serde_json::json!({"type":"object","properties":{"next":{"$ref":"#/definitions/node"}},"required":["next"],"definitions":{"node":{"type":"object","properties":{"next":{"$ref":"#/definitions/node"}},"required":["next"]}}});
+        assert!(super::example_input_for_schema(&schema).is_none());
+        use crate::Tool;
+        let question =
+            super::example_input_for_schema(&crate::AskUserQuestionTool.input_schema()).unwrap();
+        assert_eq!(
+            question["questions"][0]["options"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+        assert_eq!(question["questions"][0]["options"][1]["label"], "Option B");
+    }
+
+    #[test]
+    fn compatibility_aliases_normalize_without_type_coercion() {
+        let mut grep = serde_json::json!({"pattern":"needle", "-C":2});
+        super::normalize_tool_input("grep", &mut grep);
+        assert_eq!(grep, serde_json::json!({"pattern":"needle", "context":2}));
+        let mut equal = serde_json::json!({"context":2,"-C":2});
+        super::normalize_tool_input("grep", &mut equal);
+        assert_eq!(equal, serde_json::json!({"context":2}));
+        let mut conflict = serde_json::json!({"context":2,"-C":3});
+        let original = conflict.clone();
+        super::normalize_tool_input("grep", &mut conflict);
+        assert_eq!(conflict, original);
+        let mut string = serde_json::json!({"-C":"2"});
+        super::normalize_tool_input("grep", &mut string);
+        assert_eq!(string, serde_json::json!({"context":"2"}));
+        let mut browser = serde_json::json!({"action":"screenshot","url":"https://example.com"});
+        super::normalize_tool_input("WebBrowser", &mut browser);
+        assert_eq!(browser["action"], "snapshot");
+        let mut other_tool = original.clone();
+        super::normalize_tool_input("other", &mut other_tool);
+        assert_eq!(other_tool, original);
+        use crate::Tool;
+        let grep_schema = crate::GrepTool.input_schema();
+        assert!(super::validate_input_against_schema(&grep, &grep_schema).is_ok());
+        assert!(super::validate_input_against_schema(&conflict, &grep_schema).is_err());
+        assert!(super::validate_input_against_schema(&string, &grep_schema).is_err());
+        assert!(
+            super::validate_input_against_schema(&browser, &crate::WebBrowserTool.input_schema())
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn guidance_preserves_all_validation_keywords_and_nested_semantics() {
+        fn without_descriptions(value: &mut serde_json::Value) {
+            match value {
+                serde_json::Value::Object(map) => {
+                    map.remove("description");
+                    for child in map.values_mut() {
+                        without_descriptions(child);
+                    }
+                }
+                serde_json::Value::Array(values) => {
+                    for child in values {
+                        without_descriptions(child);
+                    }
+                }
+                _ => {}
+            }
+        }
+        for tool in crate::default_registry().all() {
+            let mut original = tool.input_schema();
+            let mut enriched = super::schema_with_parameter_guidance(&tool.name(), &original);
+            assert_eq!(
+                enriched.to_string().matches("numeric-key object").count(),
+                original.to_string().matches("numeric-key object").count(),
+                "{} repeats generic array guidance",
+                tool.name()
+            );
+            without_descriptions(&mut original);
+            without_descriptions(&mut enriched);
+            assert_eq!(
+                original,
+                enriched,
+                "{} changed validation contract",
+                tool.name()
+            );
+        }
+    }
+
     use super::*;
 
     #[test]

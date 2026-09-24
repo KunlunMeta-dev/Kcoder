@@ -123,7 +123,8 @@ export type GoalStatus =
   | "blocked"
   | "usageLimited"
   | "budgetLimited"
-  | "complete";
+  | "complete"
+  | "cancelled";
 
 export interface ThreadGoal {
   threadId: string;
@@ -132,6 +133,9 @@ export interface ThreadGoal {
   mode: GoalMode;
   verificationKind: "artifact" | "answer";
   status: GoalStatus;
+  blockedCandidateCount?: number;
+  blockerId?: string;
+  blockerReason?: string;
   tokenBudget: number | null;
   tokensUsed: number;
   timeUsedSeconds: number;
@@ -1514,8 +1518,11 @@ export class TaskRuntime {
     return result.goals ?? [];
   }
 
-  async updateGoalStatus(status: "active" | "paused"): Promise<ThreadGoal> {
+  async updateGoalStatus(status: "active" | "paused" | "cancelled"): Promise<ThreadGoal> {
     if (!this.client) throw new Error("当前任务未连接");
+    if (status === "cancelled" && this.client.supportsExperimental?.("goalCancellationV1") !== true) {
+      throw new Error("Goal cancellation is unsupported by this server; update the remote KCoder server first.");
+    }
     const current = await this.getGoal();
     if (!current) throw new Error("当前没有目标");
     const result = await this.request<{ goal: ThreadGoal }>("thread/goal/set", {

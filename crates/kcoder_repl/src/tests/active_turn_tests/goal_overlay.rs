@@ -180,7 +180,7 @@ fn goal_continuation_prompt_is_hidden_when_restoring_ui_transcript() {
     let goal = Goal::new("finish the work", Some(100));
     let messages = vec![
         Message::user_text("visible user request"),
-        Message::user_text(format_goal_continuation_prompt(&goal)),
+        Message::runtime_text(format_goal_continuation_prompt(&goal)),
         Message::assistant_text("visible assistant answer"),
     ];
     let mut app = ReplApp::default();
@@ -208,7 +208,7 @@ fn ultgoal_continuation_prompt_is_hidden_when_restoring_ui_transcript() {
     );
     let messages = vec![
         Message::user_text("visible user request"),
-        Message::user_text(format_goal_continuation_prompt(&goal)),
+        Message::runtime_text(format_goal_continuation_prompt(&goal)),
         Message::assistant_text("visible assistant answer"),
     ];
     let mut app = ReplApp::default();
@@ -232,7 +232,7 @@ fn goal_pro_continuation_prompt_is_hidden_when_restoring_ui_transcript() {
         Goal::new_with_file_and_mode("finish the strict work", None, Some(100), GoalMode::Strict);
     let messages = vec![
         Message::user_text("visible user request"),
-        Message::user_text(format_goal_continuation_prompt(&goal)),
+        Message::runtime_text(format_goal_continuation_prompt(&goal)),
         Message::assistant_text("visible assistant answer"),
     ];
     let mut app = ReplApp::default();
@@ -272,9 +272,9 @@ fn internal_followup_context_is_hidden_when_pushed_directly() {
         .collect::<Vec<_>>()
         .join("\n");
     assert!(ui_text.contains("visible notice"));
-    assert!(!ui_text.contains("Continue working toward the active `/goal` objective"));
-    assert!(!ui_text.contains("background sub-agent run just completed"));
-    assert!(!ui_text.contains("All tracked background sub-agents have finished"));
+    assert!(ui_text.contains("Continue working toward the active `/goal` objective"));
+    assert!(ui_text.contains("background sub-agent run just completed"));
+    assert!(ui_text.contains("All tracked background sub-agents have finished"));
 }
 
 #[test]

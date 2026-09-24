@@ -407,7 +407,7 @@ pub(crate) fn background_started_output(
             "expires_at_ms": expires_at_ms,
             "lifecycle_scope": "kcoder_session",
             "next_action": format!(
-                "The command is running in the background as `{task_id}`. Continue other useful work. Use TaskOutput with block=false to check status, use a short blocking timeout only when the result is on the critical path, or TaskStop to cancel it."
+                "The command is running in the background as `{task_id}`. Continue other useful work. Use status or cancellation controls only when they are attached to this request; otherwise rely on managed completion notifications. Wait only when the result blocks the next step."
             ),
         })
         .to_string(),
@@ -442,7 +442,7 @@ pub(crate) fn background_started_output_after_foreground_budget(
             "foreground_budget_ms": foreground_budget_ms,
             "automatically_backgrounded": true,
             "next_action": format!(
-                "The command exceeded the {foreground_budget_ms} ms foreground blocking budget and is still running as `{task_id}`. Its total lifetime timeout remains {command_timeout_ms} ms from the original start. Continue other useful work; use TaskOutput to read status/output or TaskStop to terminate the process tree."
+                "The command exceeded the {foreground_budget_ms} ms foreground blocking budget and is still running as `{task_id}`. Its total lifetime timeout remains {command_timeout_ms} ms from the original start. Continue other useful work. Use status or cancellation controls only when attached to this request; otherwise rely on managed completion notifications."
             ),
         })
         .to_string(),
@@ -570,5 +570,25 @@ mod tests {
         let second = tokio::fs::read_to_string(&path).await.unwrap();
         assert!(second.contains("stdout:\nearly stdout"));
         assert!(second.contains("stderr:\nearly stderr"));
+    }
+}
+
+#[cfg(test)]
+mod background_hint_contract_tests {
+    use super::*;
+    #[test]
+    fn background_results_do_not_advertise_unscoped_peer_tools() {
+        let outputs = [
+            background_started_output("bash", "job", "echo fixture", 1000, Path::new("/fixture")),
+            background_started_output_after_foreground_budget("PowerShell", "job", "Write-Output fixture", 1000, 100, Path::new("/fixture")),
+        ];
+        for output in outputs {
+            let text = output.content.iter().filter_map(|block| if let kcoder_types::ContentBlock::Text {text} = block {Some(text.as_str())} else {None}).collect::<String>();
+            let value: serde_json::Value = serde_json::from_str(&text).unwrap();
+            assert_eq!(value["task_id"], "job");
+            let hint = value["next_action"].as_str().unwrap();
+            assert!(!hint.contains("TaskOutput") && !hint.contains("TaskStop"));
+            assert!(hint.contains("attached to this request"));
+        }
     }
 }

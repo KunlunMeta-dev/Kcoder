@@ -76,7 +76,7 @@ impl ToolResultStorage {
         let mut total_modified = 0;
         for msg in messages.iter_mut() {
             let content = match msg {
-                kcoder_types::Message::User { content } => content,
+                kcoder_types::Message::User { content, .. } => content,
                 kcoder_types::Message::Assistant { content, .. } => content,
             };
             total_modified += self.enforce_on_content(content).await?;
@@ -381,6 +381,7 @@ mod tests {
         let storage = ToolResultStorage::new(tmp.path());
 
         let mut messages = vec![kcoder_types::Message::User {
+            origin: kcoder_types::MessageOrigin::Unknown,
             content: vec![ContentBlock::Text {
                 text: "hello".into(),
             }],

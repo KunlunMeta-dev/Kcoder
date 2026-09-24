@@ -1,6 +1,6 @@
 use crate::{
     Tool, ToolContext, ToolError, ToolOutput, parse_input,
-    text_file::{LineEndings, TextEncoding, read_text_file, resolve_path, write_text_file},
+    text_file::{LineEndings, resolve_path, write_text_file},
 };
 use async_trait::async_trait;
 use schemars::JsonSchema;
@@ -24,13 +24,17 @@ pub struct FileWriteTool;
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct FileWriteInput {
+    /// Known source encoding for existing text files; auto accepts UTF-8/BOM Unicode.
+    /// Use gbk/gb18030 explicitly for Chinese legacy files. New files use this encoding.
+    #[serde(default)]
+    pub encoding: crate::text_file::TextEncodingHint,
     /// Absolute path, workspace-relative path, or ~/... path to the file to
     /// create or overwrite. Parent directories are created automatically when
     /// allowed.
     pub file_path: String,
     /// Full file content to write. This replaces the entire file. A single
     /// write call accepts at most 256 KiB / 262144 UTF-8 bytes in this field;
-    /// prefer `edit` for existing files and small targeted modifications, and
+    /// prefer an attached targeted-edit capability for small modifications, and
     /// split larger artifacts into smaller steps instead of one huge write.
     pub content: String,
 }
@@ -55,13 +59,13 @@ impl Tool for FileWriteTool {
     fn description(&self) -> String {
         "Create or overwrite a file at the given path with the provided content. \
          Use this tool when you need to create a new file or replace an existing file. \
-         Prefer edit for modifying existing files because it sends a smaller, reviewable diff; \
+         Prefer an attached targeted-edit tool for small changes because it sends a smaller, reviewable diff; \
          use write for new files or deliberate complete rewrites. \
          If the file already exists, read it first; the write is rejected when the file \
          was not read in this session or changed after it was read. \
          Do not create documentation files such as README.md or other *.md files unless the user explicitly requested them. \
          Do not add emojis to files unless the user explicitly requested emojis. \
-         Existing UTF-16LE files keep their encoding when overwritten; new files are written as UTF-8. \
+         Existing files retain the selected source encoding. Specify encoding=gbk or gb18030 for legacy files; unrepresentable text fails before writing. New files default to UTF-8 unless encoding is specified. \
          A single write call supports at most 256 KiB / 262144 UTF-8 bytes of content. \
          For larger files, do not attempt a huge one-shot write; create a smaller scaffold \
          and continue with targeted edits or another incremental generation path."
@@ -131,10 +135,10 @@ impl Tool for FileWriteTool {
                     path.display()
                 )));
             }
-            let text_file = read_text_file(&path).await.map_err(|e| {
+            let text_file = crate::text_file::read_text_file_with_encoding(&path, input.encoding).await.map_err(|e| {
                 if e.kind() == std::io::ErrorKind::InvalidData {
                     ToolError::Execution(format!(
-                        "This tool cannot overwrite binary, non-UTF-8, or non-UTF-16LE files as text: {}",
+                        "This tool cannot overwrite binary, unknown-encoding files as text; specify the known encoding explicitly: {} ({e})",
                         path.display()
                     ))
                 } else {
@@ -154,7 +158,7 @@ impl Tool for FileWriteTool {
         } else {
             (
                 Some(String::new()),
-                TextEncoding::Utf8 { bom: false },
+                input.encoding.new_file_encoding(),
                 LineEndings::Lf,
             )
         };

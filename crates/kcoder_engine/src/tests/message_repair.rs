@@ -17,7 +17,7 @@ fn repair_tool_sequence_inserts_interrupted_result_for_unmatched_tool_use() {
     assert!(changed);
     assert!(matches!(
         &repaired[2],
-        Message::User { content }
+        Message::User { content, .. }
             if matches!(
                 &content[0],
                 ContentBlock::ToolResult {
@@ -29,7 +29,7 @@ fn repair_tool_sequence_inserts_interrupted_result_for_unmatched_tool_use() {
     ));
     assert!(matches!(
         &repaired[3],
-        Message::User { content }
+        Message::User { content, .. }
             if matches!(&content[0], ContentBlock::Text { text } if text == "new request after interrupt")
     ));
 }
@@ -48,7 +48,7 @@ fn repair_tool_sequence_moves_late_tool_result_before_interleaved_user_text() {
         },
         Message::user_text("queued follow-up"),
         Message::User {
-            content: vec![ContentBlock::ToolResult {
+            origin: kcoder_types::MessageOrigin::Unknown, content: vec![ContentBlock::ToolResult {
                 tool_use_id: "tool-1".to_string(),
                 content: vec![ContentBlock::Text {
                     text: "file contents".to_string(),
@@ -62,7 +62,7 @@ fn repair_tool_sequence_moves_late_tool_result_before_interleaved_user_text() {
     assert!(changed);
     assert!(matches!(
         &repaired[2],
-        Message::User { content }
+        Message::User { content, .. }
             if matches!(
                 &content[0],
                 ContentBlock::ToolResult { tool_use_id, .. } if tool_use_id == "tool-1"
@@ -70,7 +70,7 @@ fn repair_tool_sequence_moves_late_tool_result_before_interleaved_user_text() {
     ));
     assert!(matches!(
         &repaired[3],
-        Message::User { content }
+        Message::User { content, .. }
             if matches!(&content[0], ContentBlock::Text { text } if text == "queued follow-up")
     ));
 }
@@ -78,7 +78,7 @@ fn repair_tool_sequence_moves_late_tool_result_before_interleaved_user_text() {
 #[test]
 fn repair_tool_sequence_converts_orphan_tool_result_to_text() {
     let messages = vec![Message::User {
-        content: vec![ContentBlock::ToolResult {
+        origin: kcoder_types::MessageOrigin::Unknown, content: vec![ContentBlock::ToolResult {
             tool_use_id: "tool-1".to_string(),
             content: vec![ContentBlock::Text {
                 text: "late output".to_string(),
@@ -91,7 +91,7 @@ fn repair_tool_sequence_converts_orphan_tool_result_to_text() {
     assert!(changed);
     assert!(matches!(
         &repaired[0],
-        Message::User { content }
+        Message::User { content, .. }
             if matches!(
                 &content[0],
                 ContentBlock::Text { text }

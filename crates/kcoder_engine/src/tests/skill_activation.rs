@@ -100,7 +100,7 @@ async fn skill_tool_activation_updates_next_provider_request_and_usage() {
         .position(|message| {
             matches!(
                 message,
-                Message::User { content }
+                Message::User { content, .. }
                     if content.iter().any(|block| matches!(
                         block,
                         ContentBlock::ToolResult { tool_use_id, .. }
@@ -114,7 +114,7 @@ async fn skill_tool_activation_updates_next_provider_request_and_usage() {
         .expect("skill content must follow its tool_result");
     assert!(matches!(
         skill_context,
-        Message::User { content }
+        Message::User { content, .. }
             if content.iter().any(|block| matches!(
                 block,
                 ContentBlock::Text { text }
@@ -184,7 +184,7 @@ async fn core_skill_pressure_using_superpowers_injected_for_spec_project() {
     );
     assert!(engine.state.messages().iter().any(|message| matches!(
         message,
-        Message::User { content }
+        Message::User { content, .. }
             if content.iter().any(|block| matches!(
                 block,
                 ContentBlock::Text { text }
@@ -273,7 +273,7 @@ async fn core_skill_pressure_tdd_gate_injects_skill_after_denied_source_write() 
     );
     assert!(engine.state.messages().iter().any(|message| matches!(
         message,
-        Message::User { content }
+        Message::User { content, .. }
             if content.iter().any(|block| matches!(
                 block,
                 ContentBlock::Text { text }
@@ -451,7 +451,7 @@ async fn core_skill_pressure_verification_skill_survives_rushed_completion_promp
     assert!(!second_system.contains("NO COMPLETION CLAIMS"));
     assert!(requests[1].messages.iter().any(|message| matches!(
         message,
-        Message::User { content }
+        Message::User { content, .. }
             if content.iter().any(|block| matches!(
                 block,
                 ContentBlock::Text { text }

@@ -74,7 +74,10 @@ pub fn messages_after_latest_compact_boundary(messages: &[Message]) -> Vec<Messa
 }
 
 pub(super) fn compact_summary_text(message: &Message) -> Option<String> {
-    let Message::User { content } = message else {
+    if message.origin() != kcoder_types::MessageOrigin::Compaction {
+        return None;
+    }
+    let Message::User { content, .. } = message else {
         return None;
     };
     let ContentBlock::Text { text } = content.first()? else {
@@ -110,7 +113,7 @@ pub(super) fn build_compacted_messages(
     let combined_summary = combine_compact_summaries(prior_summary, new_summary);
     let mut messages = Vec::new();
     if !combined_summary.trim().is_empty() {
-        messages.push(Message::user_text(format_compact_summary_message(
+        messages.push(Message::compaction_text(format_compact_summary_message(
             &combined_summary,
         )));
     }
@@ -194,7 +197,7 @@ pub(crate) fn split_for_compaction(messages: &[Message]) -> CompactionSplit {
     // split landed on a tool_result container, walk backwards to include the
     // assistant message carrying its tool_use.
     while preserve_start > 0
-        && matches!(&messages[preserve_start], Message::User { content } if is_tool_result_only_content(content))
+        && matches!(&messages[preserve_start], Message::User { content, .. } if is_tool_result_only_content(content))
     {
         preserve_start -= 1;
     }
@@ -297,15 +300,18 @@ fn truncate_unprotected_head_for_ptl_retry(
     let drop_until = groups[drop_groups].0;
 
     let mut truncated: Vec<Message> = messages.into_iter().skip(drop_until).collect();
-    truncated.insert(0, Message::user_text(PTL_RETRY_MARKER));
+    truncated.insert(0, Message::runtime_text(PTL_RETRY_MARKER));
 
     Ok(truncated)
 }
 
 fn is_ptl_retry_marker_message(message: &Message) -> bool {
+    if message.origin() != kcoder_types::MessageOrigin::Runtime {
+        return false;
+    }
     matches!(
         message,
-        Message::User { content }
+        Message::User { content, .. }
             if content.iter().any(
                 |block| matches!(block, ContentBlock::Text { text } if text == PTL_RETRY_MARKER)
             )
@@ -332,10 +338,7 @@ fn group_message_indices_by_user_turn(messages: &[Message]) -> Vec<(usize, usize
 }
 
 pub(crate) fn is_user_request_message(message: &Message) -> bool {
-    let Message::User { content } = message else {
-        return false;
-    };
-    !is_tool_result_only_content(content)
+    kcoder_types::is_real_user_message(message)
 }
 
 pub(super) fn is_tool_result_only_content(content: &[ContentBlock]) -> bool {

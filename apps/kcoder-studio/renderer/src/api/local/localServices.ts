@@ -634,7 +634,8 @@ function runtimeGoalStatusValue(value: unknown): RuntimeGoalStatus | undefined {
     value === 'blocked' ||
     value === 'complete' ||
     value === 'usageLimited' ||
-    value === 'budgetLimited'
+    value === 'budgetLimited' ||
+    value === 'cancelled'
     ? value
     : undefined
 }

@@ -185,11 +185,27 @@ impl TranscriptTurns {
         let mut turn = 0usize;
         let mut active_turn = None;
         let turn_ids = std::mem::take(&mut artifacts.turn_ids);
-        let admitted_users = turn_ids.values().cloned().collect::<std::collections::HashSet<_>>();
-        let visible_uuids = entries.iter().filter_map(|entry| entry.uuid.clone()).collect::<std::collections::HashSet<_>>();
-        let represented = entries.iter().filter(|entry| kcoder_engine::agent::is_real_user_message(&entry.message))
-            .enumerate().map(|(index, entry)| entry.uuid.as_ref().and_then(|uuid| turn_ids.get(uuid)).cloned()
-                .unwrap_or_else(|| format!("turn-{}", index + 1))).collect::<std::collections::HashSet<_>>();
+        let admitted_users = turn_ids
+            .values()
+            .cloned()
+            .collect::<std::collections::HashSet<_>>();
+        let visible_uuids = entries
+            .iter()
+            .filter_map(|entry| entry.uuid.clone())
+            .collect::<std::collections::HashSet<_>>();
+        let represented = entries
+            .iter()
+            .filter(|entry| kcoder_engine::agent::is_real_user_message(&entry.message))
+            .enumerate()
+            .map(|(index, entry)| {
+                entry
+                    .uuid
+                    .as_ref()
+                    .and_then(|uuid| turn_ids.get(uuid))
+                    .cloned()
+                    .unwrap_or_else(|| format!("turn-{}", index + 1))
+            })
+            .collect::<std::collections::HashSet<_>>();
         let entries: Box<dyn Iterator<Item = TurnEntry> + Send> =
             Box::new(entries.into_iter().enumerate().map(move |(index, entry)| {
                 if kcoder_engine::agent::is_real_user_message(&entry.message) {
@@ -264,7 +280,7 @@ impl TranscriptTurns {
     ) -> Option<ThreadMessage> {
         use kcoder_types::{ContentBlock, Message};
         let content = match &entry.message {
-            Message::User { content } | Message::Assistant { content, .. } => content,
+            Message::User { content, .. } | Message::Assistant { content, .. } => content,
         };
         let references = content
             .iter()

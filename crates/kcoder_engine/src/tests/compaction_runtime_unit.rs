@@ -2322,6 +2322,7 @@ fn assistant_tool_use(id: &str, name: &str) -> Message {
 
 fn user_tool_result(id: &str, text: String) -> Message {
     Message::User {
+        origin: kcoder_types::MessageOrigin::Unknown,
         content: vec![ContentBlock::ToolResult {
             tool_use_id: id.to_string(),
             content: vec![ContentBlock::Text { text }],
@@ -2331,7 +2332,7 @@ fn user_tool_result(id: &str, text: String) -> Message {
 }
 
 fn tool_result_text(message: &Message) -> &str {
-    let Message::User { content } = message else {
+    let Message::User { content, .. } = message else {
         panic!("expected user tool result");
     };
     let Some(ContentBlock::ToolResult { content, .. }) = content.first() else {
@@ -3008,6 +3009,7 @@ fn engine_applies_time_based_micro_compact_before_cold_main_turn() {
         usage: None,
     });
     engine.state.add_message(Message::User {
+        origin: kcoder_types::MessageOrigin::Unknown,
         content: vec![ContentBlock::ToolResult {
             tool_use_id: "old-call".to_string(),
             content: vec![ContentBlock::Text {
@@ -3025,6 +3027,7 @@ fn engine_applies_time_based_micro_compact_before_cold_main_turn() {
         usage: None,
     });
     engine.state.add_message(Message::User {
+        origin: kcoder_types::MessageOrigin::Unknown,
         content: vec![ContentBlock::ToolResult {
             tool_use_id: "recent-call".to_string(),
             content: vec![ContentBlock::Text {

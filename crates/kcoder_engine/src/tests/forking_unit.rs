@@ -1418,7 +1418,7 @@ async fn running_subagent_waits_for_complete_parallel_tool_batch_before_applying
         .messages
         .iter()
         .position(|message| {
-            matches!(message, Message::User { content } if content.iter().any(|block| {
+            matches!(message, Message::User { content, .. } if content.iter().any(|block| {
                 matches!(block, ContentBlock::ToolResult { tool_use_id, is_error: Some(true), .. } if tool_use_id == "steer-tool-2")
             }))
         })
@@ -2031,7 +2031,7 @@ async fn send_message_repairs_legacy_unmatched_tool_use_before_provider_request(
     assert!(provider_request.messages.iter().any(|message| {
         matches!(
             message,
-            Message::User { content }
+            Message::User { content, .. }
                 if content.iter().any(|block| matches!(
                     block,
                     ContentBlock::ToolResult { tool_use_id, .. }
@@ -2690,7 +2690,7 @@ async fn verifier_result_retains_authenticated_large_tool_output_after_transcrip
         .messages
         .iter()
         .find_map(|message| match message {
-            Message::User { content } => content.iter().find_map(|block| match block {
+            Message::User { content, .. } => content.iter().find_map(|block| match block {
                 ContentBlock::ToolResult { content, .. } => Some(content),
                 _ => None,
             }),
@@ -2759,7 +2759,7 @@ async fn verifier_that_ignores_final_boundary_fails_closed_as_flaky_not_infrastr
             Message::Assistant { content, .. } => content
                 .iter()
                 .all(|block| !matches!(block, ContentBlock::ToolUse { .. })),
-            Message::User { content } => content
+            Message::User { content, .. } => content
                 .iter()
                 .all(|block| !matches!(block, ContentBlock::ToolResult { .. })),
         }

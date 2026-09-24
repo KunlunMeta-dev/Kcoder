@@ -1482,6 +1482,20 @@ mod tests {
     }
 
     #[test]
+    fn bypass_modes_never_override_explicit_denials() {
+        for mode in [PermissionMode::Yolo, PermissionMode::Bypass] {
+            let mut engine = PermissionEngine { mode, ..PermissionEngine::default() };
+            let tool = DummyTool { name: "PowerShell", read_only: false };
+            engine.session_allowed.push("PowerShell".into());
+            engine.denied_tools.push("PowerShell".into());
+            assert_eq!(engine.decide(&tool, &json!({"command":"Remove-Item -Recurse important"})), PermissionDecision::Deny);
+            engine.denied_tools.clear();
+            engine.session_denied.push("PowerShell".into());
+            assert_eq!(engine.decide(&tool, &json!({"command":"Write-Output ok"})), PermissionDecision::Deny);
+        }
+    }
+
+    #[test]
     fn yolo_mode_allows_non_high_risk_tools() {
         let engine = PermissionEngine {
             mode: PermissionMode::Yolo,

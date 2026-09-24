@@ -46,9 +46,8 @@ static NEXT_PROCESS_SCOPE: AtomicU64 = AtomicU64::new(1);
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct BashInput {
     /// Shell command or script executed in the current working directory. Pass raw
-    /// command text without additional JSON encoding. Use dedicated tools for reading,
-    /// searching, and editing files; do not invoke shell ls/find/grep/rg merely to
-    /// enumerate or search project files.
+    /// command text without additional JSON encoding. Prefer specialized file tools
+    /// when attached; otherwise keep shell inspection bounded and permission-scoped.
     pub command: String,
     /// Optional invocation directory. Relative paths resolve from the session
     /// directory and are checked by the active sandbox before execution.
@@ -103,10 +102,7 @@ impl Tool for BashTool {
         "Run a Unix-like shell command in the current session directory. \
          This shell tool uses the system shell on Unix-like platforms and Git Bash on Windows. \
          Use this for terminal operations such as build, test, git, package managers, or project-specific CLIs. \
-         Use dedicated tools for file enumeration (`glob`), content search (`grep`), reading (`read`), editing (`edit`), \
-         and writing (`write`) instead of shell `ls`, `find`, glob expansion, `grep`, or `rg`; dedicated tools \
-         preserve bounded, cancellable scans and workspace exclusions. Do not use Bash merely to enumerate or \
-         search project files, and honor a dedicated tool's limit/truncation feedback. \
+         Prefer specialized file tools when they are attached to this request; otherwise use bounded shell inspection and honor workspace exclusions. \
          Each bash call starts from the session directory; `cd` only affects that one command and does not persist. \
          Do not prefix commands with `cd` just to reach the session directory. \
          When inspecting a child repository or another directory, use absolute paths or include `cd path && ...` in the same command. \
@@ -128,7 +124,7 @@ impl Tool for BashTool {
             ToolPermissionMode::Bypass | ToolPermissionMode::Yolo
         ) {
             description.push_str(
-                " Current permission mode bypasses normal approval prompts; inspect commands carefully before using this tool.",
+                " Current permission mode bypasses normal approval prompts, including the runtime sandbox-escalation approval path. Explicit deny rules still apply. This mode is not a confinement guarantee; execute only work authorized by the user.",
             );
         }
         if ctx.is_non_interactive {
@@ -5474,6 +5470,7 @@ mod tests {
             permission_mode: crate::ToolPermissionMode::Bypass,
             is_non_interactive: true,
             active_skills: Vec::new(),
+            available_tools: Default::default(),
         };
 
         let description = tool.description_for_model(None, &ctx).await;

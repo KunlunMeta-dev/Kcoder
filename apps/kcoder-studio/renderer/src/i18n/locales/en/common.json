@@ -1147,6 +1147,7 @@
     "goal_status_active": "Active goal",
     "goal_status_paused": "Paused goal",
     "goal_status_blocked": "Blocked goal",
+    "goal_status_cancelled": "Cancelled goal",
     "goal_status_complete": "Completed goal",
     "goal_status_usage_limited": "Usage-limited goal",
     "goal_status_budget_limited": "Budget-limited goal",

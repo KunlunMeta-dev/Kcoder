@@ -361,7 +361,7 @@ impl ConversationCompactor {
                         note.covered
                     );
                     (
-                        std::iter::once(Message::user_text(format_compact_summary_message(
+                        std::iter::once(Message::compaction_text(format_compact_summary_message(
                             &note.summary,
                         )))
                         .chain(split.old[note.covered..].iter().cloned())

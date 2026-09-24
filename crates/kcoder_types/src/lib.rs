@@ -25,6 +25,7 @@ pub use provider_failure::{
     ProviderFailureCategory, ProviderFailureDetails, ProviderFailureRecoveryAction,
 };
 pub use shared_messages::SharedMessages;
+#[allow(deprecated)]
 pub use user_message_semantics::{
     REAL_USER_MESSAGE_SEMANTICS_VERSION, is_hidden_runtime_user_text, is_real_user_message,
     is_synthetic_parent_text,
@@ -96,12 +97,31 @@ fn default_mcp_transport() -> String {
     "stdio".to_string()
 }
 
+/// Provenance is local history metadata, never provider protocol or text inference.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MessageOrigin {
+    #[default]
+    Unknown,
+    User,
+    Runtime,
+    Compaction,
+}
+
+impl MessageOrigin {
+    pub fn is_unknown(&self) -> bool {
+        *self == Self::Unknown
+    }
+}
+
 /// A single conversation message in Anthropic-compatible format.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case", tag = "role")]
 pub enum Message {
     User {
         content: Vec<ContentBlock>,
+        #[serde(default, skip_serializing_if = "MessageOrigin::is_unknown")]
+        origin: MessageOrigin,
     },
     Assistant {
         content: Vec<ContentBlock>,
@@ -114,11 +134,37 @@ impl Message {
     pub fn user_text(text: impl Into<String>) -> Self {
         Self::User {
             content: vec![ContentBlock::Text { text: text.into() }],
+            origin: MessageOrigin::User,
         }
     }
 
     pub fn user_content(content: Vec<ContentBlock>) -> Self {
-        Self::User { content }
+        Self::User {
+            content,
+            origin: MessageOrigin::User,
+        }
+    }
+
+    pub fn with_origin(mut self, origin: MessageOrigin) -> Self {
+        if let Self::User { origin: stored, .. } = &mut self {
+            *stored = origin;
+        }
+        self
+    }
+
+    pub fn origin(&self) -> MessageOrigin {
+        match self {
+            Self::User { origin, .. } => *origin,
+            _ => MessageOrigin::Unknown,
+        }
+    }
+
+    pub fn runtime_text(text: impl Into<String>) -> Self {
+        Self::user_text(text).with_origin(MessageOrigin::Runtime)
+    }
+
+    pub fn compaction_text(text: impl Into<String>) -> Self {
+        Self::user_text(text).with_origin(MessageOrigin::Compaction)
     }
 
     pub fn assistant_text(text: impl Into<String>) -> Self {
@@ -147,7 +193,7 @@ impl Message {
 
     fn all_text(&self) -> String {
         let blocks = match self {
-            Message::User { content } => content,
+            Message::User { content, .. } => content,
             Message::Assistant { content, .. } => content,
         };
         let mut out = String::new();

@@ -146,7 +146,7 @@ pub(super) fn request(request: &MessagesRequest) -> Option<usize> {
     for message in messages {
         budget.node(0)?;
         match message {
-            Message::User { content } => budget.blocks(content, 0)?,
+            Message::User { content, .. } => budget.blocks(content, 0)?,
             Message::Assistant { content, usage } => {
                 budget.blocks(content, 0)?;
                 budget.usage(usage)?;

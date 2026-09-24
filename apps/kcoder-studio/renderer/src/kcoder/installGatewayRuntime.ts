@@ -4859,6 +4859,9 @@ export class KCoderGatewayRuntime {
 
   private async setTaskGoal(params: Record<string, unknown>) {
     const { taskId, task, client } = await this.taskConnection(params)
+    if (params.status === 'cancelled' && client.supportsExperimental?.('goalCancellationV1') !== true) {
+      throw new Error('Goal cancellation is unsupported by this server; update the remote KCoder server first.')
+    }
     const result = await client.request<{ goal?: Record<string, unknown> }>('thread/goal/set', {
       threadId: task.threadId,
       ...(typeof params.objective === 'string' ? { objective: params.objective } : {}),

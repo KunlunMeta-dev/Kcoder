@@ -708,7 +708,7 @@ fn build_openai_request_with_options(
 
     for msg in request.messages {
         match msg {
-            Message::User { content } => {
+            Message::User { content, .. } => {
                 // OpenAI represents each tool result as a separate "tool" role
                 // message, so split text and tool results into distinct messages.
                 let mut user_message = OpenAiUserMessageBuilder::default();
@@ -851,7 +851,7 @@ fn build_openai_responses_request(
     let mut input = Vec::new();
     for message in request.messages {
         match message {
-            Message::User { content } => {
+            Message::User { content, .. } => {
                 let mut parts = Vec::new();
                 for block in content {
                     match block {
@@ -1981,6 +1981,7 @@ mod tests {
                     usage: None,
                 },
                 Message::User {
+                    origin: kcoder_types::MessageOrigin::Unknown,
                     content: vec![ContentBlock::ToolResult {
                         tool_use_id: "call_1".to_string(),
                         content: vec![ContentBlock::Text {
@@ -2600,6 +2601,7 @@ mod tests {
         let request = MessagesRequest::new(
             "gpt-4o",
             vec![Message::User {
+                origin: kcoder_types::MessageOrigin::Unknown,
                 content: vec![
                     ContentBlock::Text {
                         text: "result".to_string(),
@@ -2632,6 +2634,7 @@ mod tests {
         let request = MessagesRequest::new(
             "gpt-4o",
             vec![Message::User {
+                origin: kcoder_types::MessageOrigin::Unknown,
                 content: vec![
                     ContentBlock::Text {
                         text: "describe this".to_string(),

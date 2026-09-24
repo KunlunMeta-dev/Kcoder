@@ -1101,6 +1101,22 @@ impl AppState {
         self.read_inner().tasks.clone()
     }
 
+    /// Count current-parent agent records without cloning task output/history.
+    pub fn try_session_subagent_activity_counts(&self) -> Option<(usize, usize)> {
+        let inner = self.inner.try_read().ok()?;
+        let mut pending = 0;
+        let mut running = 0;
+        for task in inner.tasks.values().filter(|task| task.kind == TaskKind::Subagent
+            && task.parent_session_id.as_deref() == Some(inner.session_id.as_str())) {
+            match task.status {
+                TaskStatus::Pending => pending += 1,
+                TaskStatus::Running => running += 1,
+                _ => {}
+            }
+        }
+        Some((pending, running))
+    }
+
     pub fn try_task_activity_counts(&self) -> Option<(usize, usize)> {
         let inner = self.inner.try_read().ok()?;
         let mut pending = 0;

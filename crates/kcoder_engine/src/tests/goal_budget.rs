@@ -331,3 +331,41 @@ async fn goal_budget_trip_stops_turn_at_next_subturn_boundary() {
         kcoder_state::GoalStatus::BudgetLimited
     );
 }
+
+#[tokio::test]
+async fn goal_audit_epoch_counts_outer_execution_not_host_scheduling() {
+    let tmp = tempfile::tempdir().unwrap();
+    let engine = test_engine_with_settings(
+        Arc::new(UsageThenTextProvider { usage: Usage {
+            input_tokens: 1, output_tokens: 1,
+            cache_creation_input_tokens: None, cache_read_input_tokens: None,
+            total_tokens: None, iterations: None,
+        }}), tmp.path(), Settings::default(),
+    );
+    let goal = engine.state.set_goal("ship", None);
+    for expected in [1, 2] {
+        if expected == 2 { engine.state.record_goal_continuation_start(&goal.goal_id); }
+        engine.state.add_message(Message::user_text("continue"));
+        let _ = engine.run_turn_stream(&kcoder_permissions::AutoAllowPrompt).collect::<Vec<_>>().await;
+        assert_eq!(engine.state.goal().unwrap().turn_count, expected);
+    }
+    assert_eq!(engine.state.goal().unwrap().continuation_count, 1);
+}
+
+#[tokio::test]
+async fn goal_audit_explicit_cancel_stops_turn_and_live_subagents() {
+    let tmp = tempfile::tempdir().unwrap();
+    let engine = test_engine_with_settings(Arc::new(EmptyProvider), tmp.path(), Settings::default());
+    engine.state.set_goal("ship", None);
+    let id = engine.background_jobs.spawn_subagent_with_cap("owned agent", Box::pin(async {
+        tokio::time::sleep(Duration::from_secs(60)).await;
+        ToolOutput::text("unexpected completion")
+    }), Some(1)).unwrap();
+    engine.state.update_goal_status(kcoder_state::GoalStatus::Cancelled);
+    let turn_cancel = CancellationToken::new();
+    assert_eq!(engine.cancel_goal_execution(Some(&turn_cancel)), 1);
+    assert!(turn_cancel.is_cancelled());
+    assert!(!engine.cancel_token().is_cancelled(), "the reusable engine must accept later conversations");
+    assert!(!engine.state.tasks().contains_key(&id));
+    assert_eq!(engine.state.goal().unwrap().status, kcoder_state::GoalStatus::Cancelled);
+}

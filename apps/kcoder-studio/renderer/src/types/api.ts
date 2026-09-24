@@ -697,7 +697,7 @@ export interface RuntimeGuidanceResponse {
 }
 
 export type RuntimeGoalStatus =
-  'active' | 'paused' | 'blocked' | 'usageLimited' | 'budgetLimited' | 'complete'
+  'active' | 'paused' | 'blocked' | 'usageLimited' | 'budgetLimited' | 'complete' | 'cancelled'
 
 export interface RuntimeGoal {
   threadId: string
@@ -705,6 +705,9 @@ export interface RuntimeGoal {
   mode: 'standard' | 'arrangement' | 'strict'
   verificationKind?: 'artifact' | 'answer'
   status: RuntimeGoalStatus
+  blockedCandidateCount?: number
+  blockerId?: string | null
+  blockerReason?: string | null
   tokenBudget: number | null
   tokensUsed: number
   timeUsedSeconds: number

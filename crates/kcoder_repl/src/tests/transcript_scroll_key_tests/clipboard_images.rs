@@ -31,7 +31,7 @@ fn pasted_image_filepath_attaches_and_submits_image_block() {
     let submitted = app.take_submitted_message();
     let submitted_text = submitted.text.clone();
     let message = submitted.to_model_message(submitted_text).unwrap();
-    let Message::User { content } = message else {
+    let Message::User { content, .. } = message else {
         panic!("expected user message");
     };
 

@@ -9,6 +9,7 @@ test('stages pinned browser resources for the target platform, not the build hos
     await stageDesktopResources({ electronPlatformName: platform, arch: 1 }, {
       stageDependencies: async () => calls.push('dependencies'),
       prepareBrowser: async options => calls.push(options),
+      preparePdfReader: async options => calls.push({ pdf: options }),
       env: { KCODER_CHROME_CACHE: '/fixture/cache', [`KCODER_CHROME_ARCHIVE_${expected.toUpperCase()}`]: '/fixture/official.zip' },
     });
     assert.equal(calls[0], 'dependencies');
@@ -16,11 +17,13 @@ test('stages pinned browser resources for the target platform, not the build hos
     assert.match(calls[1].destination, /input[/\\]bin[/\\]chrome$/);
     assert.equal(calls[1].archive, '/fixture/official.zip');
     assert.equal(calls[1].cache, '/fixture/cache');
+    assert.equal(calls.length, platform === 'win32' ? 3 : 2);
+    if (platform === 'win32') assert.match(calls[2].pdf.destination, /input[/\\]bin[/\\]pdf$/);
   }
 });
 
 test('remote clients do not download a local browser and unsupported architectures fail closed', async () => {
-  const options = { stageDependencies: async () => {}, prepareBrowser: async () => assert.fail('unexpected browser download') };
+  const options = { stageDependencies: async () => {}, prepareBrowser: async () => assert.fail('unexpected browser download'), preparePdfReader: async () => assert.fail('unexpected PDF download') };
   await stageDesktopResources({ electronPlatformName: 'win32', packager: { appInfo: { id: 'dev.kcoder.studio.remote' } } }, options);
   await assert.rejects(stageDesktopResources({ electronPlatformName: 'linux', arch: 3 }, options), /x64/);
 });
@@ -33,4 +36,11 @@ test('both full desktop resource manifests carry the entire Chrome directory', a
     assert.match(resource.from, /input\/bin\/chrome$/);
     assert.equal(resource.filter, undefined, 'licenses and supporting assets must not be stripped');
   }
+});
+
+test('Windows package includes the complete PDF resource directory', async () => {
+  const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+  const pdf = pkg.build.win.extraResources.find(item => item.to === 'bin/pdf');
+  assert.match(pdf.from, /windows-input\/bin\/pdf$/);
+  assert.equal(pdf.filter, undefined, 'licenses, source archive and character maps must be retained');
 });

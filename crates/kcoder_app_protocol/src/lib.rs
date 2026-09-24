@@ -1032,6 +1032,12 @@ pub struct ThreadGoal {
     pub time_used_seconds: u64,
     #[serde(default)]
     pub turn_count: u64,
+    #[serde(default)]
+    pub blocked_candidate_count: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocker_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocker_reason: Option<String>,
     pub created_at: u64,
     pub updated_at: u64,
     #[serde(default)]
@@ -1152,6 +1158,9 @@ pub enum ThreadStatus {
 }
 
 /// Client capability that opts a connection into the richer run projection.
+/// Explicit user cancellation with retained Goal history and fallible persistence.
+pub const CAPABILITY_GOAL_CANCELLATION_V1: &str = "goalCancellationV1";
+
 pub const CAPABILITY_RETRY_MODEL_CONFIGURATION_V1: &str = "retryModelConfigurationV1";
 pub const CAPABILITY_THREAD_RUN_SUMMARY_V1: &str = "threadRunSummaryV1";
 

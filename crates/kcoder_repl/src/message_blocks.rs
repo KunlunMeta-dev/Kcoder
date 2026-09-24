@@ -58,7 +58,7 @@ pub(crate) fn collect_tool_use_lookup(messages: &[Message]) -> HashMap<String, (
     let mut lookup = HashMap::new();
     for msg in messages {
         let blocks = match msg {
-            Message::User { content } => content,
+            Message::User { content, .. } => content,
             Message::Assistant { content, .. } => content,
         };
         for block in blocks {

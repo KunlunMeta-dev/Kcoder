@@ -201,7 +201,7 @@ fn foreground_result_uses_original_run_path_and_receipt_after_continuation() {
             .get("description")
             .and_then(Value::as_str)
             .unwrap();
-        for keyword in ["auto", "none", "semantic", "recent", "full", "SendMessage"] {
+        for keyword in ["auto", "none", "semantic", "recent", "full", "follow-up"] {
             assert!(
                 context_description.contains(keyword),
                 "missing {keyword} in context_mode description"
@@ -212,7 +212,7 @@ fn foreground_result_uses_original_run_path_and_receipt_after_continuation() {
             "task/workflow/sub-agent notifications",
             "provider or model",
             "never re-applies parent context",
-            "reserved leading wrappers",
+            "Structured origin",
         ] {
             assert!(context_description.contains(phrase), "missing {phrase}");
         }
@@ -227,7 +227,7 @@ fn foreground_result_uses_original_run_path_and_receipt_after_continuation() {
             context_turns["description"]
                 .as_str()
                 .unwrap()
-                .contains("fail schema validation")
+                .contains("ignored by none/semantic/full")
         );
     }
 
@@ -315,7 +315,8 @@ fn foreground_result_uses_original_run_path_and_receipt_after_continuation() {
         assert!(description.contains("must not create, edit, delete"));
         assert!(description.contains("path:line evidence"));
         assert!(description.contains("context_mode"));
-        assert!(description.contains("auto resolves to recent"));
+        assert!(!description.contains("auto resolves to recent"));
+        assert!(tool.input_schema()["properties"]["context_mode"]["description"].as_str().unwrap().contains("recent outside Arrangement"));
     }
 
     #[test]
@@ -356,9 +357,9 @@ fn foreground_result_uses_original_run_path_and_receipt_after_continuation() {
         );
         assert_eq!(props["foreground_timeout_ms"].get("default").unwrap(), 0);
         let context = props["context_mode"]["description"].as_str().unwrap();
-        assert!(context.contains("non-synthetic user messages"));
+        assert!(context.contains("real user turns"));
         assert!(context.contains("provider or model changed"));
-        assert!(context.contains("reserved leading wrappers"));
+        assert!(context.contains("Structured origin"));
         let background = props["run_in_background"]["description"].as_str().unwrap();
         assert!(background.contains("wait for every relevant background sub-agent"));
         assert!(background.contains("Do not repeat work already delegated"));
@@ -373,12 +374,12 @@ fn foreground_result_uses_original_run_path_and_receipt_after_continuation() {
             .and_then(Value::as_object)
             .expect("schema properties");
         let context = props["context_mode"]["description"].as_str().unwrap();
-        for keyword in ["auto", "none", "semantic", "recent", "full", "SendMessage"] {
+        for keyword in ["auto", "none", "semantic", "recent", "full", "follow-up"] {
             assert!(context.contains(keyword), "missing {keyword}");
         }
         assert!(context.contains("real user turn"));
         assert!(context.contains("provider or model"));
-        assert!(context.contains("reserved leading wrappers"));
+        assert!(context.contains("Structured origin"));
         assert_eq!(props["context_turns"]["default"], 2);
         assert_eq!(props["run_in_background"]["default"], false);
         let background = props["run_in_background"]["description"].as_str().unwrap();
@@ -1307,7 +1308,7 @@ fn foreground_result_uses_original_run_path_and_receipt_after_continuation() {
 
         match error {
             ToolError::InvalidInput(message) => {
-                assert!(message.contains("explore_agent"));
+                assert!(message.contains("dedicated exploration tool"));
             }
             other => panic!("expected InvalidInput, got {other:?}"),
         }
@@ -1722,3 +1723,25 @@ fn foreground_result_uses_original_run_path_and_receipt_after_continuation() {
         }
         assert!(ctx.state.tasks().is_empty());
     }
+
+#[test]
+fn context_contract_is_once_per_model_definition_and_keeps_role_defaults() {
+    for (tool, expected_auto) in [
+        (Box::new(AgentTool) as Box<dyn Tool>, "general=semantic; plan/review=recent; implementer/verifier/tool_agent=none; all Arrangement roles=none"),
+        (Box::new(ExploreAgentTool), "recent outside Arrangement; none in Arrangement"),
+        (Box::new(PlanAgentTool), "recent outside Arrangement; none in Arrangement"),
+    ] {
+        let schema = tool.input_schema();
+        let description = tool.description();
+        let context = schema["properties"]["context_mode"]["description"].as_str().unwrap();
+        assert!(context.contains(expected_auto), "{}", tool.name());
+        for constraint in ["Explicit modes are honored", "drop entire mixed ToolUse", "Structured origin", "unknown legacy text is retained", "Summaries do not count", "tool-sequence-repaired", "provider or model changed", "MoA aggregator", "Does not change model, role, permissions", "never re-applies parent context"] {
+            assert!(context.contains(constraint), "{} missing {constraint}", tool.name());
+        }
+        assert!(!description.contains("semantic cleanup"));
+        assert_eq!(schema["properties"]["context_mode"]["enum"], serde_json::json!(["auto","none","semantic","recent","full"]));
+        assert_eq!(schema["properties"]["context_turns"]["minimum"], 1);
+        assert_eq!(schema["properties"]["context_turns"]["default"], 2);
+        assert!(context.len() < 1500, "context documentation grew: {}", context.len());
+    }
+}

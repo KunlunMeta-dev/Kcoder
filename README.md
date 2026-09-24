@@ -739,7 +739,7 @@ Tool profiles (`--tool-profile`, default `auto`):
 |---------|------|
 | `full` | All built-in tools in the default registry; MCP tools join dynamically at runtime |
 | `core` | Basic development tools from `nano`, plus `spawn_agent`, `explore_agent`, `SendMessage`, `wait`, `close_agent`, all `Task*`, `get/create/update_goal`, and `WebFetch`, `WebSearch`, `WebBrowser`; excludes `AskUserQuestion` |
-| `nano` | `read`, `write`, `edit`, `glob`, `grep`, `TodoWrite`, `Sleep`, shell — the minimum tool surface based on the legacy `core`, with `AskUserQuestion` removed |
+| `nano` | `read`, `write`, `edit`, `glob`, `grep`, `TodoWrite`, `Sleep`, `CtxInspect`, shell — the minimum tool surface based on the legacy `core`, with `AskUserQuestion` removed |
 | `none` | Expose no tools to the model |
 | `auto` | Cloud providers use `full`; local vLLM/SGLang uses `core` |
 
@@ -769,8 +769,8 @@ force, recovery, Doctor, and degradation boundaries are described alongside the 
 | Workflow | `Workflow` (embedded QuickJS scripted JS workflow runtime) |
 | Code review | `ocr` (external code review CLI integration) |
 | LSP | Not an independent tool: automatically attaches LSP diagnostics after writes (currently supports Python/pyright) |
-| Configuration | `Config` (runtime settings read/write, about 110 supported dotted keys) |
-| Context | `CtxInspect`, `Snip` |
+| Configuration | `Config` (runtime settings read/write; `action=list` discovers paths and `action=describe` returns their schema and write restrictions) |
+| Context | `CtxInspect` (runtime observations and bounded current-context message pages), `Snip` |
 | Code execution | `REPL` (JavaScript/TypeScript/Python/Shell) |
 | Other | `Sleep`, `AskUserQuestion`, `WebBrowser` |
 
@@ -790,17 +790,47 @@ Tool execution details:
 - The current default registry has no built-in `apply_patch` tool. File modification paths are `write` / `edit`; the engine and trait layers retain
   Freeform tool input format capability for future tool extension.
 
+### Text encodings and bounded inspection
+
+- `read`, `edit`, and `write` accept `encoding`: `auto`, `utf-8`, `utf-16le`, `gbk`, or `gb18030`.
+  Auto mode accepts UTF-8, BOM-marked Unicode and clear ASCII-like UTF-16LE patterns; it does not guess legacy Chinese encodings.
+  For known GBK/GB18030 or ambiguous BOM-less UTF-16LE files, specify the source encoding consistently when reading and modifying.
+  Existing BOM and the detected line-ending convention are preserved (mixed endings retain the established majority-normalization behavior); a new file defaults to UTF-8 unless an encoding is specified.
+  Invalid decoding, conflicting BOMs and unrepresentable output fail before the destination file is overwritten. Encoding selection is not an implicit conversion operation.
+- PDF `read` prefers the bundled Windows x64 Xpdf `pdftotext`, then uses a system Poppler `pdftotext` on other hosts: 32 MiB input limit, at most 20 requested pages,
+  bounded output, cancellation and timeout. `pages` defaults to `1-10`. This is text extraction, not OCR or visual page rendering;
+  unavailable dependencies and scanned pages receive explicit diagnostics. The full Windows installer includes the reader, Simplified/Traditional Chinese character maps, licenses and matching source archive; no separate PDF utility installation is needed. Remote hosts execute their own reader.
+- `WebBrowser` uses `navigate` or `snapshot` for HTTP page text; legacy `screenshot` input is accepted only as a text-snapshot alias.
+  Neither WebBrowser nor WebFetch supplies visual screenshot evidence. WebFetch includes response metadata and caching, preserves loopback HTTP,
+  and returns its optional prompt to the caller rather than silently invoking another model.
+- `Config` discovery reads the authoritative configuration schema without reading credential values. For example,
+  `{"action":"describe","setting":"goal_pro.verification"}` exposes nested properties and constraints.
+- `CtxInspect` exposes `action=status` and `action=messages`; message pages use a bounded, owner-bound snapshot of the active context.
+  It does not claim to retrieve all pre-compaction history. Results distinguish message-token estimates, the last prepared full-request estimate, configured budgets and cumulative usage;
+  unavailable authoritative measurements are reported as unavailable rather than inferred from environment variables.
+- `TodoWrite` may retain pending items when work is blocked or cancelled. An empty replacement list explicitly clears the list and does not
+  assert that the work was completed; optional `clear_reason` records why it was abandoned. Use `write` for file creation; empty `edit.old_string`
+  remains a legacy compatibility path for missing or empty files.
+- Goal blocking uses consecutive accepted outer execution turns, not retries or tool-loop iterations. `get_goal` exposes candidate counts,
+  the declared blocker identity/reason and audit version; changing the blocker or skipping a candidate turn restarts the sequence.
+  Users can cancel a Goal explicitly (`/goal cancel` or the Studio goal action); cancellation is distinct from completion and is retained in history.
+  Models cannot cancel a Goal merely because work is difficult or incomplete.
+  Remote cancellation requires `goalCancellationV1`. New builds read existing Goal data, but after writing cancellation state/events,
+  compatibility with Studio 0.1.48 and earlier bundled runtimes is not guaranteed; upgrade processes sharing that session before using it.
+- YOLO/bypass skip approval, including the runtime sandbox-escalation approval path. Explicit deny rules remain enforced;
+  bypass mode is not a confinement guarantee. Current-session observations do not grant additional authority.
+
 ### Bounded Search
 
 `glob` / `grep` use budget-limited scans to avoid unbounded scans in large repos:
 
-- `glob`: `path` (search root), `limit` (default 100, rejects 0), `output_mode` (`paths` returns paths sorted by modification time;
+- `glob`: `path` (search root), `limit` (default 100, range 1..2000; rejects 0), `output_mode` (`paths` returns paths sorted by modification time;
   `count` returns aggregate counts, ignores limit but reports whether the count is complete), three `scan_budget` tiers:
   `default` (50k entries/2s/100 results), `expanded` (500k entries/10s/500 results), `large` (5M entries/30s/2000 results).
   Larger budgets must be explicitly selected and require a narrowed `path`; the default budget rejects top-level directory scans. Scans exclude VCS and generated directories,
   using `rg --no-config --files` to read limit+1 to determine truncation, falling back to walkdir without rg, with rg timeout 20s.
 - `grep`: `regex` / `path` / `glob` / `type` filters, `output_mode` (`content` / `files_with_matches` / `count`),
-  context `-A/-B/-C`, `-i`, `-n`, `head_limit` (default 250, 0=unlimited), `offset`, `multiline`;
+  context `-A`/`-B`/`context` (legacy `-C` accepted), `-i`, `-n`, `head_limit` (default 250, range 1..10000; 0 is rejected), `offset`, `multiline`;
   `count` mode gives full-range precise aggregation. Wide searches limited to 500 files/16MiB, deep searches 2000 files/128MiB, timeout 20s.
 - ripgrep location order: `KCODER_RIPGREP_PATH` / `KCODER_RG_PATH` explicit override → system `rg` in PATH →
   `<prefix>/lib/kcoder/rg` bundled with the install package. rg exit code 1=no match, 2+=failure (feedback to model).

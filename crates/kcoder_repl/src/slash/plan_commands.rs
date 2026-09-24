@@ -28,10 +28,10 @@ fn report_goal_creation(
     }
 }
 
-const GOAL_USAGE: &str = "/goal [status|history|pause|resume|clear|edit [--budget <tokens>] <objective>|--budget <tokens> <objective>|<objective>]";
+const GOAL_USAGE: &str = "/goal [status|history|pause|resume|cancel|clear|edit [--budget <tokens>] <objective>|--budget <tokens> <objective>|<objective>]";
 const ULTGOAL_USAGE: &str =
-    "/ultgoal [status|history|pause|resume|clear|--budget <tokens> <objective>|<objective>]";
-const GOAL_PRO_USAGE: &str = "/goal-pro [status|history|pause|resume|clear|edit [--budget <tokens>] <objective>|[--answer] [--budget <tokens>] [--] <objective>]";
+    "/ultgoal [status|history|pause|resume|cancel|clear|--budget <tokens> <objective>|<objective>]";
+const GOAL_PRO_USAGE: &str = "/goal-pro [status|history|pause|resume|cancel|clear|edit [--budget <tokens>] <objective>|[--answer] [--budget <tokens>] [--] <objective>]";
 
 #[derive(Default)]
 pub(super) struct OrchestrateCommand;
@@ -576,14 +576,25 @@ impl SlashCommand for GoalCommand {
                 );
                 return SlashResult::Handled;
             }
+            "cancel" => {
+                if engine.state.goal().is_some_and(|goal| goal.status.is_unfinished() || goal.status.is_user_resumable() || goal.status == GoalStatus::Cancelled) {
+                    engine.cancel_goal_execution(app.turn_state.cancel_flag());
+                }
+                match engine.state.cancel_goal_by_user() {
+                    Ok(Some(_)) => app.push_message(MessageRole::System, "Goal cancelled by user; history retained."),
+                    Ok(None) => app.push_message(MessageRole::System, "No unfinished goal to cancel."),
+                    Err(error) => app.push_message(MessageRole::System, format!("{error:#}")),
+                }
+                return SlashResult::Handled;
+            }
             "clear" => {
-                if let Some(goal) = engine.state.clear_goal() {
-                    app.push_message(
-                        MessageRole::System,
-                        format!("{} cleared.", goal_mode_display_name(goal.mode)),
-                    );
-                } else {
-                    app.push_message(MessageRole::System, "No goal is currently defined.");
+                if engine.state.goal().is_some_and(|goal| goal.status.is_unfinished() || goal.status.is_user_resumable()) {
+                    engine.cancel_goal_execution(app.turn_state.cancel_flag());
+                }
+                match engine.state.clear_goal_by_user() {
+                    Ok(Some(goal)) => app.push_message(MessageRole::System, format!("{} cleared.", goal_mode_display_name(goal.mode))),
+                    Ok(None) => app.push_message(MessageRole::System, "No goal is currently defined."),
+                    Err(error) => app.push_message(MessageRole::System, format!("{error:#}")),
                 }
                 return SlashResult::Handled;
             }
@@ -802,14 +813,25 @@ impl SlashCommand for GoalProCommand {
                 );
                 return SlashResult::Handled;
             }
+            "cancel" => {
+                if engine.state.goal().is_some_and(|goal| goal.status.is_unfinished() || goal.status.is_user_resumable() || goal.status == GoalStatus::Cancelled) {
+                    engine.cancel_goal_execution(app.turn_state.cancel_flag());
+                }
+                match engine.state.cancel_goal_by_user() {
+                    Ok(Some(_)) => app.push_message(MessageRole::System, "Goal cancelled by user; history retained."),
+                    Ok(None) => app.push_message(MessageRole::System, "No unfinished goal to cancel."),
+                    Err(error) => app.push_message(MessageRole::System, format!("{error:#}")),
+                }
+                return SlashResult::Handled;
+            }
             "clear" => {
-                if let Some(goal) = engine.state.clear_goal() {
-                    app.push_message(
-                        MessageRole::System,
-                        format!("{} cleared.", goal_mode_display_name(goal.mode)),
-                    );
-                } else {
-                    app.push_message(MessageRole::System, "No goal is currently defined.");
+                if engine.state.goal().is_some_and(|goal| goal.status.is_unfinished() || goal.status.is_user_resumable()) {
+                    engine.cancel_goal_execution(app.turn_state.cancel_flag());
+                }
+                match engine.state.clear_goal_by_user() {
+                    Ok(Some(goal)) => app.push_message(MessageRole::System, format!("{} cleared.", goal_mode_display_name(goal.mode))),
+                    Ok(None) => app.push_message(MessageRole::System, "No goal is currently defined."),
+                    Err(error) => app.push_message(MessageRole::System, format!("{error:#}")),
                 }
                 return SlashResult::Handled;
             }
@@ -1036,14 +1058,25 @@ impl SlashCommand for UltGoalCommand {
                 );
                 return SlashResult::Handled;
             }
+            "cancel" => {
+                if engine.state.goal().is_some_and(|goal| goal.status.is_unfinished() || goal.status.is_user_resumable() || goal.status == GoalStatus::Cancelled) {
+                    engine.cancel_goal_execution(app.turn_state.cancel_flag());
+                }
+                match engine.state.cancel_goal_by_user() {
+                    Ok(Some(_)) => app.push_message(MessageRole::System, "Goal cancelled by user; history retained."),
+                    Ok(None) => app.push_message(MessageRole::System, "No unfinished goal to cancel."),
+                    Err(error) => app.push_message(MessageRole::System, format!("{error:#}")),
+                }
+                return SlashResult::Handled;
+            }
             "clear" => {
-                if let Some(goal) = engine.state.clear_goal() {
-                    app.push_message(
-                        MessageRole::System,
-                        format!("{} cleared.", goal_mode_display_name(goal.mode)),
-                    );
-                } else {
-                    app.push_message(MessageRole::System, "No goal is currently defined.");
+                if engine.state.goal().is_some_and(|goal| goal.status.is_unfinished() || goal.status.is_user_resumable()) {
+                    engine.cancel_goal_execution(app.turn_state.cancel_flag());
+                }
+                match engine.state.clear_goal_by_user() {
+                    Ok(Some(goal)) => app.push_message(MessageRole::System, format!("{} cleared.", goal_mode_display_name(goal.mode))),
+                    Ok(None) => app.push_message(MessageRole::System, "No goal is currently defined."),
+                    Err(error) => app.push_message(MessageRole::System, format!("{error:#}")),
                 }
                 return SlashResult::Handled;
             }
@@ -1314,7 +1347,7 @@ fn format_goal_status(goal: Option<Goal>) -> String {
         .map(|path| format!(". Objective file: {}", path.display()))
         .unwrap_or_default();
     let mut rendered = format!(
-        "{name} `{}` ({mode}) verification={} is {}. Turn: {}. Tokens: {}{}. Time: {}s. Stop: Esc pauses, `{command} resume` continues. Objective: {}",
+        "{name} `{}` ({mode}) verification={} is {}. Turn: {}. Tokens: {}{}. Time: {}s. Stop: Esc pauses, `{command} resume` continues, `{command} cancel` stops permanently. Objective: {}",
         goal.goal_id,
         goal.verification_kind.as_str(),
         goal.status.as_str(),
@@ -1346,6 +1379,13 @@ fn format_goal_status(goal: Option<Goal>) -> String {
             policy.allow_network_only_failures,
         ));
     }
+    if goal.blocked_candidate_count > 0 {
+        rendered.push_str(&format!("\nBlocked audit: {}/3 consecutive execution epochs. Blocker: {}. Reason: {}",
+            goal.blocked_candidate_count,
+            goal.blocked_candidate_id.as_deref().unwrap_or("exact reason text"),
+            goal.blocked_candidate_reason.as_deref().unwrap_or("not recorded"),
+        ));
+    }
     if !goal.events.is_empty() {
         rendered.push_str("\nRecent events:");
         for event in goal.events.iter().rev().take(5).rev() {
@@ -1372,7 +1412,7 @@ fn format_goal_history(
     }
     if history.is_empty() {
         return format!(
-            "No completed, blocked, or budget-limited {} history for this session.",
+            "No completed, cancelled, blocked, or budget-limited {} history for this session.",
             goal_mode_display_name(requested_mode)
         );
     }
@@ -1506,6 +1546,20 @@ mod tests {
         assert!(engine.state.goal().is_some());
         assert!(sidecar.is_file());
         assert!(recovered.messages.iter().any(|message| message.text.contains("Goal started")));
+    }
+
+    #[tokio::test]
+    async fn goal_cancel_command_retains_history_and_does_not_poison_engine() {
+        let temp = tempfile::tempdir().unwrap();
+        let engine = test_engine(temp.path());
+        engine.state.set_goal("ship", None);
+        let mut app = ReplApp::default();
+        super::GoalCommand.run("cancel", &mut app, &engine).await;
+        assert_eq!(engine.state.goal().unwrap().status, GoalStatus::Cancelled);
+        assert_eq!(engine.state.goal_history().last().unwrap().status, GoalStatus::Cancelled);
+        assert!(!engine.cancel_token().is_cancelled());
+        super::GoalCommand.run("resume", &mut app, &engine).await;
+        assert_eq!(engine.state.goal().unwrap().status, GoalStatus::Cancelled);
     }
 
     #[test]
@@ -1774,11 +1828,11 @@ mod tests {
     fn goal_history_empty_state_uses_requested_mode_label() {
         assert_eq!(
             format_goal_history(Vec::new(), None, GoalMode::Standard),
-            "No completed, blocked, or budget-limited Goal history for this session."
+            "No completed, cancelled, blocked, or budget-limited Goal history for this session."
         );
         assert_eq!(
             format_goal_history(Vec::new(), None, GoalMode::Arrangement),
-            "No completed, blocked, or budget-limited UltGoal history for this session."
+            "No completed, cancelled, blocked, or budget-limited UltGoal history for this session."
         );
     }
 

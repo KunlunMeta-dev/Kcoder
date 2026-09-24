@@ -169,6 +169,7 @@ fn fixture_messages(records: usize, damaged: bool) -> Vec<kcoder_types::Message>
             }],
         });
         messages.push(Message::User {
+            origin: kcoder_types::MessageOrigin::Unknown,
             content: vec![ContentBlock::ToolResult {
                 tool_use_id: format!("call-{turn}"),
                 is_error: Some(false),
@@ -432,7 +433,7 @@ fn latest_user_query_projection_measurement() {
                         let snapshot = state.messages();
                         // This fixture ends in a plain user text, so the old selector returns it.
                         match snapshot.last().unwrap() {
-                            kcoder_types::Message::User { content } => match &content[0] {
+                            kcoder_types::Message::User { content, .. } => match &content[0] {
                                 kcoder_types::ContentBlock::Text { text } => Some(text.clone()),
                                 _ => unreachable!(),
                             },

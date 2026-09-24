@@ -1085,6 +1085,7 @@ mod tests {
             &engine,
             &followups,
             "[scheduled task task-a] inspect results".into(),
+            kcoder_types::MessageOrigin::User,
         )
         .unwrap();
         assert_eq!(manager.volatile_turn_count(&id), 11);
@@ -1092,6 +1093,7 @@ mod tests {
             &engine,
             &followups,
             "[system] Continue working toward the active goal".into(),
+            kcoder_types::MessageOrigin::Runtime,
         )
         .unwrap();
         assert_eq!(manager.volatile_turn_count(&id), 11);
@@ -1135,7 +1137,8 @@ mod tests {
             crate::app_server::append_background_followup_message(
                 &engine,
                 &followups,
-                "[scheduled task task-a] inspect results".into()
+                "[scheduled task task-a] inspect results".into(),
+                kcoder_types::MessageOrigin::User,
             )
             .is_err()
         );
@@ -1159,9 +1162,11 @@ mod tests {
             &event,
             Some(0)
         ));
-        engine.state.add_message(kcoder_types::Message::user_text(
-            "[system] hook rewritten reminder",
-        ));
+        engine
+            .state
+            .add_message(kcoder_types::Message::runtime_text(
+                "[system] hook rewritten reminder",
+            ));
         assert!(!explicit_turn_appended_user_message(
             &engine,
             &EngineEvent::UserMessageAdded,

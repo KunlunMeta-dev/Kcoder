@@ -323,6 +323,15 @@ fn anthropic_request_body_with_options(
     let mut payload = serde_json::to_value(request)
         .map_err(|e| ApiErrorKind::JsonParse(e, "<request serialization>".to_string()))?;
 
+    // Provenance belongs to persisted KCoder history, not the vendor wire format.
+    if let Some(messages) = payload.get_mut("messages").and_then(Value::as_array_mut) {
+        for message in messages {
+            if let Some(object) = message.as_object_mut() {
+                object.remove("origin");
+            }
+        }
+    }
+
     add_anthropic_prompt_cache_breakpoints(&mut payload);
 
     if let Some(budget_tokens) =
@@ -553,7 +562,7 @@ fn summarize_message_shapes<'a>(
 
 fn message_shape(index: usize, message: &Message) -> String {
     match message {
-        Message::User { content } => format!("{index}:user({})", block_shapes(content)),
+        Message::User { content, .. } => format!("{index}:user({})", block_shapes(content)),
         Message::Assistant { content, .. } => {
             format!("{index}:assistant({})", block_shapes(content))
         }
@@ -694,6 +703,26 @@ mod tests {
         })
         .await
         .expect("connection reuse probe exceeded its deadline");
+    }
+
+    #[test]
+    fn request_wire_omits_local_message_origin() {
+        let messages = vec![
+            Message::user_text("literal"),
+            Message::runtime_text("runtime"),
+            Message::compaction_text("summary"),
+        ];
+        assert!(
+            serde_json::to_value(&messages).unwrap()[0]
+                .get("origin")
+                .is_some()
+        );
+        let request = MessagesRequest::new("model", messages);
+        let value: Value =
+            serde_json::from_str(&anthropic_request_body(&request).unwrap()).unwrap();
+        for message in value["messages"].as_array().unwrap() {
+            assert!(message.get("origin").is_none());
+        }
     }
 
     #[test]

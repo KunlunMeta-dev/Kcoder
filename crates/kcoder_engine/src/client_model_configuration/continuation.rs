@@ -197,7 +197,7 @@ fn ensure_context_compatible(
     let mut needs = Requirements::default();
     for message in messages {
         match message {
-            Message::User { content } | Message::Assistant { content, .. } => {
+            Message::User { content, .. } | Message::Assistant { content, .. } => {
                 scan(content, &mut needs)
             }
         }

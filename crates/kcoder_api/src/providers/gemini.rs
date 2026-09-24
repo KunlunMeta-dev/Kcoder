@@ -299,7 +299,7 @@ fn build_gemini_request_with_extra(
     let mut contents = Vec::new();
     for msg in request.messages {
         let content = match &msg {
-            Message::User { content } => content,
+            Message::User { content, .. } => content,
             Message::Assistant { content, .. } => content,
         };
         let role = match msg.role() {
@@ -763,6 +763,7 @@ mod tests {
         let request = MessagesRequest::new(
             "gemini-1.5-pro",
             vec![Message::User {
+                origin: kcoder_types::MessageOrigin::Unknown,
                 content: vec![
                     ContentBlock::Text {
                         text: "describe this".to_string(),

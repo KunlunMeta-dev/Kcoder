@@ -204,7 +204,7 @@ impl GoalLifecycle {
         if automatic.is_some()
             && let Some(goal) = engine.state.goal().filter(|goal| goal.status.is_active())
         {
-            engine.state.record_goal_turn_start(&goal.goal_id);
+            engine.state.record_goal_continuation_start(&goal.goal_id);
             self.started += 1;
         }
         self.automatic = automatic;

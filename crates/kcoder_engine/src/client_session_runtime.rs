@@ -181,7 +181,7 @@ impl QueryEngine {
             }
             _ => " Conversation boundary was not found (it may already be compacted); only files were restored.".to_string(),
         };
-        self.state.add_message(Message::user_text(format!(
+        self.state.add_message(Message::runtime_text(format!(
             "<system-reminder>Rewind to checkpoint turn {turn} completed: {summary}.{conversation_note}</system-reminder>"
         )));
         Ok((report, outcome))

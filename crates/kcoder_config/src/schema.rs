@@ -18,6 +18,54 @@ fn settings_schema() -> &'static Value {
     })
 }
 
+/// Describe a setting from the authoritative schema without reading user values.
+pub fn settings_schema_for_path(path: &str) -> Option<Value> {
+    fn resolve<'a>(root: &'a Value, mut node: &'a Value) -> Option<&'a Value> {
+        for _ in 0..32 {
+            let Some(reference) = node.get("$ref").and_then(Value::as_str) else {
+                return Some(node);
+            };
+            node = root.pointer(reference.strip_prefix('#')?)?;
+        }
+        None
+    }
+    let root = settings_schema();
+    let mut node = root;
+    for part in path.split('.') {
+        if part.is_empty() {
+            return None;
+        }
+        node = resolve(root, node)?.get("properties")?.get(part)?;
+    }
+    let mut result = resolve(root, node)?.clone();
+    // Include only reachable definitions so nested schemas remain self-contained.
+    let mut pending = vec![result.clone()];
+    let mut definitions = serde_json::Map::new();
+    while let Some(value) = pending.pop() {
+        match value {
+            Value::Object(map) => {
+                if let Some(reference) = map.get("$ref").and_then(Value::as_str) {
+                    let name = reference.strip_prefix("#/$defs/")?;
+                    if !definitions.contains_key(name) {
+                        let definition = root.pointer(&reference[1..])?.clone();
+                        definitions.insert(name.to_owned(), definition.clone());
+                        pending.push(definition);
+                    }
+                }
+                pending.extend(map.into_values());
+            }
+            Value::Array(items) => pending.extend(items),
+            _ => {}
+        }
+    }
+    if !definitions.is_empty() {
+        result
+            .as_object_mut()?
+            .insert("$defs".into(), Value::Object(definitions));
+    }
+    Some(result)
+}
+
 /// Materialize the embedded editor schema beside the user's settings file.
 ///
 /// The file is replaced on every startup so an installed binary cannot leave

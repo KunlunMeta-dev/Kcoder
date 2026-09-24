@@ -110,7 +110,7 @@ impl Tool for SkillManageTool {
          `create` for durable reusable procedures, and `write_file` for supporting \
          references/templates/scripts/assets. Do not save one-off details; save \
          recurring workflow knowledge, pitfalls, verification steps, and user-corrected \
-         procedures. This is for writing skills: to RUN one use skill; to install community skills use skill_hub; for archive/stale/consolidate housekeeping use skill_curator."
+         procedures. This is for writing skills: activation, community installation, and lifecycle housekeeping require separate attached controls."
             .to_string()
     }
 

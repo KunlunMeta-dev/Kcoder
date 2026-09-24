@@ -38,8 +38,9 @@ pub struct GrepInput {
     pub after_context: Option<usize>,
     /// Number of lines to show before and after each content match.
     #[serde(rename = "-C")]
+    #[schemars(skip)]
     pub context_flag: Option<usize>,
-    /// Alias for `-C`.
+    /// Lines before and after each content match.
     pub context: Option<usize>,
     /// Show line numbers in content mode. Defaults to true.
     #[serde(rename = "-n")]
@@ -50,8 +51,9 @@ pub struct GrepInput {
     /// Ripgrep file type filter such as `rust`, `js`, or `py`.
     #[serde(rename = "type")]
     pub file_type: Option<String>,
-    /// Maximum number of output lines/entries. Defaults to 250. Pass 0 for
-    /// unlimited.
+    /// Maximum output lines/entries, 1..=10000; defaults to 250. Zero is rejected.
+    /// Count totals still include all matches; only displayed per-file rows are limited.
+    #[schemars(range(min = 1, max = 10000))]
     pub head_limit: Option<usize>,
     /// Skip this many output lines/entries before applying `head_limit`.
     pub offset: Option<usize>,
@@ -120,6 +122,22 @@ impl Tool for GrepTool {
 
     async fn call(&self, input: Value, ctx: &ToolContext) -> Result<ToolOutput, ToolError> {
         let input: GrepInput = parse_input(&input)?;
+        if input
+            .head_limit
+            .is_some_and(|limit| limit == 0 || limit > 10_000)
+        {
+            return Ok(ToolOutput::error(
+                "head_limit must be in 1..=10000; zero no longer requests unlimited output. Omit it for 250, or paginate with offset. Count mode still computes the full aggregate.",
+            ));
+        }
+        if let (Some(context), Some(legacy)) = (input.context, input.context_flag) {
+            if context != legacy {
+                return Err(ToolError::InvalidInput(
+                    "Conflicting context and legacy -C values; use context only".into(),
+                ));
+            }
+        }
+
         let base = input
             .path
             .as_ref()
@@ -834,7 +852,7 @@ fn format_count_results(lines: Vec<String>, input: &GrepInput) -> String {
         .count();
     let (items, applied_limit) =
         apply_head_limit(lines, input.head_limit, input.offset.unwrap_or(0));
-    if items.is_empty() {
+    if total_matches == 0 {
         return "No matches found".to_string();
     }
     let mut text = items.join("\n");
@@ -858,10 +876,8 @@ fn apply_head_limit<T>(
     limit: Option<usize>,
     offset: usize,
 ) -> (Vec<T>, Option<usize>) {
-    if limit == Some(0) {
-        return (items.into_iter().skip(offset).collect(), None);
-    }
-    let effective_limit = limit.unwrap_or(DEFAULT_HEAD_LIMIT);
+    // Model and direct-tool entry points reject zero. Internal callers remain bounded.
+    let effective_limit = limit.unwrap_or(DEFAULT_HEAD_LIMIT).clamp(1, 10_000);
     let total_after_offset = items.len().saturating_sub(offset);
     let applied_limit = (total_after_offset > effective_limit).then_some(effective_limit);
     (
@@ -1019,6 +1035,42 @@ mod tests {
                 _ => None,
             })
             .collect::<String>()
+    }
+
+    #[tokio::test]
+    async fn zero_and_excessive_limits_are_rejected_even_for_narrow_count_searches() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("one.txt"), "needle\nneedle\n").unwrap();
+        let ctx = ToolContext::new(AppState::new(dir.path()));
+        for limit in [0, 10001] {
+            let result = GrepTool.call(json!({"pattern":"needle","path":"one.txt","output_mode":"count","head_limit":limit}), &ctx).await.unwrap();
+            assert!(result.is_error);
+            assert!(tool_text(&result).contains("1..=10000"));
+        }
+        let result = GrepTool
+            .call(
+                json!({"pattern":"needle","output_mode":"count","head_limit":1}),
+                &ctx,
+            )
+            .await
+            .unwrap();
+        assert!(!result.is_error);
+        assert!(tool_text(&result).contains("Found 2 total occurrences across 1 file."));
+    }
+
+    #[test]
+    fn count_aggregate_survives_row_limit_and_empty_pages() {
+        let mut input = grep_input_with_pattern("needle");
+        input.head_limit = Some(1);
+        let lines = vec!["one.txt:2".to_string(), "two.txt:3".to_string()];
+        let page = format_count_results(lines.clone(), &input);
+        assert!(page.contains("Found 5 total occurrences across 2 files."));
+        assert!(page.contains("one.txt:2"));
+        assert!(!page.contains("two.txt:3"));
+        input.offset = Some(99);
+        let empty_page = format_count_results(lines, &input);
+        assert!(empty_page.contains("Found 5 total occurrences across 2 files."));
+        assert!(!empty_page.contains("No matches found"));
     }
 
     #[test]
@@ -1189,11 +1241,8 @@ mod tests {
 
         assert!(output.is_error);
         let text = tool_text(&output);
-        assert!(text.contains("Refusing to run an unbounded grep"), "{text}");
-        assert!(text.contains("Preflight estimated"), "{text}");
-        assert!(text.contains("more than 500 files"), "{text}");
-        assert!(text.contains("type: \"rust\""), "{text}");
-        assert!(text.contains("head_limit: 0"), "{text}");
+        assert!(text.contains("head_limit must be in 1..=10000"), "{text}");
+        assert!(text.contains("zero no longer requests unlimited"), "{text}");
     }
 
     #[tokio::test]
@@ -1465,5 +1514,32 @@ mod tests {
 
         assert!(!text.contains("sandbox escape marker"), "{text}");
         assert!(!text.contains("linked.txt"), "{text}");
+    }
+}
+
+#[cfg(test)]
+mod context_alias_tests {
+    use super::*;
+    #[test]
+    fn advertises_only_canonical_context() {
+        let schema = GrepTool.input_schema();
+        assert!(schema["properties"].get("context").is_some());
+        assert!(schema["properties"].get("-C").is_none());
+        let input: GrepInput =
+            serde_json::from_value(serde_json::json!({"pattern":"x", "-C":2})).unwrap();
+        assert_eq!(input.context_flag, Some(2));
+    }
+    #[tokio::test]
+    async fn conflicting_aliases_fail_before_search() {
+        let ctx = ToolContext::new(kcoder_state::AppState::new("/nonexistent"));
+        assert!(matches!(
+            GrepTool
+                .call(
+                    serde_json::json!({"pattern":"x", "context":1, "-C":2}),
+                    &ctx
+                )
+                .await,
+            Err(ToolError::InvalidInput(_))
+        ));
     }
 }

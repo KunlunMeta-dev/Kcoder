@@ -402,6 +402,7 @@ fn history_restore_preserves_full_text_and_tool_blocks() {
     let long_text = format!("{}TAIL", "x".repeat(10_500));
     let messages = vec![
         Message::User {
+            origin: kcoder_types::MessageOrigin::Unknown,
             content: vec![ContentBlock::Text {
                 text: long_text.clone(),
             }],
@@ -415,6 +416,7 @@ fn history_restore_preserves_full_text_and_tool_blocks() {
             usage: None,
         },
         Message::User {
+            origin: kcoder_types::MessageOrigin::Unknown,
             content: vec![ContentBlock::ToolResult {
                 tool_use_id: "tool-1".to_string(),
                 content: vec![ContentBlock::Text {

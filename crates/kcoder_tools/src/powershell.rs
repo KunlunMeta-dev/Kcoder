@@ -45,7 +45,7 @@ pub struct PowerShellInput {
     /// JSON boolean controlling background task execution.
     ///
     /// Set true only for long-running commands where useful non-overlapping
-    /// work can continue before checking with TaskOutput. Do not add shell
+    /// work can continue before inspecting its managed output. Do not add shell
     /// wrappers like Start-Job unless explicitly needed.
     #[serde(default)]
     pub run_in_background: Option<bool>,
@@ -80,8 +80,7 @@ impl Tool for PowerShellTool {
         "Run a PowerShell command in the current working directory. \
          This Windows shell tool is exposed only on Windows by the default tool registry. \
          Use this for terminal operations such as build, test, git, package managers, Docker, or PowerShell cmdlets. \
-         Prefer dedicated tools for file search (`glob`), content search (`grep`), reading (`read`), editing (`edit`), \
-         and writing (`write`) because those tools provide better review and permission behavior. \
+         Prefer specialized file tools when attached; otherwise use bounded PowerShell inspection with the same permission limits. \
          Do not prefix commands with `cd` or `Set-Location`; the working directory is already the KCoder session directory. \
          Foreground commands are registered with the task manager and keep the same task ID if they exceed the configured foreground budget and move to background delivery. \
          For known long-running commands, set `run_in_background` instead of using `Start-Job` or polling with `Start-Sleep`."
@@ -99,7 +98,7 @@ impl Tool for PowerShellTool {
             ToolPermissionMode::Bypass | ToolPermissionMode::Yolo
         ) {
             description.push_str(
-                " Current permission mode bypasses normal approval prompts; inspect commands carefully before using this tool.",
+                " Current permission mode bypasses normal approval prompts, including the runtime sandbox-escalation approval path. Explicit deny rules still apply. This mode is not a confinement guarantee; execute only work authorized by the user.",
             );
         }
         if ctx.is_non_interactive {

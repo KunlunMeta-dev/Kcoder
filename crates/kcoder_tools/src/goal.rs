@@ -63,6 +63,9 @@ pub struct UpdateGoalInput {
     /// Required when status is `blocked`; describe the concrete blocking condition.
     #[serde(default)]
     pub reason: Option<String>,
+    /// Stable ID for the same external blocker across turns; optional, 1–128 ASCII letters/digits or . _ : -. Without it, exact trimmed reason text identifies the blocker.
+    #[serde(default)]
+    pub blocker_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -208,11 +211,12 @@ impl Tool for UpdateGoalTool {
          objective is genuinely achieved, or `blocked` after the same blocking condition has \
          repeated for at least three consecutive goal turns and no meaningful progress can be \
          made without user input or an external state change. Supply `reason` for blocked so the \
-         runtime can compare distinct goal turns. A budget-limited goal may still \
+         runtime audits consecutive outer Engine executions (not API retries or tool rounds). \
+         Use the same blocker_id for an unchanged blocker; otherwise exact trimmed reason text identifies it. A budget-limited goal may still \
          receive this final verdict when the wrap-up shows the objective was reached or is \
          genuinely blocked. Verifier/provider/protocol infrastructure failures never count as \
          the blocking condition and cannot accumulate the blocked audit. Do not use this to \
-         pause, resume, clear, or budget-limit a goal; \
+         pause, resume, cancel, clear, or budget-limit a goal; \
          those are controlled by the user or runtime."
             .to_string()
     }
@@ -259,6 +263,7 @@ impl Tool for UpdateGoalTool {
                 goal: Some(current_goal),
             });
         }
+        let mut verdict_revision = current_goal.revision;
         if status == GoalStatus::Blocked {
             let reason = input
                 .reason
@@ -276,8 +281,14 @@ impl Tool for UpdateGoalTool {
                     goal: Some(current_goal),
                 });
             }
-            let fingerprint = blocked_reason_fingerprint(reason);
-            let Some(candidate) = ctx.state.record_goal_blocked_candidate(&fingerprint) else {
+            let blocker_id = input.blocker_id.as_deref();
+            if blocker_id.is_some_and(|id| id.is_empty() || id.len() > 128 || !id.bytes().all(|b| b.is_ascii_alphanumeric() || b"._:-".contains(&b))) {
+                return Err(ToolError::InvalidInput("blocker_id must be 1–128 ASCII letters/digits or . _ : -".into()));
+            }
+            let fingerprint = blocked_reason_fingerprint(&match blocker_id {
+                Some(id) => format!("id:{id}"), None => format!("reason:{}", reason.trim()),
+            });
+            let Some(candidate) = ctx.state.record_goal_blocked_candidate_details(&fingerprint, blocker_id, Some(reason), Some((&current_goal.goal_id, current_goal.revision))) else {
                 return respond_error(GoalToolResponse {
                     success: false,
                     message: "Goal blocked candidate could not be recorded because the goal state changed."
@@ -285,11 +296,12 @@ impl Tool for UpdateGoalTool {
                     goal: ctx.state.goal(),
                 });
             };
+            verdict_revision = candidate.revision;
             if candidate.blocked_candidate_count < 3 {
                 return respond_error(GoalToolResponse {
                     success: false,
                     message: format!(
-                        "Blocked candidate recorded for goal turn {} ({}/3 consecutive turns). Keep working when meaningful progress is possible; the same blocking condition must recur on three distinct goal turns before the goal can be marked blocked.",
+                        "Blocked candidate recorded for goal turn {} ({}/3 consecutive turns). Keep working when meaningful progress is possible; the same blocking condition must recur on three consecutive goal turns before the goal can be marked blocked.",
                         candidate.turn_count, candidate.blocked_candidate_count
                     ),
                     goal: Some(candidate),
@@ -317,10 +329,10 @@ impl Tool for UpdateGoalTool {
         if status == GoalStatus::Complete && current_goal.mode.is_strict() {
             return verify_strict_completion(ctx, &current_goal).await;
         }
-        let Some(goal) = ctx.state.update_goal_status(status) else {
+        let Some(goal) = ctx.state.commit_goal_model_status(&current_goal.goal_id, verdict_revision, status) else {
             return respond_error(GoalToolResponse {
                 success: false,
-                message: "Goal update rejected because the goal no longer exists.".to_string(),
+                message: "Goal update rejected because the goal changed or was cancelled.".to_string(),
                 goal: ctx.state.goal(),
             });
         };
@@ -341,21 +353,7 @@ impl Tool for UpdateGoalTool {
 }
 
 fn blocked_reason_fingerprint(reason: &str) -> String {
-    let normalized = reason
-        .chars()
-        .flat_map(char::to_lowercase)
-        .map(|character| {
-            if character.is_alphanumeric() {
-                character
-            } else {
-                ' '
-            }
-        })
-        .collect::<String>()
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
-    format!("{:x}", Sha256::digest(normalized.as_bytes()))
+    format!("{:x}", Sha256::digest(reason.trim().as_bytes()))
 }
 
 /// Normalized verdict for a verifier-panel member after vote handling, text fallback, and machine gates.
@@ -2301,7 +2299,7 @@ fn verifier_turn_limit_exhausted(output: &str) -> bool {
 fn recent_goal_evidence(ctx: &ToolContext) -> String {
     let mut evidence = Vec::new();
     for message in ctx.state.messages().iter().rev() {
-        let Message::User { content } = message else {
+        let Message::User { content, .. } = message else {
             continue;
         };
         for block in content.iter().rev() {
@@ -2346,7 +2344,7 @@ fn recent_completion_failure_evidence(ctx: &ToolContext) -> Option<String> {
     let shell_commands = collect_shell_tool_use_commands(&messages);
     let verification_tool_uses = collect_verification_tool_use_ids(&messages);
     for message in messages.iter().rev() {
-        let Message::User { content } = message else {
+        let Message::User { content, .. } = message else {
             continue;
         };
         for block in content.iter().rev() {
@@ -3846,7 +3844,7 @@ mod tests {
             ctx.state.record_goal_turn_start(&goal.goal_id).unwrap();
             let output = UpdateGoalTool
                 .call(
-                    serde_json::json!({"status": "blocked", "reason": "API unavailable!!!"}),
+                    serde_json::json!({"status": "blocked", "reason": "api unavailable"}),
                     &ctx,
                 )
                 .await
@@ -3865,6 +3863,33 @@ mod tests {
             .unwrap();
         assert!(!output.is_error);
         assert_eq!(ctx.state.goal().unwrap().status, GoalStatus::Blocked);
+    }
+
+    #[tokio::test]
+    async fn blocked_audit_stable_id_has_bounded_diagnostics_and_cannot_cancel() {
+        let ctx = ToolContext::new(AppState::new("/"));
+        let goal = ctx.state.set_goal("ship", None);
+        for (index, reason) in ["waiting for account access", "account access still absent", "account access not restored"].iter().enumerate() {
+            ctx.state.record_goal_turn_start(&goal.goal_id).unwrap();
+            let output = UpdateGoalTool.call(serde_json::json!({"status":"blocked", "blocker_id":"account-access", "reason":reason}), &ctx).await.unwrap();
+            assert_eq!(output.is_error, index < 2);
+            let goal = ctx.state.goal().unwrap();
+            assert_eq!(goal.blocked_candidate_count, index as u32 + 1);
+            assert_eq!(goal.blocked_candidate_id.as_deref(), Some("account-access"));
+            assert_eq!(goal.blocked_candidate_reason.as_deref(), Some(*reason));
+        }
+        assert!(UpdateGoalTool.call(serde_json::json!({"status":"cancelled"}), &ctx).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn blocked_audit_without_id_does_not_guess_equivalent_reasons() {
+        let ctx = ToolContext::new(AppState::new("/"));
+        let goal = ctx.state.set_goal("ship", None);
+        for reason in ["API unavailable", "api unavailable", "API unavailable!"] {
+            ctx.state.record_goal_turn_start(&goal.goal_id).unwrap();
+            assert!(UpdateGoalTool.call(serde_json::json!({"status":"blocked", "reason":reason}), &ctx).await.unwrap().is_error);
+            assert_eq!(ctx.state.goal().unwrap().blocked_candidate_count, 1);
+        }
     }
 
     #[tokio::test]
@@ -4854,7 +4879,7 @@ mod tests {
             usage: None,
         });
         state.add_message(Message::User {
-            content: vec![ContentBlock::ToolResult {
+            origin: kcoder_types::MessageOrigin::Unknown, content: vec![ContentBlock::ToolResult {
                 tool_use_id: "bash-failed".to_string(),
                 content: vec![ContentBlock::Text {
                     text: "exit_code: 1\nFAILED regression".to_string(),
@@ -5351,7 +5376,7 @@ mod tests {
         ctx.state
             .update_active_goal_status(GoalStatus::BudgetLimited);
         ctx.state.add_message(Message::User {
-            content: vec![ContentBlock::ToolResult {
+            origin: kcoder_types::MessageOrigin::Unknown, content: vec![ContentBlock::ToolResult {
                 tool_use_id: "tool-1".to_string(),
                 content: vec![ContentBlock::Text {
                     text: "stdout:\nTraceback (most recent call last):\nAssertionError\n"
@@ -5375,7 +5400,7 @@ mod tests {
         let ctx = ToolContext::new(AppState::new("/"));
         ctx.state.set_goal("finish", None);
         ctx.state.add_message(Message::User {
-            content: vec![ContentBlock::ToolResult {
+            origin: kcoder_types::MessageOrigin::Unknown, content: vec![ContentBlock::ToolResult {
                 tool_use_id: "tool-1".to_string(),
                 content: vec![ContentBlock::Text {
                     text: "stdout:\nTraceback (most recent call last):\nAssertionError\n"
@@ -5407,7 +5432,7 @@ mod tests {
             usage: None,
         });
         ctx.state.add_message(Message::User {
-            content: vec![ContentBlock::ToolResult {
+            origin: kcoder_types::MessageOrigin::Unknown, content: vec![ContentBlock::ToolResult {
                 tool_use_id: "bash-old".to_string(),
                 content: vec![ContentBlock::Text {
                     text: "exit_code: 0\nfailure_evidence: FAILED, AssertionError\n".to_string(),
@@ -5424,7 +5449,7 @@ mod tests {
             usage: None,
         });
         ctx.state.add_message(Message::User {
-            content: vec![ContentBlock::ToolResult {
+            origin: kcoder_types::MessageOrigin::Unknown, content: vec![ContentBlock::ToolResult {
                 tool_use_id: "bash-1".to_string(),
                 content: vec![ContentBlock::Text {
                     text: "exit_code: 0\nstdout:\ntest_issue_6275 FAILED\nTraceback (most recent call last):\nAssertionError\n3 expected failures\n"
@@ -5448,7 +5473,7 @@ mod tests {
         let ctx = ToolContext::new(AppState::new("/"));
         ctx.state.set_goal("finish", None);
         ctx.state.add_message(Message::User {
-            content: vec![ContentBlock::ToolResult {
+            origin: kcoder_types::MessageOrigin::Unknown, content: vec![ContentBlock::ToolResult {
                 tool_use_id: "bash-old".to_string(),
                 content: vec![ContentBlock::Text {
                     text: "exit_code: 0\nfailure_evidence: FAILED\n".to_string(),
@@ -5467,7 +5492,7 @@ mod tests {
             usage: None,
         });
         ctx.state.add_message(Message::User {
-            content: vec![ContentBlock::ToolResult {
+            origin: kcoder_types::MessageOrigin::Unknown, content: vec![ContentBlock::ToolResult {
                 tool_use_id: "bash-test".to_string(),
                 content: vec![ContentBlock::Text {
                     text: "exit_code: 0\nstdout:\n20 passed\n".to_string(),
@@ -5498,7 +5523,7 @@ mod tests {
             usage: None,
         });
         ctx.state.add_message(Message::User {
-            content: vec![ContentBlock::ToolResult {
+            origin: kcoder_types::MessageOrigin::Unknown, content: vec![ContentBlock::ToolResult {
                 tool_use_id: "bash-failed".to_string(),
                 content: vec![ContentBlock::Text {
                     text: "exit_code: 1\nAssertionError\n".to_string(),
@@ -5515,7 +5540,7 @@ mod tests {
             usage: None,
         });
         ctx.state.add_message(Message::User {
-            content: vec![ContentBlock::ToolResult {
+            origin: kcoder_types::MessageOrigin::Unknown, content: vec![ContentBlock::ToolResult {
                 tool_use_id: "bash-status".to_string(),
                 content: vec![ContentBlock::Text {
                     text: "exit_code: 0\nstdout:\n M src/lib.rs\n".to_string(),
@@ -5548,7 +5573,7 @@ mod tests {
             usage: None,
         });
         ctx.state.add_message(Message::User {
-            content: vec![ContentBlock::ToolResult {
+            origin: kcoder_types::MessageOrigin::Unknown, content: vec![ContentBlock::ToolResult {
                 tool_use_id: "bash-grep".to_string(),
                 content: vec![ContentBlock::Text {
                     text: "exit_code: 1\n(no output)\n".to_string(),
@@ -5579,7 +5604,7 @@ mod tests {
             usage: None,
         });
         ctx.state.add_message(Message::User {
-            content: vec![ContentBlock::ToolResult {
+            origin: kcoder_types::MessageOrigin::Unknown, content: vec![ContentBlock::ToolResult {
                 tool_use_id: "bash-test".to_string(),
                 content: vec![ContentBlock::Text {
                     text: "exit_code: 1\n(no output)\n".to_string(),
@@ -5611,7 +5636,7 @@ mod tests {
                 usage: None,
             });
             ctx.state.add_message(Message::User {
-                content: vec![ContentBlock::ToolResult {
+                origin: kcoder_types::MessageOrigin::Unknown, content: vec![ContentBlock::ToolResult {
                     tool_use_id: "bash-check".to_string(),
                     content: vec![ContentBlock::Text {
                         text:
@@ -5655,7 +5680,7 @@ mod tests {
                 usage: None,
             });
             ctx.state.add_message(Message::User {
-                content: vec![ContentBlock::ToolResult {
+                origin: kcoder_types::MessageOrigin::Unknown, content: vec![ContentBlock::ToolResult {
                     tool_use_id: "bash-grep".to_string(),
                     content: vec![ContentBlock::Text {
                         text: result.to_string(),
@@ -5678,7 +5703,7 @@ mod tests {
         let ctx = ToolContext::new(AppState::new("/"));
         ctx.state.set_goal("finish", None);
         ctx.state.add_message(Message::User {
-            content: vec![ContentBlock::ToolResult {
+            origin: kcoder_types::MessageOrigin::Unknown, content: vec![ContentBlock::ToolResult {
                 tool_use_id: "bash-old".to_string(),
                 content: vec![ContentBlock::Text {
                     text: "exit_code: 0\nfailure_evidence: FAILED, AssertionError\n".to_string(),
@@ -5695,7 +5720,7 @@ mod tests {
             usage: None,
         });
         ctx.state.add_message(Message::User {
-            content: vec![ContentBlock::ToolResult {
+            origin: kcoder_types::MessageOrigin::Unknown, content: vec![ContentBlock::ToolResult {
                 tool_use_id: "task-output-1".to_string(),
                 content: vec![ContentBlock::Text {
                     text: serde_json::json!({
@@ -5759,7 +5784,7 @@ mod tests {
             usage: None,
         });
         ctx.state.add_message(Message::User {
-            content: vec![ContentBlock::ToolResult {
+            origin: kcoder_types::MessageOrigin::Unknown, content: vec![ContentBlock::ToolResult {
                 tool_use_id: "goal-1".to_string(),
                 content: vec![ContentBlock::Text {
                     text: "Goal completion rejected because recent tool output still contains failure evidence: tool_result.is_error=true; preview: old failure"
@@ -5783,7 +5808,7 @@ mod tests {
         let ctx = ToolContext::new(AppState::new("/"));
         ctx.state.set_goal("test read tool", None);
         ctx.state.add_message(Message::User {
-            content: vec![ContentBlock::ToolResult {
+            origin: kcoder_types::MessageOrigin::Unknown, content: vec![ContentBlock::ToolResult {
                 tool_use_id: "read-1".to_string(),
                 content: vec![ContentBlock::Text {
                     text: "/tmp/docs is a directory, not a file".to_string(),
