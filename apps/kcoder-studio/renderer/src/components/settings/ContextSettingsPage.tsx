@@ -14,6 +14,7 @@ import {
   type AppPreferences,
 } from '@/tauri/appPreferences'
 import { CodexPersonalitySettings } from './CodexPersonalitySettings'
+import { ToolProfileSettings } from './ToolProfileSettings'
 import type { DeviceInfo } from '@/types/api'
 
 export function ContextSettingsPage({ devices = [] }: { devices?: DeviceInfo[] }) {
@@ -215,6 +216,8 @@ export function ContextSettingsPage({ devices = [] }: { devices?: DeviceInfo[] }
           />
         </div>
       </section>
+
+      <ToolProfileSettings serverId={selectedDeviceId} />
 
       <CodexPersonalitySettings deviceId={selectedDeviceId || undefined} />
 

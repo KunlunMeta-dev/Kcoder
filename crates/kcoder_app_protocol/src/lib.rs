@@ -25,6 +25,8 @@ mod thread_creations;
 pub use thread_creations::*;
 mod turn_receipts;
 pub use turn_receipts::*;
+mod tool_profiles;
+pub use tool_profiles::*;
 mod turn_file_changes;
 pub use turn_file_changes::*;
 mod agent;
@@ -145,6 +147,8 @@ pub mod method {
     pub const MARKETPLACE_REMOVE: &str = "marketplace/remove";
     pub const MARKETPLACE_REFRESH: &str = "marketplace/refresh";
     /// Session-level settings templates: list/read/save/delete/default.
+    pub const SETTINGS_TOOLS_READ: &str = "settings/tools/read";
+    pub const SETTINGS_TOOLS_SAVE: &str = "settings/tools/save";
     pub const SETTINGS_TEMPLATES_LIST: &str = "settings/templates/list";
     pub const SETTINGS_TEMPLATES_READ: &str = "settings/templates/read";
     pub const SETTINGS_TEMPLATES_SAVE: &str = "settings/templates/save";

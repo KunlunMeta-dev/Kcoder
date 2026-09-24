@@ -1,3 +1,4 @@
+mod tool_profiles;
 #[cfg(test)]
 mod credential_http_tests;
 
@@ -15,7 +16,6 @@ use tokio::sync::Mutex;
 pub(super) struct SessionConfiguration {
     loader: SettingsLoader,
     cli: crate::Cli,
-    builtin_tools: ToolRegistry,
     mcp_cache: Arc<Mutex<Option<CachedMcpSnapshot>>>,
     mcp_attempts: Arc<
         std::sync::Mutex<
@@ -35,6 +35,7 @@ struct CachedMcpSnapshot {
 
 #[derive(PartialEq)]
 struct McpSnapshotKey {
+    builtin_names: Vec<String>,
     configs: Value,
     project_servers: std::collections::BTreeSet<String>,
     trust_profile: std::path::PathBuf,
@@ -52,6 +53,7 @@ impl McpSnapshotKey {
         paths: &kcoder_config::ConfigPaths,
     ) -> Result<Self> {
         Ok(Self {
+            builtin_names: Vec::new(),
             configs: serde_json::to_value(&settings.mcp_servers)?,
             project_servers: crate::project_mcp_server_names(&paths.project_root),
             trust_profile: paths.config_dir.clone(),
@@ -65,15 +67,10 @@ impl McpSnapshotKey {
 }
 
 impl SessionConfiguration {
-    pub(super) fn new(
-        loader: SettingsLoader,
-        cli: crate::Cli,
-        builtin_tools: ToolRegistry,
-    ) -> Self {
+    pub(super) fn new(loader: SettingsLoader, cli: crate::Cli) -> Self {
         Self {
             loader,
             cli,
-            builtin_tools,
             mcp_cache: Arc::new(Mutex::new(None)),
             mcp_attempts: Arc::new(std::sync::Mutex::new(std::collections::BTreeMap::new())),
         }
@@ -100,7 +97,6 @@ impl SessionConfiguration {
         Self {
             loader: self.loader.clone().with_prepended_overlay_files([path]),
             cli: self.cli.clone(),
-            builtin_tools: self.builtin_tools.clone(),
             mcp_cache: Arc::new(Mutex::new(None)),
             mcp_attempts: Arc::new(std::sync::Mutex::new(std::collections::BTreeMap::new())),
         }
@@ -134,6 +130,10 @@ impl SessionConfiguration {
         plugins: &EffectivePluginSnapshot,
         tools: &ToolRegistry,
     ) -> Result<()> {
+        let builtins = crate::builtin_tools_for_settings(&self.cli, settings);
+        if builtins.names().is_empty() {
+            return Ok(());
+        }
         if settings
             .mcp_servers
             .iter()
@@ -147,11 +147,14 @@ impl SessionConfiguration {
                 kcoder_app_protocol::McpConnectionAttemptStatus::Ready,
             );
         }
+        let mut key = McpSnapshotKey::new(settings, plugins, &self.loader.paths()?)?;
+        key.builtin_names = builtins.names();
+        key.builtin_names.sort();
         *self
             .mcp_cache
             .try_lock()
             .context("session configuration cache is busy")? = Some(CachedMcpSnapshot {
-            key: McpSnapshotKey::new(settings, plugins, &self.loader.paths()?)?,
+            key,
             tools: tools.clone(),
             _plugin_leases: plugins.version_leases.clone(),
         });
@@ -219,12 +222,16 @@ impl SessionConfiguration {
         settings: &Settings,
         plugins: &EffectivePluginSnapshot,
     ) -> Result<ToolRegistry> {
-        if self.builtin_tools.names().is_empty() {
-            return Ok(self.builtin_tools.clone());
+        // Rebuild per newly activated conversation; resident engines keep their own registry.
+        let builtin_tools = crate::builtin_tools_for_settings(&self.cli, settings);
+        if builtin_tools.names().is_empty() {
+            return Ok(builtin_tools);
         }
         let paths = self.loader.paths()?;
         let project_mcp_names = crate::project_mcp_server_names(&paths.project_root);
         let mut key = McpSnapshotKey::new(settings, plugins, &paths)?;
+        key.builtin_names = builtin_tools.names();
+        key.builtin_names.sort();
         let revision_valid =
             match crate::mcp_connection::authorization_revisions(&settings.mcp_servers).await {
                 Ok(revisions) => {
@@ -247,7 +254,7 @@ impl SessionConfiguration {
         let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
         let mut complete = revision_valid;
         let tools = {
-            let mut tools = self.builtin_tools.clone();
+            let mut tools = builtin_tools;
             let configured_count = settings
                 .mcp_servers
                 .len()
@@ -361,7 +368,7 @@ mod model_refresh_source_tests {
             .with_overlay_files([overlay.clone()]);
         let mut cli = crate::Cli::parse_from(["kcoder"]);
         cli.max_tokens = None;
-        let config = SessionConfiguration::new(loader, cli, ToolRegistry::new())
+        let config = SessionConfiguration::new(loader, cli)
             .freeze_model_overlays()
             .unwrap();
         let source = config.model_source();
@@ -386,6 +393,74 @@ mod model_refresh_source_tests {
         );
     }
     #[tokio::test]
+    async fn new_session_registry_reloads_profile_and_preserves_existing_snapshot() {
+        let temp = tempfile::tempdir().unwrap();
+        let config = SessionConfiguration::new(
+            SettingsLoader::new(temp.path()).with_config_dir(temp.path()),
+            crate::Cli::parse_from(["kcoder"]),
+        );
+        let plugins = EffectivePluginSnapshot::default();
+        let mut settings = Settings::default();
+        let full = config.tools(&settings, &plugins).await.unwrap();
+        std::fs::write(
+            temp.path().join("settings.json"),
+            r#"{"tools":{"profile":"nano"}}"#,
+        )
+        .unwrap();
+        settings = config.settings(temp.path(), true).unwrap();
+        assert_eq!(settings.tools.profile, kcoder_config::ToolProfile::Nano);
+        let nano = config.tools(&settings, &plugins).await.unwrap();
+        assert!(full.names().len() > nano.names().len());
+        assert!(nano.names().contains(&"CtxInspect".to_owned()));
+        let full_names = full.names();
+        settings.tools.profile = kcoder_config::ToolProfile::None;
+        // None must not even attempt to connect a configured MCP endpoint.
+        settings.mcp_servers.push(
+            serde_json::from_value(serde_json::json!({
+                "name":"unreachable", "transport":"stdio", "command":"does-not-exist"
+            }))
+            .unwrap(),
+        );
+        assert!(config
+            .tools(&settings, &plugins)
+            .await
+            .unwrap()
+            .names()
+            .is_empty());
+        assert!(config
+            .mcp_connection_attempt(&settings.mcp_servers[0])
+            .is_none());
+        assert_eq!(full.names(), full_names);
+        settings.mcp_servers.clear();
+        settings.tools.profile = kcoder_config::ToolProfile::Full;
+        assert_eq!(
+            config.tools(&settings, &plugins).await.unwrap().names(),
+            full_names
+        );
+    }
+
+    #[tokio::test]
+    async fn explicit_profile_survives_settings_reload_and_disabled_filter() {
+        let temp = tempfile::tempdir().unwrap();
+        let config = SessionConfiguration::new(
+            SettingsLoader::new(temp.path()).with_config_dir(temp.path()),
+            crate::Cli::parse_from(["kcoder", "--tool-profile", "nano"]),
+        );
+        let mut settings = Settings::default();
+        settings.tools.profile = kcoder_config::ToolProfile::None;
+        let plugins = EffectivePluginSnapshot::default();
+        let tools = config.tools(&settings, &plugins).await.unwrap();
+        assert!(tools.names().contains(&"CtxInspect".to_owned()));
+        settings.tools.disabled.push("CtxInspect".into());
+        assert!(!config
+            .tools(&settings, &plugins)
+            .await
+            .unwrap()
+            .names()
+            .contains(&"CtxInspect".to_owned()));
+    }
+
+    #[tokio::test]
     async fn resident_provider_rejects_removed_stored_credentials_without_legacy_fallback() {
         let temp = tempfile::tempdir().unwrap();
         let loader = SettingsLoader::new(temp.path()).with_config_dir(temp.path());
@@ -402,11 +477,7 @@ mod model_refresh_source_tests {
         loader
             .refresh_stored_provider_credentials(&mut settings)
             .unwrap();
-        let config = SessionConfiguration::new(
-            loader,
-            crate::Cli::parse_from(["kcoder"]),
-            ToolRegistry::new(),
-        );
+        let config = SessionConfiguration::new(loader, crate::Cli::parse_from(["kcoder"]));
         let provider = config
             .provider_for_kind(&settings, ProviderKind::Openai)
             .unwrap();
@@ -462,7 +533,6 @@ mod mcp_connection_attempt_tests {
             SessionConfiguration::new(
                 SettingsLoader::new(temp.path()).with_config_dir(temp.path()),
                 crate::Cli::parse_from(["kcoder"]),
-                ToolRegistry::new(),
             )
         };
         let configuration = make();

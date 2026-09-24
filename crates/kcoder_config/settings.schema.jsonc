@@ -725,6 +725,7 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "profile": { "enum": ["full", "core", "nano", "none"], "default": "full", "description": "Explicit built-in tool registry profile. Selected when a TUI process or a new Studio conversation starts; CLI --tool-profile overrides this setting. Existing resident conversations retain their registry. Provider IDs and endpoint addresses do not select a profile." },
         "coerce": {
           "type": "object",
           "additionalProperties": false,

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { startChromium } from "../../harness/chromium.mjs";
 import { startGateway } from "../../harness/gateway.mjs";
 import { assertRendererBuildFresh } from "../../harness/renderer-build.mjs";
@@ -19,10 +20,13 @@ await runE2E(
     const { path: workspace } = await materializeWorkspace(context, "minimal", {
       instanceId: "workspace-context-settings",
     });
+    const toolsConfig = { disabled: ['Spec*'], coerce: { semantic_boolean: false }, luna: { allowed: ['read'] } };
+    const settingsPath = await context.writeStateJson('tool-profile-config/settings.json', { providers: {}, tools: toolsConfig });
     const gateway = await startGateway(context, {
       label: "workspace-context-settings-gateway",
       workspace,
       auth: true,
+      env: { KCODER_CONFIG_DIR: context.pathInState('tool-profile-config') },
     });
     const chromium = await startChromium(context, {
       label: "workspace-context-settings-chromium",
@@ -36,6 +40,21 @@ await runE2E(
 
     await login(primary, gateway);
     await openContextSettings(primary, gateway);
+
+    // Toolset is target configuration, not a client preference. Exercise the real
+    // select popup, RPC save, persisted sibling fields, reload and second client.
+    const toolProfile = primary.getByTestId('tool-profile-select');
+    await primary.waitForFunction(() => {
+      const select = document.querySelector('[data-testid="tool-profile-select"]');
+      return select && !select.disabled;
+    });
+    assert.equal(await toolProfile.inputValue(), 'full');
+    await toolProfile.click();
+    await primary.getByRole('listbox').getByRole('option', { name: '核心工具集', exact: true }).click();
+    await primary.getByTestId('tool-profile-save').click();
+    await primary.getByTestId('tool-profile-settings').getByRole('status').waitFor();
+    const persistedTools = JSON.parse(await readFile(settingsPath, 'utf8')).tools;
+    assert.deepEqual(persistedTools, { ...toolsConfig, profile: 'core' });
 
     const terminalToggle = primary.getByTestId(
       "context-terminal-injection-toggle",
@@ -72,6 +91,7 @@ await runE2E(
     );
     await assertPersonality(primary, "亲和");
     await assertInstructions(primary, instructions);
+    assert.equal(await primary.getByTestId('tool-profile-select').inputValue(), 'core');
 
     const secondaryContext = await chromium.browser.newContext({
       viewport: { width: 1024, height: 720 },
@@ -80,6 +100,7 @@ await runE2E(
     observe(secondary, diagnostics, "secondary");
     await login(secondary, gateway);
     await openContextSettings(secondary, gateway);
+    await secondary.waitForFunction(() => document.querySelector('[data-testid="tool-profile-select"]')?.value === 'core');
 
     await assertSwitch(
       secondary.getByTestId("context-terminal-injection-toggle"),
@@ -103,6 +124,19 @@ await runE2E(
       .getByTestId("context-settings-page")
       .waitFor({ state: "visible", timeout: 30_000 });
     await assertInstructions(secondary, "");
+
+    await primary.goto(new URL('/settings', gateway.baseUrl).href);
+    await primary.getByTestId('general-language-en-button').click();
+    await openContextSettings(primary, gateway);
+    await primary.waitForFunction(() => document.querySelector('[data-testid="tool-profile-select"]')?.value === 'core');
+    const profileCopy = await primary.getByTestId('tool-profile-settings').innerText();
+    assert.match(profileCopy, /Toolset/);
+    assert.match(profileCopy, /without autonomous skill discovery/);
+    assert.doesNotMatch(profileCopy, /[\u3400-\u9fff]/);
+    await context.writeArtifactJson('tool-profile-settings.json', {
+      savedProfile: 'core', siblingFieldsPreserved: true, secondClientObserved: true,
+      englishCopy: profileCopy,
+    });
 
     await primary.screenshot({
       path: context.pathInArtifacts("context-settings-primary.png"),

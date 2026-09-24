@@ -509,7 +509,7 @@ sessions can also run in daemon and be attached (tmux provides pty).
 | `-a, --api-key <key>` | API key override for Anthropic-compatible providers (hidden echo) |
 | `--base-url <url>` | Base URL override for Anthropic-compatible providers |
 | `-p, --permission-mode <mode>` | Permission mode (`ask` / `auto` / `accept-edits` / `dont-ask` / `bypass` / `yolo`) |
-| `--tool-profile <full\|core\|nano\|none\|auto>` | Tool profile; `auto` uses `full` for cloud, `core` for local |
+| `--tool-profile <full\|core\|nano\|none\|auto>` | Tool profile override; `auto` follows `tools.profile` (default `full`) |
 | `--json` | Output newline-delimited JSON events |
 | `--max-tokens <n>` | Single-response token limit |
 | `--summary-provider <name>` | Summary provider override |
@@ -615,7 +615,7 @@ kcoder \
   "hi"
 ```
 
-For the local provider, `--tool-profile auto` defaults to `core`, providing multi-agent collaboration, tasks, goals, and Web capabilities on top of the basic development tools, while avoiding loading the full tool list. Small models that need the minimal tool surface from the legacy `core` can pass `--tool-profile nano`; for all tools pass `--tool-profile full`; for pure chat or connectivity testing pass `--tool-profile none`.
+Set `tools.profile` explicitly to `full` (default), `core`, `nano`, or `none`. The tool surface never depends on the Provider type or whether its endpoint is public, loopback, or private. `--tool-profile full|core|nano|none` overrides settings for that process; the compatible `auto` value follows the merged settings. In Studio, create a new conversation after changing the profile; existing resident conversations keep their current tool set.
 
 ### Ollama
 
@@ -623,7 +623,7 @@ Ollama's OpenAI-compatible endpoint validates every tool schema before the reque
 
 - KCoder declares `properties` on every object schema it sends — including the empty object `{}` for no-argument tools — both for built-in tools and for MCP/plugin tools on the OpenAI-compatible wire. Ollama's validator accepts `{"type":"object","properties":{}}` but rejects `{"type":"object"}` with `JSON schema error at #: properties must be an object`.
 - Thinking output: both the DeepSeek-style `delta.reasoning_content` and Ollama's `delta.reasoning` are mapped to the thinking channel and rendered as a collapsed block.
-- `--tool-profile auto` treats endpoints on `localhost`, `127.0.0.0/8`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `169.254.0.0/16`, and `*.local` as local runtimes, so an Ollama endpoint selects `core` automatically. Use `--tool-profile nano` for the smallest surface or `none` for pure chat.
+- Local runtimes use the same explicit `tools.profile` setting as cloud or proxied models. Choose `core`/`nano` only when you want a reduced tool surface, or `none` for pure chat.
 - Ollama currently offers no server-side switch to relax this validation. If a request is still rejected, one tool schema — often contributed by an MCP server — is at fault; disable that server to proceed.
 
 ### Gemini / Grok
@@ -665,7 +665,7 @@ The permission engine uses an 8-layer priority decision chain:
 7. High-risk shell command interactive confirmation (`high_risk_ask`, triggered when not bypass and not dont-ask)
 8. Mode heuristic (ask/auto/accept-edits/bypass/yolo/dont-ask)
 
-`allowed_tools` / `denied_tools` are decision-chain entries (layer 2 above): they decide whether a tool call may proceed, not which tools the model can see. The model-visible tool list is controlled by `--tool-profile` (`full` / `core` / `nano` / `none`); `denied_tools` does not shrink the tool definitions sent to the model.
+`allowed_tools` / `denied_tools` are decision-chain entries (layer 2 above): they decide whether a tool call may proceed, not which tools the model can see. The model-visible tool list is controlled by `tools.profile` and its `--tool-profile` override (`full` / `core` / `nano` / `none`); `denied_tools` does not shrink the tool definitions sent to the model.
 
 Permission responses support `AllowOnce`, `AllowAlways`, `AllowForSession`, `DenyOnce`, `DenyAlways`, `DenyForSession`,
 and `Edit` (allows the user to edit tool input before authorization). Both session-level and persistent rules are atomic dual-write (disk first, then memory);
@@ -733,7 +733,7 @@ pub trait Tool: Send + Sync {
 
 `name()`, `description()`, `input_schema()`, and `call()` must be implemented; the rest have default implementations, which tools override as needed.
 
-Tool profiles (`--tool-profile`, default `auto`):
+Tool profiles (`tools.profile`, default `full`; CLI `--tool-profile auto` follows settings):
 
 | Profile | Content |
 |---------|------|
@@ -741,7 +741,11 @@ Tool profiles (`--tool-profile`, default `auto`):
 | `core` | Basic development tools from `nano`, plus `spawn_agent`, `explore_agent`, `SendMessage`, `wait`, `close_agent`, all `Task*`, `get/create/update_goal`, and `WebFetch`, `WebSearch`, `WebBrowser`; excludes `AskUserQuestion` |
 | `nano` | `read`, `write`, `edit`, `glob`, `grep`, `TodoWrite`, `Sleep`, `CtxInspect`, shell — the minimum tool surface based on the legacy `core`, with `AskUserQuestion` removed |
 | `none` | Expose no tools to the model |
-| `auto` | Cloud providers use `full`; local vLLM/SGLang uses `core` |
+| `auto` (CLI only) | Follow `tools.profile`, with `full` as the default |
+
+Studio exposes this setting under **Settings → Context → Tool profile** for the selected target. Saving preserves other `tools` settings and applies to new conversations; the UI shows explicit CLI overrides. Targets must advertise `toolProfilesV1` to support this editor.
+
+Skills are workflow instructions, not individual callable tools. When the `skill` loader is attached, each model request includes a bounded directory of registered skill names and descriptions (not full skill bodies). Load a selected workflow through `skill`; use `DiscoverSkills` to search beyond the bounded directory when attached. Trust, guard checks and mode restrictions still apply.
 
 Under non-`none` profiles, the CLI additionally registers the `Config` tool and each MCP server's tools; `ConfigTool` is not in
 `default_registry()`. The platform registry registers only one native Shell tool: Unix-like systems use

@@ -102,6 +102,7 @@ const SUPPORTED_CONFIG_SETTINGS: &[&str] = &[
     "history_directory",
     "history.directory",
     "mcp_servers",
+    "tools.profile",
     "tools.luna",
     "tools.luna.allowed",
     "tools.coerce",
@@ -213,6 +214,12 @@ impl Tool for ConfigTool {
             return Ok(secret_setting_write_output(&setting));
         }
 
+        if setting == "tools.profile" && requested_value.is_some() {
+            return Ok(ToolOutput::error(
+                "tools.profile is startup-only; Config cannot rebuild the running tool registry. Set tools.profile in your settings file, then start a new TUI process or a new Studio conversation. --tool-profile overrides the file setting.",
+            ));
+        }
+
         // The file-edit surface is chosen when the session starts and pinned
         // for the engine's lifetime: GET reports the pinned surface (what the
         // model actually sees) and SET is rejected mid-session.
@@ -241,6 +248,12 @@ impl Tool for ConfigTool {
                 .read()
                 .map_err(|_| ToolError::Execution("runtime settings lock is poisoned".to_string()))?
                 .clone();
+            if setting == "tools.profile" {
+                return Ok(ToolOutput::text(format!(
+                    "tools.profile = {} (configured value, not an inventory of the active registry; startup-only, --tool-profile may override it; start a new TUI process or a new Studio conversation to apply file changes)",
+                    settings.tools.profile.as_str(),
+                )));
+            }
             return get_setting(&setting, &settings);
         };
 
@@ -354,7 +367,7 @@ fn config_discovery(action: &ConfigAction, setting: &str) -> Result<ToolOutput, 
     };
     Ok(ToolOutput::text(pretty_json(&serde_json::json!({
         "setting": setting, "canonical_setting": canonical, "schema": schema,
-        "writable_in_current_session": !startup_only && setting != "tools.file_edit_tool" && !is_secret_setting(setting),
+        "writable_in_current_session": !startup_only && !matches!(setting, "tools.file_edit_tool" | "tools.profile") && !is_secret_setting(setting),
         "schema_source": if startup_only { "startup_flag" } else { "settings.schema.jsonc" },
         "note": "Schema describes persisted values, not current values. Parent objects may contain fields outside this tool's supported individual paths; writes still undergo runtime validation."
     }))))
@@ -603,6 +616,7 @@ fn get_setting(setting: &str, settings: &Settings) -> Result<ToolOutput, ToolErr
             .as_ref()
             .map_or(Value::Null, |p| Value::String(p.display().to_string())),
         "mcp_servers" => serde_json::to_value(&settings.mcp_servers).unwrap_or(Value::Null),
+        "tools.profile" => Value::String(settings.tools.profile.as_str().to_string()),
         "tools.luna" => serde_json::to_value(&settings.tools.luna).unwrap_or(Value::Null),
         "tools.file_edit_tool" => Value::String(settings.tools.file_edit_tool.as_str().to_string()),
         "tools.luna.allowed" => Value::Array(
@@ -960,6 +974,7 @@ fn apply_setting(
                 ToolError::InvalidInput(format!("invalid MCP server config: {}", e))
             })?;
         }
+        "tools.profile" => return Err(ToolError::InvalidInput("tools.profile is startup-only; start a new TUI process or Studio conversation after changing the settings file".into())),
         "tools.luna" => {
             settings.tools.luna = serde_json::from_value(value.clone()).map_err(|e| {
                 ToolError::InvalidInput(format!("invalid tools.luna config: {}", e))
@@ -2304,6 +2319,29 @@ mod tests {
                 _ => None,
             })
             .collect::<String>()
+    }
+
+    #[tokio::test]
+    async fn tools_profile_is_discoverable_but_startup_only_and_never_written() {
+        let workspace = tempfile::tempdir().unwrap();
+        let mut settings = Settings::default();
+        settings.tools.profile = kcoder_config::ToolProfile::Core;
+        let path = workspace.path().join("settings.json");
+        std::fs::write(&path, r#"{"tools":{"profile":"core"}}"#).unwrap();
+        let context = config_context(workspace.path(), settings, Some(path));
+        let before = std::fs::read(context.settings_persistence_path.as_ref().unwrap()).ok();
+        let description = ConfigTool.call(serde_json::json!({"action":"describe","setting":"tools.profile"}), &context).await.unwrap();
+        let described: Value = serde_json::from_str(&output_text(&description)).unwrap();
+        assert_eq!(described["schema"]["enum"], serde_json::json!(["full","core","nano","none"]));
+        assert_eq!(described["writable_in_current_session"], false);
+        let read = ConfigTool.call(serde_json::json!({"setting":"tools.profile"}), &context).await.unwrap();
+        assert!(output_text(&read).contains("core"));
+        assert!(output_text(&read).contains("configured value"));
+        let result = ConfigTool.call(serde_json::json!({"setting":"tools.profile","value":"full"}), &context).await.unwrap();
+        assert!(result.is_error);
+        assert!(output_text(&result).contains("startup-only"));
+        assert_eq!(context.runtime_settings.as_ref().unwrap().read().unwrap().tools.profile, kcoder_config::ToolProfile::Core);
+        assert_eq!(std::fs::read(context.settings_persistence_path.as_ref().unwrap()).ok(), before);
     }
 
     #[tokio::test]

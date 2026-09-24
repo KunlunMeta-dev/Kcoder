@@ -2138,14 +2138,20 @@ export class KCoderGatewayRuntime {
         operation !== 'settings/templates/delete' &&
         operation !== 'settings/templates/default' &&
         operation !== 'settings/turn-file-changes/read' &&
-        operation !== 'settings/turn-file-changes/save'
+        operation !== 'settings/turn-file-changes/save' &&
+        operation !== 'settings/tools/read' &&
+        operation !== 'settings/tools/save'
       )
         throw new Error('Unsupported settings operation')
       if (!text(params.serverId)) throw new Error('A settings target is required')
       const target = await this.serverForParams({ deviceId: params.serverId })
       const client = await this.commandClient(target)
-      if (client.supportsExperimental?.('settingsTemplatesV1') !== true)
+      if (operation === 'settings/tools/read' || operation === 'settings/tools/save') {
+        if (client.supportsExperimental?.('toolProfilesV1') !== true)
+          throw new Error(i18n.t('common:toolProfile.unsupported'))
+      } else if (client.supportsExperimental?.('settingsTemplatesV1') !== true) {
         throw new Error('请升级目标 KCoder 以使用会话配置模板')
+      }
       const fields = { ...record(params.params) }
       if (operation === 'settings/templates/default' && !('id' in fields)) fields.id = null
       return client.request(operation, fields)

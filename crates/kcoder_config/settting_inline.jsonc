@@ -289,6 +289,7 @@
 
   // Tool-input normalization and execution limits.
   "tools": {
+    "profile": "full",
     "coerce": {
       "semantic_boolean": true,
       "semantic_number": true,

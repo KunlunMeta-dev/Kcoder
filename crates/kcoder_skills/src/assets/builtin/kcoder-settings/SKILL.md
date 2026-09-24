@@ -1,6 +1,6 @@
 ---
 name: kcoder-settings
-description: Manage KCoder's settings, Providers, per-model request bodies and reasoning, permissions, credentials, and extensions. Used for configuration sources/scopes, Studio local/remote accounts, configuration activation and failed-generation retry, JSONC/schema, MCP, skills, Hooks, plugin/marketplace, and training isolation; also used for KCoder TUI copy, clipboard (F9/copy/clipboard), Markdown colors/theme, directory navigation (F8/outline/jump), and scroll-back review. Not used for unrelated app terminal troubleshooting or general Markdown writing.
+description: Manage KCoder's settings, Providers, per-model request bodies and reasoning, permissions, explicit tool profiles, credentials, and extensions. Used for configuration sources/scopes, Studio local/remote accounts, configuration activation and failed-generation retry, JSONC/schema, MCP, skills, Hooks, plugin/marketplace, and training isolation; also used for KCoder TUI copy, clipboard (F9/copy/clipboard), Markdown colors/theme, directory navigation (F8/outline/jump), and scroll-back review. Not used for unrelated app terminal troubleshooting or general Markdown writing.
 metadata:
   kcoder:
     category: configuration
@@ -22,6 +22,10 @@ When the task involves KCoder TUI copy, F9, clipboard, Markdown colors, theme, F
 ## Studio, Remote Targets, and Failed Generation
 
 When Studio settings take effect on the wrong machine, an account/model cannot be selected, an extension needs a new session, a login expires, or a failed response restarts on retry, read [references/studio.md](references/studio.md). Identify the target, KCoder account and server build before proposing configuration changes. A remote target uses its own configuration and credentials; copying its key into Windows local settings is not the default fix. Failed-generation continuation is a runtime capability, not a setting or permission mode to turn on.
+
+## Tool Profiles and Missing Skill Tools
+
+For missing skill discovery/activation or choosing a reduced tool set, read [references/skills.md](references/skills.md#tool-profile-and-missing-discovery-tools). `tools.profile` explicitly selects the tool set; endpoint location and Provider type never select `core`. The default is `full`. Do not change `tui.alternate_screen`, permissions, model reasoning, or model `capabilities.tools` to select a tool profile.
 
 ## Confirm the Configuration Directory
 

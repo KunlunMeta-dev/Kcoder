@@ -105,3 +105,33 @@ Use the composer `$` or `/` picker to select a Skill from the current target/acc
 - Script-based skills must check script permissions, external commands, network access, and secret reading; activating a skill does not automatically expand task authorization.
 
 Before downgrading to an older version that does not understand the Skill journal, first run `kcoder doctor` on the current version to confirm there is no pending transaction or `recovery_required`.
+
+## Tool Profile and Missing Discovery Tools
+
+Use the target account's settings, not necessarily the Windows client's local profile:
+
+```json
+{
+  "tools": {
+    "profile": "full"
+  }
+}
+```
+
+`tools.profile` accepts `full` (default), `core`, `nano`, and `none`. `full` includes `DiscoverSkills` and `skill`; the reduced `core`/`nano` profiles intentionally do not. `none` mounts neither built-ins nor MCP tools. Existing tool denylists, role restrictions, training mode and model tool capability can still narrow the effective list.
+
+Explicit `--tool-profile full|core|nano|none` overrides the merged setting for that process. Omitted CLI selection and the legacy `--tool-profile auto` follow `tools.profile`; `auto` is not a settings value. Neither private/loopback IP addresses nor the Provider protocol/kind change this choice. An internal reverse proxy can serve a fully capable cloud model.
+
+To inspect/change the persisted value, use the current CLI entry:
+
+```bash
+kcoder config get tools.profile
+kcoder config set tools.profile full --scope user
+kcoder doctor
+```
+
+Read the effective profile reported by `doctor`, including any CLI override. The model-facing `Config` tool can describe/read this key but cannot replace a running session's registry. For TUI, start a new process after saving. For Studio, use the tool-profile selector for the current target and create a genuinely new conversation; reopening an already resident conversation does not replace its tool set. Do not promise live mutation of the current conversation.
+
+Diagnose separately: skill installed/discoverable, tool mounted, activation successful. `capabilities.tools=true` enables model tool calls but does not select `full`; `permission_mode=yolo` affects approval, not tool registration; `tui.alternate_screen` only controls terminal rendering. Seeing a skill in Studio's picker alone does not prove the model received `DiscoverSkills`/`skill`. Use the current session tool catalog as evidence. `DiscoverSkills` searches registered skills, not an external marketplace; do not claim the separate `find-skills` skill is bundled.
+
+The model-facing skill candidate catalog contains bounded names and descriptions from the registered skill snapshot, not SKILL.md bodies and not extra callable tools. A skill name is passed to the attached `skill` tool; it is not itself a tool name. The catalog does not grant permission or prove successful activation. Read the activation result before claiming a workflow was loaded. If the catalog reports truncation, use `DiscoverSkills` when attached to find more registered candidates. Trust/guard checks remain in the activation path.

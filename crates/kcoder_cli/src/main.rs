@@ -49,8 +49,10 @@ pub(crate) use headless::engine_event_json;
 
 use cli_args::{
     AuthAction, Cli, Commands, ConfigAction, MarketplaceAction, McpAction, PluginAction,
-    ToolProfile, TrustAction,
+    TrustAction,
 };
+#[cfg(test)]
+use cli_args::ToolProfile;
 use diagnostics::{hook_startup_notice, init_tracing};
 
 use std::collections::{BTreeMap, HashMap};
@@ -216,6 +218,16 @@ impl ProviderKind {
     }
 }
 
+pub(crate) fn builtin_tools_for_settings(cli: &Cli, settings: &Settings) -> ToolRegistry {
+    let tools = match cli.tool_profile.effective(settings.tools.profile) {
+        kcoder_config::ToolProfile::Full => default_registry(),
+        kcoder_config::ToolProfile::Core => core_registry(),
+        kcoder_config::ToolProfile::Nano => nano_registry(),
+        kcoder_config::ToolProfile::None => return ToolRegistry::new(),
+    };
+    tools.register(ConfigTool)
+}
+
 fn resolve_provider_kind(
     cli_provider: Option<&str>,
     env_provider: Option<ApiProviderKind>,
@@ -233,18 +245,6 @@ fn resolve_provider_kind(
         return Ok(provider);
     }
     Ok(ProviderKind::from_settings(settings)?.unwrap_or(ApiProviderKind::Kunlunmeta))
-}
-
-/// Endpoint of the provider that will actually serve this session, used to
-/// decide whether the `auto` tool profile should treat the target as a local
-/// runtime (Ollama, llama.cpp, vLLM, SGLang, LM Studio).
-fn active_provider_endpoint(settings: &Settings) -> Option<&str> {
-    if let Some(active) = settings.active_provider.as_deref()
-        && let Some(profile) = settings.providers.get(active)
-    {
-        return Some(profile.endpoint.as_str());
-    }
-    settings.base_url.as_deref()
 }
 
 /// Model API kind for the session commands.
@@ -783,26 +783,14 @@ async fn run(bootstrap_outcome: Option<internal_bootstrap::BootstrapOutcome>) ->
         .mcp_servers
         .extend(plugin_snapshot.mcp_configs.iter().cloned());
 
-    let effective_tool_profile = cli
-        .tool_profile
-        .effective_with_endpoint(provider_kind, active_provider_endpoint(&settings));
-    let mut tools = match effective_tool_profile {
-        ToolProfile::Full => default_registry(),
-        ToolProfile::Core => core_registry(),
-        ToolProfile::Nano => nano_registry(),
-        ToolProfile::None => ToolRegistry::new(),
-        ToolProfile::Auto => unreachable!("auto tool profile should be resolved"),
-    };
-    if !matches!(effective_tool_profile, ToolProfile::None) {
-        tools = tools.register(ConfigTool);
-    }
-    let session_builtin_tools = tools.clone();
+    let effective_tool_profile = cli.tool_profile.effective(settings.tools.profile);
+    let mut tools = builtin_tools_for_settings(&cli, &settings);
     let is_app_server = matches!(cli.command, Some(Commands::AppServer { .. }));
     // Optional services must leave room for the Gateway's 12-second initialize handshake.
     let mcp_startup_deadline =
         is_app_server.then(|| tokio::time::Instant::now() + std::time::Duration::from_secs(8));
     let mut mcp_snapshot_complete = true;
-    if !matches!(effective_tool_profile, ToolProfile::None) {
+    if !matches!(effective_tool_profile, kcoder_config::ToolProfile::None) {
         for (server_index, server) in settings.mcp_servers.iter().enumerate() {
             let plugin_source = if server_index < configured_mcp_server_count {
                 None
@@ -932,7 +920,6 @@ async fn run(bootstrap_outcome: Option<internal_bootstrap::BootstrapOutcome>) ->
         .with_session_configuration(
             settings_loader.clone(),
             cli.clone(),
-            session_builtin_tools,
             mcp_snapshot_complete,
         )?;
         let engine = factory
@@ -2289,7 +2276,7 @@ fn run_doctor(
     println!(
         "tool profile: {:?} (effective: {:?})",
         cli.tool_profile,
-        cli.tool_profile.effective(*provider_kind)
+        cli.tool_profile.effective(settings.tools.profile)
     );
     let project_skills = kcoder_tools::skill_telemetry::project_skills_root(cwd);
     print_skill_store_doctor("project", &project_skills)?;

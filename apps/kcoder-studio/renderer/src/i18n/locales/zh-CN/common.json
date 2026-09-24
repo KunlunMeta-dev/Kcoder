@@ -2702,5 +2702,27 @@
     "allowSessionDescription": "允许当前会话中的同类操作。",
     "decline": "拒绝",
     "declineDescription": "不批准当前操作。"
+  },
+  "toolProfile": {
+    "title": "工具集",
+    "description": "选择新会话向模型提供的内置工具集。权限与会话模式仍可进一步限制可用工具。",
+    "full": "完整工具集（默认）",
+    "core": "核心工具集",
+    "nano": "精简工具集",
+    "none": "不提供模型工具",
+    "save": "保存",
+    "saving": "保存中…",
+    "saved": "已保存配置。",
+    "appliesToNewSessions": "当前目标的新会话读取此配置，显式命令行参数优先。已有会话保持当前工具，无需重启 Studio。",
+    "cliOverride": "当前目标存在显式命令行覆盖，新会话实际使用 {{profile}}，优先于保存的选项。",
+    "chooseTarget": "请先选择要配置的运行目标。",
+    "loadFailed": "读取目标工具集失败。",
+    "saveFailed": "保存目标工具集失败。",
+    "reload": "重新读取",
+    "unsupported": "请升级所选目标的 KCoder，以配置工具集。",
+    "fullHelp": "包含技能发现、技能激活等完整内置工具。",
+    "coreHelp": "保留核心工具，不提供模型自主技能发现与激活工具；仍可由用户在 Studio 中选择技能。",
+    "nanoHelp": "仅保留精简工具，不提供模型自主技能发现与激活工具；仍可由用户在 Studio 中选择技能。",
+    "noneHelp": "模型不接收工具；不影响技能安装或用户在 Studio 中选择技能。"
   }
 }

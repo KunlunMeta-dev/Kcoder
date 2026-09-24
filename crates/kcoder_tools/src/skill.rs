@@ -38,14 +38,11 @@ impl Tool for SkillTool {
     }
 
     fn description(&self) -> String {
-        "Invoke a skill by name and add its instructions to the current conversation context — the runtime activation layer: this RUNS a skill, it does not manage it. \
-         Use this with parameters shaped like {\"skill\":\"commit\",\"args\":\"-m 'Fix bug'\"}; \
-         legacy {\"name\":\"commit\",\"arguments\":[\"-m 'Fix bug'\"]} input is still accepted. \
-         When a matching skill applies to the user's task, invoking it before acting is a blocking requirement. \
-         Bundled skills may be addressed as either \"using-superpowers\" or \
-         \"superpowers:using-superpowers\". Creation, installation and lifecycle housekeeping are separate capabilities and require their own attached controls. Activation updates the current \
-         conversation's active-skill state and usage telemetry, so calls are \
-         serialized. Choose an exact known skill name; discover candidates first when discovery is available."
+        "Load a registered skill's workflow instructions into the conversation; this does not automatically execute a program. \
+         Use an exact registered name from the current catalog, discovery or user selection, including namespace:name when listed; do not infer installed skills from examples. \
+         When a relevant skill applies, load it before following its workflow. Catalog metadata alone is not activation. \
+         Trust, guard and approval checks still apply. Loading updates active-skill state and usage telemetry, so calls are serialized. \
+         Creation, installation and lifecycle management require separate attached controls. Legacy name/arguments input remains accepted."
             .to_string()
     }
 
@@ -630,6 +627,15 @@ mod tests {
 
     struct StaticQuestioner {
         answer: &'static str,
+    }
+
+    #[test]
+    fn description_distinguishes_loading_from_execution_and_inventory() {
+        let description = SkillTool.description();
+        assert!(description.contains("does not automatically execute"));
+        assert!(description.contains("Catalog metadata alone is not activation"));
+        assert!(!description.contains("RUNS a skill"));
+        assert!(!description.contains("using-superpowers"));
     }
 
     #[test]

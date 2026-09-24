@@ -46,6 +46,16 @@ vi.mock('@/hooks/useTranslation', () => ({
   }),
 }))
 
+vi.mock('@/kcoder/toolProfiles', () => ({
+  TOOL_PROFILES: ['full', 'core', 'nano', 'none'],
+  readToolProfile: vi.fn(async () => ({
+    profile: 'full',
+    effectiveProfile: 'full',
+    cliOverride: null,
+  })),
+  saveToolProfile: vi.fn(),
+}))
+
 vi.mock('@/tauri/appPreferences', () => ({
   defaultAppPreferences: {
     closeToTrayEnabled: true,
@@ -97,9 +107,7 @@ describe('ContextSettingsPage', () => {
       Promise.resolve({ instructions, configPath: '/Users/example/.codex/config.toml' })
     )
     getLocalCodexPersonalityMock.mockResolvedValue('pragmatic')
-    saveLocalCodexPersonalityMock.mockImplementation(personality =>
-      Promise.resolve(personality)
-    )
+    saveLocalCodexPersonalityMock.mockImplementation(personality => Promise.resolve(personality))
   })
 
   test('saves terminal context injection preference', async () => {
@@ -191,11 +199,10 @@ describe('ContextSettingsPage', () => {
     getLocalCodexInstructionsMock.mockImplementation((deviceId?: string) =>
       Promise.resolve({ instructions: `instructions-${deviceId}`, configPath: null })
     )
-    saveLocalCodexInstructionsMock.mockImplementation(
-      (_instructions: string, deviceId?: string) =>
-        deviceId === 'server-a'
-          ? saveA.promise
-          : Promise.resolve({ instructions: 'saved-b', configPath: null })
+    saveLocalCodexInstructionsMock.mockImplementation((_instructions: string, deviceId?: string) =>
+      deviceId === 'server-a'
+        ? saveA.promise
+        : Promise.resolve({ instructions: 'saved-b', configPath: null })
     )
     render(
       <ContextSettingsPage
@@ -218,7 +225,9 @@ describe('ContextSettingsPage', () => {
     )
 
     saveA.resolve({ instructions: 'saved A response', configPath: null })
-    await waitFor(() => expect(saveLocalCodexInstructionsMock).toHaveBeenCalledWith('pending A', 'server-a'))
+    await waitFor(() =>
+      expect(saveLocalCodexInstructionsMock).toHaveBeenCalledWith('pending A', 'server-a')
+    )
     await saveA.promise
     await Promise.resolve()
     expect(screen.getByTestId('context-studio-instructions-textarea')).toHaveValue(
@@ -245,16 +254,22 @@ describe('ContextSettingsPage', () => {
     )
 
     const personality = await screen.findByTestId('codex-personality-select')
-    await waitFor(() => expect(personality).toHaveTextContent('workbench.codex_personality_friendly'))
+    await waitFor(() =>
+      expect(personality).toHaveTextContent('workbench.codex_personality_friendly')
+    )
     await userEvent.click(personality)
     await userEvent.click(screen.getByTestId('codex-personality-option-pragmatic'))
     await userEvent.selectOptions(screen.getByTestId('context-runtime-target-select'), 'server-b')
-    await waitFor(() => expect(personality).toHaveTextContent('workbench.codex_personality_pragmatic'))
+    await waitFor(() =>
+      expect(personality).toHaveTextContent('workbench.codex_personality_pragmatic')
+    )
 
     saveA.resolve('friendly')
     await saveA.promise
     await Promise.resolve()
-    await waitFor(() => expect(saveLocalCodexPersonalityMock).toHaveBeenCalledWith('pragmatic', 'server-a'))
+    await waitFor(() =>
+      expect(saveLocalCodexPersonalityMock).toHaveBeenCalledWith('pragmatic', 'server-a')
+    )
     expect(personality).toHaveTextContent('workbench.codex_personality_pragmatic')
   })
 })

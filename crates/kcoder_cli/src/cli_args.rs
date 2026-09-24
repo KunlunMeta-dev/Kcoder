@@ -1,6 +1,5 @@
 use super::{daemon, tui_dev_mock::TuiDevScenario};
 use clap::{Parser, ValueEnum};
-use kcoder_api::ProviderKind as ApiProviderKind;
 use kcoder_config::{ConfigScope, PermissionMode};
 use std::path::PathBuf;
 
@@ -16,7 +15,7 @@ pub(super) enum CliPermissionMode {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub(super) enum ToolProfile {
-    /// Choose by provider: full for cloud providers and core for local providers.
+    /// Follow tools.profile from settings (full by default).
     Auto,
     /// Expose every built-in tool.
     Full,
@@ -29,76 +28,15 @@ pub(super) enum ToolProfile {
 }
 
 impl ToolProfile {
-    pub(super) fn effective(self, provider_kind: ApiProviderKind) -> Self {
+    pub(super) fn effective(self, configured: kcoder_config::ToolProfile) -> kcoder_config::ToolProfile {
         match self {
-            Self::Auto if provider_kind == ApiProviderKind::Local => Self::Core,
-            Self::Auto => Self::Full,
-            other => other,
+            Self::Auto => configured,
+            Self::Full => kcoder_config::ToolProfile::Full,
+            Self::Core => kcoder_config::ToolProfile::Core,
+            Self::Nano => kcoder_config::ToolProfile::Nano,
+            Self::None => kcoder_config::ToolProfile::None,
         }
     }
-
-    /// Like [`Self::effective`], but also treats endpoints that clearly belong
-    /// to a runtime on this machine or the local network (Ollama, llama.cpp
-    /// server, vLLM, SGLang, LM Studio) as local, so `auto` picks the core
-    /// tool profile even when the provider was configured through the
-    /// OpenAI-compatible transport.
-    pub(super) fn effective_with_endpoint(
-        self,
-        provider_kind: ApiProviderKind,
-        endpoint: Option<&str>,
-    ) -> Self {
-        if matches!(self, Self::Auto) && endpoint.is_some_and(endpoint_is_local) {
-            return Self::Core;
-        }
-        self.effective(provider_kind)
-    }
-}
-
-/// Whether `endpoint` points at this machine or a private network address.
-pub(super) fn endpoint_is_local(endpoint: &str) -> bool {
-    let trimmed = endpoint.trim();
-    if trimmed.is_empty() {
-        return false;
-    }
-    let without_scheme = trimmed
-        .split_once("://")
-        .map(|(_, rest)| rest)
-        .unwrap_or(trimmed);
-    let authority = without_scheme
-        .split(['/', '?', '#'])
-        .next()
-        .unwrap_or(without_scheme);
-    let authority = authority
-        .rsplit_once('@')
-        .map(|(_, host)| host)
-        .unwrap_or(authority);
-    let host = if let Some(rest) = authority.strip_prefix('[') {
-        rest.split(']').next().unwrap_or(rest)
-    } else {
-        authority.split(':').next().unwrap_or(authority)
-    };
-    let host = host.trim_matches('.').to_ascii_lowercase();
-    if host.is_empty() {
-        return false;
-    }
-    if host == "localhost" || host == "::1" || host.ends_with(".local") {
-        return true;
-    }
-    let parts: Vec<&str> = host.split('.').collect();
-    if parts.len() != 4 {
-        return false;
-    }
-    let Ok(octets) = parts
-        .iter()
-        .map(|part| part.parse::<u8>())
-        .collect::<Result<Vec<u8>, _>>()
-    else {
-        return false;
-    };
-    matches!(octets[0], 10 | 127)
-        || (octets[0] == 172 && (16..=31).contains(&octets[1]))
-        || (octets[0] == 192 && octets[1] == 168)
-        || (octets[0] == 169 && octets[1] == 254)
 }
 
 impl From<CliPermissionMode> for PermissionMode {
@@ -226,8 +164,8 @@ pub(super) struct Cli {
     #[arg(short, long, value_enum, env = "KCODER_PERMISSION_MODE", global = true)]
     pub(super) permission_mode: Option<CliPermissionMode>,
 
-    /// Tool set sent to the model. `auto` selects `core` for local vLLM/SGLang
-    /// providers and `full` for cloud providers.
+    /// Tool set override. `auto` follows settings tools.profile (full by default);
+    /// model provider and endpoint location never select a tool set.
     #[arg(long, value_enum, default_value = "auto", global = true)]
     pub(super) tool_profile: ToolProfile,
 
@@ -572,76 +510,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn local_auto_profile_uses_expanded_core() {
-        assert_eq!(
-            ToolProfile::Auto.effective(ApiProviderKind::Local),
-            ToolProfile::Core
-        );
-    }
-
-    #[test]
-    fn nano_profile_remains_explicit_for_local_provider() {
-        assert_eq!(
-            ToolProfile::Nano.effective(ApiProviderKind::Local),
-            ToolProfile::Nano
-        );
-    }
-
-    #[test]
-    fn endpoint_locality_detection_covers_local_and_private_hosts() {
-        for endpoint in [
-            "http://localhost:11434/v1",
-            "http://127.0.0.1:8000/v1",
-            "http://[::1]:8080/v1",
-            "https://user:pass@localhost:11434/v1",
-            "http://10.0.0.5:8000/v1",
-            "http://172.16.5.9:8000/v1",
-            "http://172.31.255.254:1/v1",
-            "http://192.168.1.7:5000/v1",
-            "http://ollama.local:11434/v1",
-        ] {
-            assert!(endpoint_is_local(endpoint), "{endpoint}");
+    fn tool_profile_auto_follows_settings_and_explicit_cli_wins() {
+        use kcoder_config::ToolProfile as ConfigProfile;
+        for configured in [ConfigProfile::Full, ConfigProfile::Core, ConfigProfile::Nano, ConfigProfile::None] {
+            assert_eq!(ToolProfile::Auto.effective(configured), configured);
+            assert_eq!(ToolProfile::Full.effective(configured), ConfigProfile::Full);
+            assert_eq!(ToolProfile::Core.effective(configured), ConfigProfile::Core);
+            assert_eq!(ToolProfile::Nano.effective(configured), ConfigProfile::Nano);
+            assert_eq!(ToolProfile::None.effective(configured), ConfigProfile::None);
         }
-        for endpoint in [
-            "",
-            "https://api.example.com/v1",
-            "https://api.openai.com/v1",
-            "http://172.32.0.1/v1",
-            "http://11.0.0.1/v1",
-            "http://192.169.0.1/v1",
-            "https://ollama.example.com/v1",
-        ] {
-            assert!(!endpoint_is_local(endpoint), "{endpoint}");
-        }
-    }
-
-    #[test]
-    fn auto_profile_treats_local_endpoints_as_local_runtimes() {
-        assert_eq!(
-            ToolProfile::Auto.effective_with_endpoint(
-                ApiProviderKind::Openai,
-                Some("http://localhost:11434/v1")
-            ),
-            ToolProfile::Core
-        );
-        assert_eq!(
-            ToolProfile::Auto.effective_with_endpoint(
-                ApiProviderKind::Openai,
-                Some("https://api.example.com/v1")
-            ),
-            ToolProfile::Full
-        );
-        assert_eq!(
-            ToolProfile::Auto.effective_with_endpoint(ApiProviderKind::Local, None),
-            ToolProfile::Core
-        );
-        assert_eq!(
-            ToolProfile::Full.effective_with_endpoint(
-                ApiProviderKind::Openai,
-                Some("http://localhost:11434/v1")
-            ),
-            ToolProfile::Full
-        );
+        let cli = Cli::try_parse_from(["kcoder"]).unwrap();
+        assert_eq!(cli.tool_profile, ToolProfile::Auto);
+        let cli = Cli::try_parse_from(["kcoder", "--tool-profile", "core"]).unwrap();
+        assert_eq!(cli.tool_profile, ToolProfile::Core);
     }
 
     #[test]

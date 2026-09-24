@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use kcoder_api::Provider;
 use kcoder_config::Settings;
 use kcoder_engine::{QueryEngine, WorkspaceRuntimeServices};
@@ -73,16 +73,23 @@ impl AppServerEngineFactory {
         mut self,
         loader: kcoder_config::SettingsLoader,
         cli: crate::Cli,
-        builtin_tools: ToolRegistry,
         mcp_snapshot_complete: bool,
     ) -> Result<Self> {
         let mut configuration =
-            super::session_configuration::SessionConfiguration::new(loader, cli, builtin_tools);
+            super::session_configuration::SessionConfiguration::new(loader, cli);
         if mcp_snapshot_complete {
             configuration.seed_mcp(&self.base_settings, &self.plugin_snapshot, &self.tools)?;
         }
         self.configuration = Some(configuration);
         Ok(self)
+    }
+
+    pub(super) fn tool_profile_settings(&self, profile: Option<kcoder_app_protocol::ToolProfile>) -> Result<kcoder_app_protocol::ToolsSettingsResult> {
+        let configuration = self.configuration.as_ref().context("Tool settings unavailable for this runtime")?;
+        match profile {
+            Some(profile) => configuration.save_tool_profile(profile),
+            None => configuration.read_tool_profile(),
+        }
     }
 
     pub(super) fn supports_session_reload(&self) -> bool {

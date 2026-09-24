@@ -1197,3 +1197,60 @@ describe('KCoder gateway runtime task isolation', () => {
     await unlisten()
   })
 })
+
+test('tool profile settings are scoped, leaf-only, and require an explicit target capability', async () => {
+  const client = new FakeGatewayClient(null)
+  const connections: string[] = []
+  const request = vi
+    .spyOn(client, 'request')
+    .mockResolvedValue({ profile: 'full', effectiveProfile: 'core', cliOverride: 'core' } as never)
+  const capability = vi
+    .spyOn(client, 'supportsExperimental')
+    .mockImplementation(name => name === 'toolProfilesV1')
+  const runtime = createTestGatewayRuntime('token', {
+    loadServers: async () => [
+      {
+        id: 'remote',
+        label: 'Remote',
+        description: '',
+        transport: 'ssh',
+        host: 'remote.test',
+        workspacePath: '/remote',
+      },
+    ],
+    createClient: serverId => {
+      connections.push(serverId)
+      return client
+    },
+  })
+  await expect(
+    runtime.request('runtime.settings.request', {
+      serverId: 'remote',
+      method: 'settings/tools/read',
+      params: {},
+    })
+  ).resolves.toMatchObject({ profile: 'full', cliOverride: 'core' })
+  await runtime.request('runtime.settings.request', {
+    serverId: 'remote',
+    method: 'settings/tools/save',
+    params: { profile: 'nano' },
+  })
+  expect(connections).toEqual(['remote'])
+  expect(request).toHaveBeenLastCalledWith('settings/tools/save', { profile: 'nano' })
+  capability.mockReturnValue(false)
+  request.mockClear()
+  await expect(
+    runtime.request('runtime.settings.request', {
+      serverId: 'remote',
+      method: 'settings/tools/save',
+      params: { profile: 'full' },
+    })
+  ).rejects.toThrow()
+  expect(request).not.toHaveBeenCalled()
+  await expect(
+    runtime.request('runtime.settings.request', {
+      method: 'settings/tools/save',
+      params: { profile: 'none' },
+    })
+  ).rejects.toThrow('target')
+})

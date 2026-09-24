@@ -75,11 +75,7 @@ async fn assert_http_rotation(kind: ProviderKind, format: kcoder_config::ApiForm
     loader
         .refresh_stored_provider_credentials(&mut settings)
         .unwrap();
-    let config = SessionConfiguration::new(
-        loader,
-        crate::Cli::parse_from(["kcoder"]),
-        ToolRegistry::new(),
-    );
+    let config = SessionConfiguration::new(loader, crate::Cli::parse_from(["kcoder"]));
     let provider = config.provider_for_kind(&settings, kind).unwrap();
     let request = kcoder_types::MessagesRequest::new("fixture-model", vec![]).with_max_tokens(1234);
     for index in 0..2 {

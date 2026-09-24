@@ -1,6 +1,52 @@
 use super::*;
 
 #[test]
+fn configured_tool_profile_is_independent_of_provider_endpoint() {
+    let mut settings = Settings::default();
+    let mut cli = cli_for_test();
+    for endpoint in [
+        "http://10.31.6.8",
+        "http://localhost:11434/v1",
+        "https://api.example.com/v1",
+    ] {
+        for provider in settings.providers.values_mut() {
+            provider.endpoint = endpoint.into();
+        }
+        for (profile, discover, basic) in [
+            (kcoder_config::ToolProfile::Full, true, true),
+            (kcoder_config::ToolProfile::Core, false, true),
+            (kcoder_config::ToolProfile::Nano, false, true),
+            (kcoder_config::ToolProfile::None, false, false),
+        ] {
+            settings.tools.profile = profile;
+            let tools = builtin_tools_for_settings(&cli, &settings);
+            assert_eq!(
+                tools.get("DiscoverSkills").is_some(),
+                discover,
+                "{endpoint} {profile:?}"
+            );
+            assert_eq!(tools.get("skill").is_some(), discover);
+            assert_eq!(tools.get("read").is_some(), basic);
+            assert_eq!(tools.get("Config").is_some(), basic);
+        }
+    }
+    settings.tools.profile = kcoder_config::ToolProfile::None;
+    cli.tool_profile = ToolProfile::Full;
+    assert!(
+        builtin_tools_for_settings(&cli, &settings)
+            .get("DiscoverSkills")
+            .is_some()
+    );
+    settings.tools.profile = kcoder_config::ToolProfile::Full;
+    cli.tool_profile = ToolProfile::None;
+    assert!(
+        builtin_tools_for_settings(&cli, &settings)
+            .names()
+            .is_empty()
+    );
+}
+
+#[test]
 fn provider_template_commands_parse_without_provider_credentials() {
     assert!(Cli::try_parse_from(["kcoder", "config", "templates"]).is_ok());
     assert!(Cli::try_parse_from(["kcoder", "config", "template", "deepseek"]).is_ok());

@@ -218,7 +218,7 @@ pub(super) fn build_system_prompt(
     let skill_routing_prompt = if available_tools.contains("DiscoverSkills")
         && available_tools.contains("skill")
     {
-        "Skill routing rule: when a user request concerns KCoder configuration, settings, providers, models, permissions, credentials, JSON/JSONC, schemas, configuration paths, sources, or scopes, call DiscoverSkills first and then use skill to activate the matching workflow before invoking platform shell, read, edit, or write tools. Search for and prefer `kcoder-settings` for these requests. Do not bypass skill discovery to run configuration commands directly. If activation fails, report the failure instead of claiming that the skill was used.".to_string()
+        "Skill routing rule: when a user request concerns KCoder configuration, settings, providers, models, permissions, credentials, JSON/JSONC, schemas, configuration paths, sources, or scopes, call DiscoverSkills first and then use skill to activate the matching workflow before invoking platform shell, read, edit, or write tools. Prefer a registered configuration workflow returned by discovery; do not assume an unlisted skill name exists. Do not bypass skill discovery to run configuration commands directly. If activation fails, report the failure instead of claiming that the skill was used.".to_string()
     } else {
         String::new()
     };

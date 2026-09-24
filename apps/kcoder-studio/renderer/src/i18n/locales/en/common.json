@@ -2703,5 +2703,27 @@
     "allowSessionDescription": "Allow similar operations for the current session.",
     "decline": "Decline",
     "declineDescription": "Decline this operation."
+  },
+  "toolProfile": {
+    "title": "Toolset",
+    "description": "Choose the built-in tools offered to the model in new conversations. Permissions and conversation modes can restrict them further.",
+    "full": "Full toolset (default)",
+    "core": "Core toolset",
+    "nano": "Minimal toolset",
+    "none": "No model tools",
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Configuration saved.",
+    "appliesToNewSessions": "New conversations read this configuration; explicit command-line options take precedence. Existing conversations keep their tools. No Studio restart is required.",
+    "cliOverride": "This target has an explicit command-line override. New conversations use {{profile}} instead of the saved choice.",
+    "chooseTarget": "Select a runtime target to configure its tools.",
+    "loadFailed": "Failed to load the target toolset.",
+    "saveFailed": "Failed to save the target toolset.",
+    "reload": "Reload",
+    "unsupported": "Upgrade the selected KCoder target to configure its toolset.",
+    "fullHelp": "Includes skill discovery and activation tools, alongside the full built-in toolset.",
+    "coreHelp": "Keeps core tools without autonomous skill discovery or activation. You can still select skills in Studio.",
+    "nanoHelp": "A minimal toolset without autonomous skill discovery or activation. You can still select skills in Studio.",
+    "noneHelp": "The model receives no tools. Skill installation and user-selected skills in Studio remain available."
   }
 }

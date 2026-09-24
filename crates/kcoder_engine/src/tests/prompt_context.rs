@@ -194,7 +194,8 @@ fn system_prompt_routes_configuration_tasks_through_settings_skill() {
 
     assert!(prompt.contains("KCoder configuration, settings, providers, models"));
     assert!(prompt.contains("call DiscoverSkills first and then use skill"));
-    assert!(prompt.contains("`kcoder-settings`"));
+    assert!(prompt.contains("registered configuration workflow"));
+    assert!(!prompt.contains("`kcoder-settings`"));
     assert!(prompt.contains("The active KCoder CLI entry point is"));
     assert!(prompt.contains("do not mix profile-specific entry points"));
 }

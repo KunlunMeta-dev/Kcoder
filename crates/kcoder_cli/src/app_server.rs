@@ -952,6 +952,7 @@ impl SessionLease {
 #[derive(Debug, Default)]
 struct ConnectionState {
     initialized: bool,
+    tool_profiles_v1: bool,
     tool_path_preview_v1: bool,
     /// Set when the client negotiated `threadRunSummaryV1`; only then may thread
     /// snapshots carry the richer run status and `runSummary` payload.
@@ -3993,6 +3994,7 @@ impl ConnectionState {
             );
         }
         let mut capabilities = server_capabilities(engine.state.history_path().is_some());
+        capabilities.experimental.insert(kcoder_app_protocol::CAPABILITY_TOOL_PROFILES_V1.into(), self.tool_profiles_v1);
         capabilities.experimental.insert("modelSelectionModeV1".into(), engine.supports_target_default_model_selection());
         capabilities.experimental.insert(kcoder_app_protocol::CAPABILITY_RETRY_MODEL_CONFIGURATION_V1.into(), engine.supports_target_default_model_selection());
         let result = InitializeResult {
@@ -4257,7 +4259,10 @@ pub async fn run(
     let _terminal_guard = TerminalRegistryGuard(terminals.clone());
     let server_id = format!("server-{}", engine.session_id());
     let sequence = Arc::new(AtomicU64::new(1));
-    let mut state = ConnectionState::default();
+    let mut state = ConnectionState {
+        tool_profiles_v1: engine_factory.supports_session_reload(),
+        ..ConnectionState::default()
+    };
     let mut attachment_directories = AttachmentDirectories::default();
     let mut thread_list_snapshots = thread_list_snapshots::ThreadListSnapshots::default();
     let mut history_refresh = history_refresh_processor::HistoryRefreshProcessor::default();
@@ -5032,6 +5037,19 @@ pub async fn run(
                     Err(error) => {
                         send(&outbound_tx, error_response(id, -32602, &error.to_string())).await?;
                     }
+                }
+            }
+            method::SETTINGS_TOOLS_READ | method::SETTINGS_TOOLS_SAVE => {
+                let result = if method == method::SETTINGS_TOOLS_READ {
+                    serde_json::from_value::<kcoder_app_protocol::ToolsSettingsReadParams>(params.clone())
+                        .map_err(anyhow::Error::from).and_then(|_| engine_factory.tool_profile_settings(None))
+                } else {
+                    serde_json::from_value::<kcoder_app_protocol::ToolsSettingsSaveParams>(params.clone())
+                        .map_err(anyhow::Error::from).and_then(|value| engine_factory.tool_profile_settings(Some(value.profile)))
+                };
+                match result {
+                    Ok(value) => send(&outbound_tx, success_response(id, serde_json::to_value(value)?)).await?,
+                    Err(error) => send(&outbound_tx, error_response(id, -32602, &error.to_string())).await?,
                 }
             }
             method::SETTINGS_TURN_FILE_CHANGES_READ => {

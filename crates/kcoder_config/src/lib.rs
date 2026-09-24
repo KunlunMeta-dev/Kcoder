@@ -443,9 +443,36 @@ impl FileEditSurface {
     }
 }
 
+/// Explicit built-in tool registry profile, fixed when a runtime starts.
+/// Provider IDs, model names and endpoint addresses never select this value.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolProfile {
+    #[default]
+    Full,
+    Core,
+    Nano,
+    None,
+}
+
+impl ToolProfile {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Full => "full",
+            Self::Core => "core",
+            Self::Nano => "nano",
+            Self::None => "none",
+        }
+    }
+}
+
 /// Tool-system settings.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ToolsSettings {
+    /// Explicit startup registry. CLI --tool-profile overrides this setting;
+    /// changing a settings file does not rebuild an already running registry.
+    #[serde(default)]
+    pub profile: ToolProfile,
     #[serde(default)]
     pub coerce: ToolCoercionConfig,
     /// Small tool surface activated by `/luna` for less capable models.
@@ -2949,6 +2976,28 @@ mod tests {
     use super::*;
     use std::collections::HashSet;
     use tempfile::TempDir;
+
+    #[test]
+    fn tool_profile_defaults_and_schema_agree() {
+        assert_eq!(Settings::default().tools.profile, ToolProfile::Full);
+        assert_eq!(serde_json::from_str::<ToolsSettings>("{}").unwrap().profile, ToolProfile::Full);
+        let embedded: serde_json::Value = jsonc_parser::parse_to_serde_value(include_str!("../settting_inline.jsonc"), &Default::default()).unwrap();
+        assert_eq!(embedded["tools"]["profile"], "full");
+        let schema = crate::settings_schema_for_path("tools.profile").unwrap();
+        assert_eq!(schema["default"], "full");
+        assert_eq!(schema["enum"], serde_json::json!(["full", "core", "nano", "none"]));
+        for (value, expected) in [("full", ToolProfile::Full), ("core", ToolProfile::Core), ("nano", ToolProfile::Nano), ("none", ToolProfile::None)] {
+            let parsed: ToolProfile = serde_json::from_value(serde_json::json!(value)).unwrap();
+            assert_eq!(parsed, expected);
+            assert_eq!(parsed.as_str(), value);
+            assert_eq!(serde_json::to_value(parsed).unwrap(), value);
+            crate::schema::validate_settings_schema(&serde_json::json!({"tools":{"profile":value}})).unwrap();
+        }
+        for invalid in ["auto", "minimal", "CORE"] {
+            assert!(serde_json::from_value::<ToolProfile>(serde_json::json!(invalid)).is_err());
+            assert!(crate::schema::validate_settings_schema(&serde_json::json!({"tools":{"profile":invalid}})).is_err());
+        }
+    }
 
     #[test]
     fn permission_mode_parsing() {

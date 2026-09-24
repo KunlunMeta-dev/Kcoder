@@ -2471,6 +2471,29 @@ mod tests {
     }
 
     #[test]
+    fn tool_profile_obeys_user_project_local_and_explicit_layer_order() {
+        use crate::ToolProfile;
+        let temp = TempDir::new().unwrap();
+        let config = temp.path().join("config");
+        let project = temp.path().join("project");
+        let overlay = temp.path().join("explicit.json");
+        fs::create_dir_all(&project).unwrap();
+        let load = || SettingsLoader::new(&project).with_config_dir(&config).load().unwrap().settings;
+        assert_eq!(load().tools.profile, ToolProfile::Full);
+        write(&config.join("settings.json"), r#"{"tools":{"profile":"core"}}"#);
+        assert_eq!(load().tools.profile, ToolProfile::Core);
+        write(&project.join(".kcoder/settings.json"), r#"{"tools":{"profile":"nano"}}"#);
+        assert_eq!(load().tools.profile, ToolProfile::Nano);
+        write(&project.join(".kcoder/settings.local.json"), r#"{"tools":{"profile":"none"}}"#);
+        assert_eq!(load().tools.profile, ToolProfile::None);
+        write(&overlay, r#"{"tools":{"profile":"full"}}"#);
+        let explicit = SettingsLoader::new(&project).with_config_dir(&config)
+            .with_overlay_files([overlay]).load().unwrap();
+        assert_eq!(explicit.settings.tools.profile, ToolProfile::Full);
+        assert!(explicit.overlay_fields.contains("tools.profile"));
+    }
+
+    #[test]
     fn loads_user_workspace_and_local_settings_in_precedence_order() {
         let temp = TempDir::new().unwrap();
         let config = temp.path().join("config");

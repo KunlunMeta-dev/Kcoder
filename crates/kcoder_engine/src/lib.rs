@@ -88,6 +88,7 @@ mod path_preview;
 mod path_preview_runtime;
 mod permission_runtime;
 mod prompt_runtime;
+mod skill_catalog_runtime;
 mod provider_runtime;
 mod client_model_configuration;
 pub use client_model_configuration::{ClientModelConfiguration, ClientModelContinuationOptions};
@@ -3403,6 +3404,7 @@ impl QueryEngine {
                             suppress_user_elicitation,
                             &available_tool_names,
                         );
+                        system_prompt.push_str(&engine.skill_catalog_prompt(&available_tool_names));
                         if let Some(role_prompt) = engine.subagent_system_prompt.as_deref() {
                             system_prompt.push_str("\n\n## Sub-agent role\n");
                             system_prompt.push_str(role_prompt);
