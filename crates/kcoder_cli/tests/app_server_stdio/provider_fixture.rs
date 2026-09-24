@@ -11,6 +11,48 @@ use std::sync::{Arc, Mutex};
 /// moment it happens, not only once the fixture stops.
 type FixtureCalls = Arc<Mutex<Vec<Value>>>;
 
+// Read exactly one HTTP body; waiting for EOF deadlocks persistent connections.
+fn read_fixture_request_body(socket: &mut std::net::TcpStream, header: &str) -> Vec<u8> {
+    const MAX_BODY: usize = 2 * 1024 * 1024;
+    if let Some(length) = header.lines().find_map(|line| {
+        line.strip_prefix("content-length:")
+            .map(|value| value.trim().parse::<usize>().unwrap())
+    }) {
+        assert!(length <= MAX_BODY);
+        let mut body = vec![0; length];
+        socket.read_exact(&mut body).unwrap();
+        return body;
+    }
+    assert!(
+        header
+            .lines()
+            .any(|line| line.starts_with("transfer-encoding:") && line.contains("chunked"))
+    );
+    let mut body = Vec::new();
+    loop {
+        let mut line = Vec::new();
+        while !line.ends_with(b"\r\n") {
+            let mut byte = [0];
+            socket.read_exact(&mut byte).unwrap();
+            line.push(byte[0]);
+            assert!(line.len() <= 1024);
+        }
+        let text = std::str::from_utf8(&line).unwrap();
+        let size = usize::from_str_radix(text.trim().split(';').next().unwrap(), 16).unwrap();
+        assert!(size <= MAX_BODY - body.len());
+        if size == 0 {
+            break;
+        }
+        let start = body.len();
+        body.resize(start + size, 0);
+        socket.read_exact(&mut body[start..]).unwrap();
+        let mut crlf = [0; 2];
+        socket.read_exact(&mut crlf).unwrap();
+        assert_eq!(&crlf, b"\r\n");
+    }
+    body
+}
+
 fn serving_fixture() -> (String, FixtureCalls, std::thread::JoinHandle<()>) {
     serving_fixture_with(outage_first_call)
 }
@@ -203,50 +245,7 @@ where
                 drop(socket);
                 continue;
             }
-            let content_length = header.lines().find_map(|line| {
-                line.strip_prefix("content-length:")
-                    .map(|value| value.trim().parse::<usize>().unwrap())
-            });
-            let chunked = header
-                .lines()
-                .any(|line| line.starts_with("transfer-encoding:") && line.contains("chunked"));
-            // A full main turn carries the whole tool catalog, so its body may be
-            // chunked instead of carrying a Content-Length.
-            let body = if let Some(length) = content_length {
-                let mut body = vec![0; length];
-                socket.read_exact(&mut body).unwrap();
-                body
-            } else if chunked {
-                let mut rest = Vec::new();
-                socket.read_to_end(&mut rest).unwrap();
-                let mut body = Vec::new();
-                let mut cursor = 0usize;
-                loop {
-                    let line_end = rest[cursor..]
-                        .windows(2)
-                        .position(|window| window == b"\r\n")
-                        .map(|offset| cursor + offset)
-                        .unwrap_or_else(|| panic!("malformed chunk header"));
-                    let size = usize::from_str_radix(
-                        String::from_utf8_lossy(&rest[cursor..line_end])
-                            .trim()
-                            .split(';')
-                            .next()
-                            .unwrap(),
-                        16,
-                    )
-                    .unwrap();
-                    cursor = line_end + 2;
-                    if size == 0 {
-                        break;
-                    }
-                    body.extend_from_slice(&rest[cursor..cursor + size]);
-                    cursor += size + 2;
-                }
-                body
-            } else {
-                panic!("fixture request has no usable length header");
-            };
+            let body = read_fixture_request_body(&mut socket, &header);
             requests.push(serde_json::from_slice::<Value>(&body).unwrap());
             recorded
                 .lock()

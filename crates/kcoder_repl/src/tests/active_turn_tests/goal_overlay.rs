@@ -281,12 +281,13 @@ fn internal_followup_context_is_hidden_when_pushed_directly() {
 fn background_notification_tags_are_model_only_context() {
     let messages = vec![
         Message::user_text("visible request"),
-        Message::user_text(
+        Message::runtime_text(
             "<skill_content name=\"using-superpowers\">\ninternal skill body\n</skill_content>",
         ),
-        Message::user_text(r#"<workflow_notification id="workflow-1" status="completed"/>"#),
-        Message::user_text(r#"<subagent_notification id="agent-1" status="completed"/>"#),
+        Message::runtime_text(r#"<workflow_notification id="workflow-1" status="completed"/>"#),
+        Message::runtime_text(r#"<subagent_notification id="agent-1" status="completed"/>"#),
         Message::assistant_text("visible response"),
+        Message::user_text(r#"<workflow_notification id="literal-user" status="completed"/>"#),
         Message::user_text("I wrote <skill_content as ordinary visible prose."),
         Message::user_text(
             r#"<workflow_notification id="example" status="completed"/> shown as an XML example"#,
@@ -308,6 +309,7 @@ fn background_notification_tags_are_model_only_context() {
         .join("\n");
     assert!(ui_text.contains("visible request"));
     assert!(ui_text.contains("visible response"));
+    assert!(ui_text.contains("id=\"literal-user\""));
     assert!(ui_text.contains("I wrote <skill_content as ordinary visible prose."));
     assert!(ui_text.contains("id=\"example\""));
     assert!(ui_text.contains("This explains the example."));

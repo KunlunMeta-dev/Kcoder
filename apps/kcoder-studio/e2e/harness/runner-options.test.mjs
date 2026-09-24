@@ -63,3 +63,8 @@ test("real-model suite ID receives only its explicit provider environment", () =
     false,
   );
 });
+
+test("Wine packaged smoke only receives its explicit package path", () => {
+  assert.ok(suiteEnvironmentNames("suites/gateway/windows-wine-resources.e2e.mjs").includes("KCODER_E2E_PACKAGED_DIR"));
+  assert.equal(suiteEnvironmentNames("suites/gateway/runtime-target-local.e2e.mjs").includes("KCODER_E2E_PACKAGED_DIR"), false);
+});

@@ -5,6 +5,12 @@ import { OPEN_SETTINGS_COMMAND, setActiveKeybindings } from '@/lib/keybindings'
 import { getLocalCodexUsageDisplay } from '@/api/local/codexUsage'
 import { DesktopSettingsMenu } from './DesktopSettingsMenu'
 
+const login = vi.hoisted(() => vi.fn())
+vi.mock('@/kcoder/gatewayRpc', async original => {
+  const actual = await original<typeof import('@/kcoder/gatewayRpc')>()
+  return { ...actual, loginGatewayAccount: login }
+})
+
 const mockCheckNow = vi.fn()
 const mockInstallUpdate = vi.fn()
 const mockDismissError = vi.fn()
@@ -316,12 +322,24 @@ describe('DesktopSettingsMenu', () => {
     const onAccountLogin = vi.fn()
     const accountTargets = [
       {
-        id: 'h20', label: 'H20', description: '', runtime: 'kcoder' as const, transport: 'ssh' as const,
+        id: 'h20',
+        label: 'H20',
+        description: '',
+        runtime: 'kcoder' as const,
+        transport: 'ssh' as const,
         security: { identity: { mode: 'kcoder-account' as const } },
-        accountIdentity: { principalId: '0b6cfba4-5f61-4d17-9d92-3d60a1ef2f01', username: 'root', role: 'admin' as const },
+        accountIdentity: {
+          principalId: '0b6cfba4-5f61-4d17-9d92-3d60a1ef2f01',
+          username: 'root',
+          role: 'admin' as const,
+        },
       },
       {
-        id: 'lab', label: 'Lab', description: '', runtime: 'kcoder' as const, transport: 'ssh' as const,
+        id: 'lab',
+        label: 'Lab',
+        description: '',
+        runtime: 'kcoder' as const,
+        transport: 'ssh' as const,
         security: { identity: { mode: 'kcoder-account' as const } },
       },
     ]
@@ -342,15 +360,14 @@ describe('DesktopSettingsMenu', () => {
   })
 
   test('the login item opens an inline login dialog without navigating', async () => {
-    const login = vi.hoisted(() => vi.fn())
-    vi.mock('@/kcoder/gatewayRpc', async original => {
-      const actual = await original<typeof import('@/kcoder/gatewayRpc')>()
-      return { ...actual, loginGatewayAccount: login }
-    })
     login.mockResolvedValue({ authenticated: true })
     const accountTargets = [
       {
-        id: 'lab', label: 'Lab', description: '', runtime: 'kcoder' as const, transport: 'ssh' as const,
+        id: 'lab',
+        label: 'Lab',
+        description: '',
+        runtime: 'kcoder' as const,
+        transport: 'ssh' as const,
         security: { identity: { mode: 'kcoder-account' as const } },
       },
     ]
@@ -358,9 +375,14 @@ describe('DesktopSettingsMenu', () => {
     await userEvent.click(screen.getByTestId('gateway-account-login-lab'))
     expect(screen.getByTestId('gateway-account-login-dialog')).toBeTruthy()
     await userEvent.type(screen.getByTestId('gateway-account-dialog-username'), 'root')
-    await userEvent.type(screen.getByTestId('gateway-account-dialog-password'), 'fixture-password-1')
+    await userEvent.type(
+      screen.getByTestId('gateway-account-dialog-password'),
+      'fixture-password-1'
+    )
     await userEvent.click(screen.getByTestId('gateway-account-dialog-submit'))
-    await waitFor(() => expect(login).toHaveBeenCalledWith('lab', expect.objectContaining({ username: 'root' })))
+    await waitFor(() =>
+      expect(login).toHaveBeenCalledWith('lab', expect.objectContaining({ username: 'root' }))
+    )
   })
 
   test('hides the KCoder account section when no account targets exist', () => {

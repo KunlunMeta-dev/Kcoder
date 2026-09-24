@@ -634,7 +634,7 @@ async fn edit_previous_message_skips_hidden_internal_user_messages() {
         .add_message(Message::assistant_text("real answer"));
     // Hidden internal user message, as produced by /goal continuations
     // and sub-agent follow-up nudges.
-    engine.state.add_message(Message::user_text(
+    engine.state.add_message(Message::runtime_text(
         "[system] Continue working toward the active `/goal` objective. keep going",
     ));
     engine

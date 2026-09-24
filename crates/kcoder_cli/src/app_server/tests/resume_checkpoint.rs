@@ -10,7 +10,7 @@ fn persisted_resume_typed_checkpoint_is_used_by_the_real_cli_preflight() {
     engine
         .state
         .add_message(kcoder_types::Message::user_text("real user"));
-    engine.state.add_message(kcoder_types::Message::user_text(
+    engine.state.add_message(kcoder_types::Message::runtime_text(
         "[system] internal context",
     ));
     engine.state.save_history().unwrap();

@@ -89,11 +89,21 @@ await runE2E(import.meta.url, {
     editedSettings.providers.fixture.models['fixture-model'].extra_body.temperature = 0.9;
     const updatedSettings = await context.writeStateJson(`${mode}-config/settings-next.json`, editedSettings);
     await rename(updatedSettings, resolve(home, 'settings.json'));
-    const retry = await rpc.request('turn/start', { threadId: thread.id, retryFromTurnId: turn.id,
-      retryOperationId: `f06-${mode}`, input: [] });
-    assert.equal(retry.turn.id, turn.id);
-    const done = await rpc.waitFor(m => m !== failed && m.method === 'turn/completed' && m.params?.turnId === turn.id, 30000, 'F06 retry outcome');
-    assert.equal(done.params.turn.status, mode === 'rotate' ? 'completed' : 'failed');
+    let retryStatus;
+    const retryParams = { threadId: thread.id, retryFromTurnId: turn.id,
+      retryOperationId: `f06-${mode}`, input: [] };
+    if (mode === 'revoke') {
+      // Revocation is rejected before a new attempt is admitted. There is no
+      // accepted turn/completed pair to wait for, and the old key must not be used.
+      await assert.rejects(rpc.request('turn/start', retryParams), /credential.*(?:removed|revoked|source changed)/i);
+      retryStatus = 'rejected';
+    } else {
+      const retry = await rpc.request('turn/start', retryParams);
+      assert.equal(retry.turn.id, turn.id);
+      const done = await rpc.waitFor(m => m !== failed && m.method === 'turn/completed' && m.params?.turnId === turn.id, 30000, 'F06 retry outcome');
+      assert.equal(done.params.turn.status, 'completed');
+      retryStatus = done.params.turn.status;
+    }
     assert.deepEqual(authStates, mode === 'rotate' ? ['old', 'old', 'new'] : ['old', 'old']);
     assert.equal(await readFile(resolve(workspace, 'credential-tool-count.txt'), 'utf8'), 'x');
     if (mode === 'rotate') {
@@ -102,7 +112,7 @@ await runE2E(import.meta.url, {
     }
     await rpc.request('thread/delete', { threadId: thread.id });
     rpc.close();
-    results.push({ mode, authentication: authStates, toolExecutions: 1, status: done.params.turn.status });
+    results.push({ mode, authentication: authStates, toolExecutions: 1, status: retryStatus });
   }
   return { results };
 });

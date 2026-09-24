@@ -627,9 +627,9 @@ fn memory_query_projection_preserves_latest_real_user_text_selection() {
     state.add_message(Message::user_text("  retain original whitespace"));
     for message in [
         Message::assistant_text("assistant"),
-        Message::user_text("  <project-instructions>injected"),
-        Message::user_text("<relevant-memories>injected"),
-        Message::user_text("<skill_content name=\"test\">injected"),
+        Message::runtime_text("  <project-instructions>injected"),
+        Message::runtime_text("<relevant-memories>injected"),
+        Message::runtime_text("<skill_content name=\"test\">injected"),
         Message::User {
             origin: kcoder_types::MessageOrigin::Unknown, content: vec![
                 ContentBlock::Text {
@@ -664,6 +664,6 @@ fn memory_query_projection_preserves_latest_real_user_text_selection() {
     });
     assert_eq!(
         latest_real_user_text(&state).as_deref(),
-        Some("new user text")
+        Some("<relevant-memories>skip block")
     );
 }

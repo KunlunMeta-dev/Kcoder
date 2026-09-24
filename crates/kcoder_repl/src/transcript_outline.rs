@@ -724,7 +724,7 @@ mod tests {
     }
 
     #[test]
-    fn groups_answer_segments_and_excludes_internal_context_and_thinking() {
+    fn groups_answer_segments_preserve_literal_user_prefix_and_exclude_thinking() {
         let store = store(&[
             (MessageRole::User, "task"),
             (MessageRole::Assistant, "first"),
@@ -739,9 +739,11 @@ mod tests {
         ]);
         let mut model = OutlineModel::default();
         assert!(model.sync(&store));
-        assert_eq!(model.turns.len(), 2);
-        assert_eq!(model.turns[0].answers.len(), 2);
-        assert!(model.turns[1].label.contains("Attachment task"));
+        assert_eq!(model.turns.len(), 3);
+        assert_eq!(model.turns[0].answers.len(), 1);
+        assert!(model.turns[1].label.contains("All tracked background"));
+        assert_eq!(model.turns[1].answers.len(), 1);
+        assert!(model.turns[2].label.contains("Attachment task"));
         assert!(!model.rows.iter().any(|row| row.label.contains("secret")));
     }
 

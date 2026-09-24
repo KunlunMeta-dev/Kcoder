@@ -192,7 +192,21 @@ describe('REST adapters', () => {
     await createModelApi(client).listModels()
 
     expect(client.get).toHaveBeenCalledWith(
-      '/models/unified?include_config=true&scope=all&model_category_type=llm&client_origin=wework'
+      '/models/unified?include_config=true&scope=all&model_category_type=llm&client_origin=wework',
+      undefined
+    )
+  })
+
+  test('forwards model catalog cancellation to the HTTP client', async () => {
+    const client = mockClient()
+    vi.mocked(client.get).mockResolvedValueOnce({ data: [] })
+    const controller = new AbortController()
+
+    await createModelApi(client).listModels(undefined, { signal: controller.signal })
+
+    expect(client.get).toHaveBeenCalledWith(
+      '/models/unified?include_config=true&scope=all&model_category_type=llm&client_origin=wework',
+      { signal: controller.signal }
     )
   })
 

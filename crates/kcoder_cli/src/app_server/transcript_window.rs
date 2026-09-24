@@ -753,7 +753,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(visible.role, "user");
-        assert_eq!(visible.content, "[image]");
+        assert_eq!(visible.content, "<system-reminder>hidden</system-reminder>\n[image]");
         assert_pages_match(history, true);
         let many_turns = (0..60)
             .flat_map(|index| {

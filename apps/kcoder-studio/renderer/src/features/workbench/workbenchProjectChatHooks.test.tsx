@@ -725,16 +725,15 @@ test('switching model targets hides the old catalog and ignores late responses f
   const remote = { name: 'remote-only', type: 'runtime' as const }
   let finishOld!: (value: { data: UnifiedModel[] }) => void
   const api = {
-    listModels: vi
-      .fn()
-      .mockResolvedValueOnce({ data: [local] })
-      .mockImplementationOnce(
-        () =>
-          new Promise(resolve => {
-            finishOld = resolve
-          })
-      )
-      .mockResolvedValueOnce({ data: [remote] }),
+    listModels: vi.fn((target?: { deviceId?: string }, options?: { signal?: AbortSignal }) => {
+      expect(options?.signal).toBeInstanceOf(AbortSignal)
+      if (target?.deviceId === 'slow-remote') {
+        return new Promise<{ data: UnifiedModel[] }>(resolve => {
+          finishOld = resolve
+        })
+      }
+      return Promise.resolve({ data: [target?.deviceId === 'remote' ? remote : local] })
+    }),
   }
   const { result, rerender } = renderHook(
     ({ deviceId }) =>
@@ -750,9 +749,22 @@ test('switching model targets hides the old catalog and ignores late responses f
   rerender({ deviceId: 'slow-remote' })
   expect(result.current.models).toEqual([])
   expect(result.current.selectedModel).toBeNull()
+  // A cancelled flight can be skipped before dispatch. To exercise a late
+  // response, first establish that the old target actually reached the API.
+  await waitFor(() =>
+    expect(api.listModels).toHaveBeenLastCalledWith(
+      { deviceId: 'slow-remote', workspacePath: '/project' },
+      { signal: expect.any(AbortSignal) }
+    )
+  )
+  const oldSignal = api.listModels.mock.calls.at(-1)?.[1]?.signal
   rerender({ deviceId: 'remote' })
+  expect(oldSignal?.aborted).toBe(true)
   await waitFor(() => expect(result.current.models).toEqual([remote]))
   await act(async () => finishOld({ data: [local] }))
   expect(result.current.models).toEqual([remote])
-  expect(api.listModels).toHaveBeenLastCalledWith({ deviceId: 'remote', workspacePath: '/project' })
+  expect(api.listModels).toHaveBeenLastCalledWith(
+    { deviceId: 'remote', workspacePath: '/project' },
+    { signal: expect.any(AbortSignal) }
+  )
 })

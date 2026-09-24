@@ -322,3 +322,11 @@ test('the real tui-lab runner delegates platform behavior to the adapter', async
   assert.match(runner, /`--git-dir=\$\{path\.join\(cwd, '\.git'\)\}`/);
   assert.match(runner, /`--work-tree=\$\{cwd\}`/);
 });
+
+test('every scenario runOptions keeps the private profile from its run context', async () => {
+  const source = await readFile(new URL('../bin/tui-lab.mjs', import.meta.url), 'utf8');
+  const options = [...source.matchAll(/const (?:runOptions|baseRunOptions) = \{([\s\S]*?)\n  \};/g)]
+    .map(match => match[1]).filter(body => body.includes('runDir: artifacts.dir'));
+  assert.ok(options.length >= 12);
+  for (const body of options) assert.match(body, /configHome: artifacts\.configHome/, 'a scenario must not fall back to storing config inside public artifacts');
+});

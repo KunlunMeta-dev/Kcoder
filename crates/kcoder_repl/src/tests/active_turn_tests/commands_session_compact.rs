@@ -144,7 +144,7 @@ async fn rewind_command_truncates_conversation_display_and_restores_files() {
         .add_message(Message::assistant_text("answer one"));
     // Engine-injected context blocks occupy turn numbers but must never
     // flood the rebuilt display.
-    engine.state.add_message(Message::user_text(
+    engine.state.add_message(Message::runtime_text(
         "<relevant-memories>\n# Memories\n- old fact\n</relevant-memories>",
     ));
     engine
@@ -238,13 +238,13 @@ async fn rewind_command_without_args_opens_prompt_picker() {
     engine.state.add_message(Message::assistant_text("answer"));
     // Hidden engine-generated user messages keep their turn number but are
     // not offered as picker entries.
-    engine.state.add_message(Message::user_text(
+    engine.state.add_message(Message::runtime_text(
         "<system-reminder>Rewind to checkpoint turn 1 completed.</system-reminder>",
     ));
-    engine.state.add_message(Message::user_text(
+    engine.state.add_message(Message::runtime_text(
         "<relevant-memories>\n# Memories\nold fact\n</relevant-memories>",
     ));
-    engine.state.add_message(Message::user_text(
+    engine.state.add_message(Message::runtime_text(
         "<skill_content name=\"review\">\nskill body\n</skill_content>",
     ));
     engine

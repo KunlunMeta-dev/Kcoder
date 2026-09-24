@@ -199,6 +199,25 @@ async function waitForViewportCommitBoundary(page, boundary, afterSequence, time
   );
 }
 
+// Diagnostic `top`/`visible_top` can include render-only tail rows. Compare
+// content_rows - viewport_rows against resolved_top in the same logical space.
+export function summarizeScrollbarRange(topEvent, bottomEvent) {
+  const maxTop = Math.max(0, Number(bottomEvent.content_rows) - Number(bottomEvent.viewport_rows));
+  const top = Number(topEvent.resolved_top ?? topEvent.top);
+  const bottom = Number(bottomEvent.resolved_top ?? bottomEvent.top);
+  const coverageRows = Math.max(0, bottom - top);
+  return {
+    top, bottom, maxTop, coverageRows,
+    coordinateSpace: 'resolved_transcript_rows',
+    visibleTop: Number(topEvent.visible_top ?? topEvent.top),
+    visibleBottom: Number(bottomEvent.visible_top ?? bottomEvent.top),
+    reachedTop: topEvent.boundary === 'top' && top === 0,
+    returnedToTail: bottomEvent.boundary === 'bottom' && bottom === maxTop,
+    coverageRatio: Number((maxTop > 0 ? coverageRows / maxTop : 1).toFixed(4)),
+    coverageWithinOneDisplayRow: coverageRows >= Math.max(0, maxTop - 1),
+  };
+}
+
 export async function measureTranscriptScrollbarDrag(page) {
   const geometry = await terminalCellGeometry(page);
   const { cellWidth, cellHeight, dimensions } = geometry;
@@ -244,11 +263,7 @@ export async function measureTranscriptScrollbarDrag(page) {
   const setupMs = downStart - dragStart;
   const responseMs = bottomCommit.waitMs;
   const gestureMs = dragInjectionMs + bottomCommit.waitMs;
-  const maxTop = Math.max(0, Number(bottomCommit.event.content_rows) - Number(bottomCommit.event.viewport_rows));
-  const top = Number(topCommit.event.top);
-  const bottom = Number(bottomCommit.event.top);
-  const coverageRows = Math.max(0, bottom - top);
-  const coverageRatio = maxTop > 0 ? coverageRows / maxTop : 1;
+  const range = summarizeScrollbarRange(topCommit.event, bottomCommit.event);
 
   return {
     rows: dimensions.rows,
@@ -258,16 +273,7 @@ export async function measureTranscriptScrollbarDrag(page) {
     startMarker,
     topMarker,
     bottomMarker,
-    reachedTop: topCommit.event.boundary === 'top' && top === 0,
-    returnedToTail: Boolean(
-      bottomCommit.event.boundary === 'bottom' && bottom === maxTop,
-    ),
-    top,
-    bottom,
-    maxTop,
-    coverageRows,
-    coverageRatio: Number(coverageRatio.toFixed(4)),
-    coverageWithinOneDisplayRow: coverageRows >= Math.max(0, maxTop - 1),
+    ...range,
     topCommitSequence: topCommit.event.sequence,
     bottomCommitSequence: bottomCommit.event.sequence,
     jumpTopMs: Math.round(jumpInjectionMs + topCommit.waitMs),

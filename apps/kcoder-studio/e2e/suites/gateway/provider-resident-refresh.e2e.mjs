@@ -13,6 +13,9 @@ await runE2E(import.meta.url, { testId: 'resident-model-refresh-and-deletion', t
   modelPolicy: 'model-independent loopback request parameters and idle turn boundaries' }, async context => {
   const binary = await requireExecutable(process.env.KCODER_E2E_KCODER_BIN || resolve(repoRoot, 'target/debug/kcoder'), 'KCoder');
   const { path: workspace } = await materializeWorkspace(context, 'minimal', { instanceId: 'resident-model' });
+  // The local protocol fixture deliberately emits tools; arbitrary new models
+  // default to text-only and must not acquire capabilities by inference.
+  const fixtureCapabilities = { text: true, tools: true, vision: false, reasoning: false, structured_output: false };
   let releaseTool = false;
   const marker = 'SNAPSHOT_TOOL';
   const latestUser = body => JSON.stringify(body.messages?.filter(message => message.role === 'user').at(-1)?.content ?? '');
@@ -62,7 +65,7 @@ await runE2E(import.meta.url, { testId: 'resident-model-refresh-and-deletion', t
   const heldRequestOffset = fixture.requests.length;
   const held = await rpc.request('turn/start', { threadId: thread.id, input: [{ type: 'text', text: marker }] });
   await waitFor(() => fixture.requests.some(body => latestUser(body).includes(marker)), 30000, 'in-flight model request');
-  await rpc.request('runtime.providers.upsert', { id: 'shared', model: 'model-A', originalModel: 'model-A', apiFormat: 'openai_chat_completions',
+  await rpc.request('runtime.providers.upsert', { id: 'shared', model: 'model-A', originalModel: 'model-A', apiFormat: 'openai_chat_completions', capabilities: fixtureCapabilities,
     endpoint: fixture.baseUrl, contextWindowTokens: 128000, maxOutputTokens: 1024, modelExtraBody: { temperature: 0.7 } }, 30000);
   releaseTool = true;
   const heldDone = await rpc.waitFor(message => message.method === 'turn/completed' && message.params?.turnId === held.turn.id, 30000, 'tool snapshot turn');
@@ -85,7 +88,7 @@ await runE2E(import.meta.url, { testId: 'resident-model-refresh-and-deletion', t
   const updatedTemplate = await rpc.request('thread/start', { cwd: workspace, settingsTemplate: templateId, model: 'templated::frozen' });
   assert.equal((await turn(undefined, updatedTemplate.thread.id)).temperature, 0.8, 'a new conversation loads the updated template');
 
-  await rpc.request('runtime.providers.upsert', { id: 'shared', model: 'model-B', apiFormat: 'openai_chat_completions',
+  await rpc.request('runtime.providers.upsert', { id: 'shared', model: 'model-B', apiFormat: 'openai_chat_completions', capabilities: fixtureCapabilities,
     endpoint: fixture.baseUrl, contextWindowTokens: 128000, maxOutputTokens: 1024, modelExtraBody: { temperature: 0.9 } }, 30000);
   await rpc.request('runtime.providers.delete', { id: 'shared', model: 'model-A', replacementModel: 'model-B', confirm: true }, 30000);
   const residentCatalog = await rpc.request('runtime.models.list', { threadId: thread.id });
@@ -102,7 +105,7 @@ await runE2E(import.meta.url, { testId: 'resident-model-refresh-and-deletion', t
   assert.equal(fixture.requests.length, before, 'a deleted provider must not be resurrected from cached credentials');
   assert.equal((await turn(undefined, thread.id, 'follow_target_default')).model, 'model-B',
     'explicitly following defaults resolves the replacement provider instead of the removed selection');
-  await rpc.request('runtime.providers.upsert', { id: 'companion', model: 'model-C', apiFormat: 'openai_chat_completions',
+  await rpc.request('runtime.providers.upsert', { id: 'companion', model: 'model-C', apiFormat: 'openai_chat_completions', capabilities: fixtureCapabilities,
     endpoint: fixture.baseUrl, contextWindowTokens: 128000, maxOutputTokens: 1024, makeDefault: true,
     modelExtraBody: { temperature: 0.6 } }, 30000);
   const followed = await turn();
@@ -115,7 +118,7 @@ await runE2E(import.meta.url, { testId: 'resident-model-refresh-and-deletion', t
   assert.equal((await turn(undefined, thread.id, 'follow_target_default')).model, 'model-C');
   await restartAndResume(thread.id);
   await rpc.request('runtime.providers.upsert', { id: 'companion', model: 'model-B', originalModel: 'model-B',
-    apiFormat: 'openai_chat_completions', endpoint: fixture.baseUrl, contextWindowTokens: 128000,
+    apiFormat: 'openai_chat_completions', capabilities: fixtureCapabilities, endpoint: fixture.baseUrl, contextWindowTokens: 128000,
     maxOutputTokens: 1024, makeDefault: true, modelExtraBody: { temperature: 0.4 } }, 30000);
   const resumedDefault = await turn();
   assert.equal(resumedDefault.model, 'model-B', 'follow-default intent must survive process restart');
@@ -134,6 +137,7 @@ await runE2E(import.meta.url, { testId: 'resident-model-refresh-and-deletion', t
     const toolsBefore = await readFile(resolve(workspace, 'snapshot-tool-count.txt'), 'utf8');
     const started = await rpc.request('turn/start', { threadId: active.id, input: [{ type: 'text', text: marker }] });
     await waitFor(() => fixture.requests.length > offset, 30000, 'request held before deleting its configuration');
+    assert.ok(fixture.requests.at(-1).tools?.some(tool => tool.function?.name === 'bash'), 'the fixture model must explicitly advertise tools before the deletion probe');
     await rpc.request('runtime.providers.delete', deletion, 30000);
     releaseTool = true;
     const completed = await rpc.waitFor(message => message.method === 'turn/completed'

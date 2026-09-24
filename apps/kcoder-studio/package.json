@@ -1,6 +1,6 @@
 {
   "name": "@kcoder/studio",
-  "version": "0.1.49",
+  "version": "0.1.50",
   "description": "Multi-server KCoder desktop client",
   "author": "KCoder contributors",
   "private": true,

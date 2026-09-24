@@ -4,6 +4,7 @@ import test from 'node:test';
 import { runAssertions } from '../lib/assertions.mjs';
 import {
   firstVisibleHistoryMarker,
+  summarizeScrollbarRange,
   numericRange,
   summarizeSustainedSamples,
   summarizeViewportSequenceEvents,
@@ -278,4 +279,16 @@ test('sequence aggregation is invariant when the same boundary dwell lands early
   assert.ok(late.excludedOutwardInputs > 0);
   assert.equal(early.progressRequirementMet, true);
   assert.equal(late.progressRequirementMet, true);
+});
+
+
+test('scrollbar range uses logical resolved rows while preserving physical offsets', () => {
+  const top = { boundary:'top', top:0, resolved_top:0 };
+  const bottom = { boundary:'bottom', top:135, visible_top:135, resolved_top:133, content_rows:163, viewport_rows:30 };
+  const range = summarizeScrollbarRange(top, bottom);
+  assert.equal(range.returnedToTail, true);
+  assert.equal(range.bottom, 133);
+  assert.equal(range.visibleBottom, 135);
+  assert.equal(range.coverageRatio, 1);
+  assert.equal(summarizeScrollbarRange(top, { ...bottom, resolved_top:128 }).returnedToTail, false);
 });

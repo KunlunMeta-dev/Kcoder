@@ -1078,7 +1078,7 @@ mod tests {
         manager.set_volatile_turn_count(&id, 10);
         engine
             .state
-            .set_messages(vec![kcoder_types::Message::user_text(
+            .set_messages(vec![kcoder_types::Message::compaction_text(
                 "Earlier conversation summary: compacted",
             )]);
         crate::app_server::append_background_followup_message(
@@ -1212,7 +1212,7 @@ mod tests {
         engine
             .state
             .set_messages_after_compaction(
-                vec![kcoder_types::Message::user_text(
+                vec![kcoder_types::Message::compaction_text(
                     "Earlier conversation summary: compacted",
                 )],
                 kcoder_state::CompactionTranscriptEvent {

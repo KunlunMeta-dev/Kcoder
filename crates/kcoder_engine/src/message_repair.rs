@@ -61,7 +61,9 @@ fn has_canonical_tool_sequence<'a>(get: impl Fn(usize) -> Option<&'a Message>) -
                     .peekable();
                 if ids.peek().is_some() {
                     let Some(Message::User {
-                        content: results, ..
+                        // Canonical results already have the origin emitted by slow repair.
+                        content: results,
+                        origin: kcoder_types::MessageOrigin::Runtime,
                     }) = get(index + 1)
                     else {
                         return false;
@@ -318,7 +320,7 @@ mod tests {
             input: serde_json::json!({"path":"中文.txt"}),
         };
         let result = |id: &str| interrupted_tool_result(id);
-        let variants = vec![
+        let mut variants = vec![
             Message::user_text("request"),
             Message::User {
                 origin: kcoder_types::MessageOrigin::Unknown,
@@ -362,6 +364,10 @@ mod tests {
                 ],
             },
         ];
+        variants.push(
+            Message::user_content(vec![result("a")])
+                .with_origin(kcoder_types::MessageOrigin::Runtime),
+        );
         for len in 0..=4u32 {
             for mut code in 0..variants.len().pow(len) {
                 let messages: Vec<_> = (0..len)

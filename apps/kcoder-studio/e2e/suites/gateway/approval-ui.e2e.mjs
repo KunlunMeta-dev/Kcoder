@@ -88,6 +88,8 @@ await runE2E(
     const card = page.getByTestId("request-user-input-card");
     try {
       await card.waitFor({ state: "visible", timeout: 60_000 });
+      // Fresh owned profiles use Studio's declared zh-CN default.
+      await card.getByText("权限请求", { exact: true }).waitFor();
     } catch {
       const diagnostic = await page.evaluate(() => ({
         body: document.body.innerText.slice(0, 8_000),
@@ -107,8 +109,7 @@ await runE2E(
         `approval card did not render: ${JSON.stringify(diagnostic)}`,
       );
     }
-    await card.getByText("Permission request", { exact: true }).waitFor();
-    await card.getByText("Allow once", { exact: true }).click();
+    await card.getByText("仅允许这一次", { exact: true }).click();
     // A single-question card submits immediately after selection; do not search for a submit button in the unmounted card.
     await card.waitFor({ state: "detached", timeout: 30_000 });
     await page.waitForFunction(
@@ -125,9 +126,9 @@ await runE2E(
     const declineCard = page.getByTestId("request-user-input-card");
     await declineCard.waitFor({ state: "visible", timeout: 60_000 });
     await declineCard
-      .getByText("Permission request", { exact: true })
+      .getByText("权限请求", { exact: true })
       .waitFor();
-    await declineCard.getByText("Decline", { exact: true }).click();
+    await declineCard.getByText("拒绝", { exact: true }).click();
     await declineCard.waitFor({ state: "detached", timeout: 30_000 });
     await waitFor(
       () => model.requests.length >= requestsBeforeDecline + 2,

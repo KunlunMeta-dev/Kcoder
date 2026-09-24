@@ -752,7 +752,7 @@ fn cold_count_preparation_does_not_reload_visible_history() {
             state.add_message(kcoder_types::Message::user_text("first request"));
             let tail = kcoder_types::Message::user_text("second request");
             state.add_message(tail.clone());
-            let mut compacted = vec![kcoder_types::Message::user_text(
+            let mut compacted = vec![kcoder_types::Message::compaction_text(
                 "Earlier conversation summary: compacted",
             )];
             if preserve_tail {
@@ -773,7 +773,7 @@ fn cold_count_preparation_does_not_reload_visible_history() {
             state.add_message(kcoder_types::Message::user_text(
                 "[scheduled task test] inspect",
             ));
-            state.add_message(kcoder_types::Message::user_text(
+            state.add_message(kcoder_types::Message::runtime_text(
                 "[system] Continue working toward the active goal",
             ));
             let cut = state.messages().len();
@@ -809,7 +809,7 @@ fn cold_count_summary_rewind_and_zero_rewind_keep_matching_prefixes() {
         state
             .set_messages_after_compaction(
                 vec![
-                    kcoder_types::Message::user_text("Earlier conversation summary: compacted"),
+                    kcoder_types::Message::compaction_text("Earlier conversation summary: compacted"),
                     tail,
                 ],
                 kcoder_state::CompactionTranscriptEvent {
@@ -1419,7 +1419,7 @@ fn durable_transcript_turns_drive_fork_identity_after_context_compaction() {
         entry(2, kcoder_types::Message::assistant_text("answer one")),
         entry(
             3,
-            kcoder_types::Message::user_text(
+            kcoder_types::Message::runtime_text(
                 "[system] Continue working toward the active `/goal` objective.",
             ),
         ),
@@ -1442,7 +1442,7 @@ fn strict_goal_continuation_is_hidden_from_projected_transcript() {
         timestamp_ms: 1,
         uuid: Some("strict-goal-context".into()),
         parent_uuid: None,
-        message: kcoder_types::Message::user_text(
+        message: kcoder_types::Message::runtime_text(
             "[system] Continue working toward the active `/goal-pro` objective.\n\n\
                  This is a strict `/goal-pro` continuation.",
         ),
@@ -1458,7 +1458,7 @@ fn system_reminder_is_hidden_from_projected_transcript() {
         timestamp_ms: 1,
         uuid: Some("rewind-reminder".into()),
         parent_uuid: None,
-        message: kcoder_types::Message::user_text(
+        message: kcoder_types::Message::runtime_text(
             "  <system-reminder>Rewind to checkpoint turn 2 completed: nothing to rewind.\
              </system-reminder>",
         ),
@@ -1469,40 +1469,28 @@ fn system_reminder_is_hidden_from_projected_transcript() {
 
 #[test]
 fn synthetic_skill_context_is_hidden_but_ordinary_skill_discussion_remains() {
-    for (text, visible) in [
-        (
-            "<skill_content name=\"fixture\">\nINTERNAL_SKILL_BODY\n</skill_content>",
-            false,
-        ),
-        (
-            "  <skill_content name=\"fixture\">body</skill_content>\n",
-            false,
-        ),
-        (
-            "Explain <skill_content name=\"fixture\"> and its format",
-            true,
-        ),
-        (
-            "```xml\n<skill_content name=\"fixture\">body</skill_content>\n```",
-            true,
-        ),
-        (
-            "<skill_content name=\"fixture\">incomplete user example",
-            true,
-        ),
+    for text in [
+        "<skill_content name=\"fixture\">body</skill_content>",
+        "Explain <skill_content name=\"fixture\"> and its format",
+        "<skill_content name=\"fixture\">incomplete user example",
     ] {
-        let entry = kcoder_state::HistoryEntry {
-            session_id: "session".into(),
-            timestamp_ms: 1,
-            uuid: Some("skill-context".into()),
-            parent_uuid: None,
-            message: kcoder_types::Message::user_text(text),
-        };
-        assert_eq!(
-            history_entry_thread_message(0, entry, None, &HashMap::new()).is_some(),
-            visible,
-            "{text}"
-        );
+        for (message, visible) in [
+            (kcoder_types::Message::runtime_text(text), false),
+            (kcoder_types::Message::user_text(text), true),
+        ] {
+            let entry = kcoder_state::HistoryEntry {
+                session_id: "session".into(),
+                timestamp_ms: 1,
+                uuid: Some("skill-context".into()),
+                parent_uuid: None,
+                message,
+            };
+            assert_eq!(
+                history_entry_thread_message(0, entry, None, &HashMap::new()).is_some(),
+                visible,
+                "{text}"
+            );
+        }
     }
 }
 

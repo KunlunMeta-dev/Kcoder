@@ -40,7 +40,7 @@ fn active_goal_continues_after_an_answer_without_a_completion_tool() {
         json!({"jsonrpc":"2.0","id":6,"method":"thread/goal/get","params":{"threadId":thread}}),
     );
     let goal = server.response(6)["result"]["goal"].clone();
-    assert_eq!(goal["turnCount"], 1);
+    assert_eq!(goal["turnCount"], 2);
     assert_eq!(
         goal["status"], "active",
         "A final answer must not fabricate goal completion"
@@ -86,14 +86,17 @@ fn goal_pause_clear_and_owner_suspend_disarm_automatic_turns() {
         };
         server.send(json!({"id":5,"method":method,"params":params}));
         assert!(server.response(5).get("error").is_none(), "{action}");
+        server.send(json!({"id":50,"method":"thread/goal/get","params":{"threadId":thread}}));
+        let stopped_count = server.response(50)["result"]["goal"]["turnCount"].clone();
         std::thread::sleep(Duration::from_millis(850));
         server.send(json!({"id":6,"method":"thread/goal/get","params":{"threadId":thread}}));
         let goal = server.response(6)["result"]["goal"].clone();
         if action == "clear" {
             assert!(goal.is_null());
         } else {
-            // The initial user turn counts; pausing must prevent any continuation.
-            assert_eq!(goal["turnCount"], 1, "{action}");
+            // A continuation may already have started before the stop request arrives.
+            // Once acknowledged, no later execution may advance the counter.
+            assert_eq!(goal["turnCount"], stopped_count, "{action}");
             assert_eq!(
                 goal["status"],
                 if action == "pause" {
@@ -134,7 +137,7 @@ fn goal_pro_uses_the_same_bounded_continuation_without_bypassing_verification() 
     server.send(json!({"id":5,"method":"thread/goal/get","params":{"threadId":thread}}));
     let goal = server.response(5)["result"]["goal"].clone();
     assert_eq!(goal["mode"], "strict");
-    assert_eq!(goal["turnCount"], 1);
+    assert_eq!(goal["turnCount"], 2);
     assert_eq!(goal["status"], "active");
     server.send(
         json!({"id":6,"method":"thread/goal/set","params":{"threadId":thread,"status":"complete"}}),

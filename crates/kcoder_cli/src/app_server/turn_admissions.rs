@@ -212,7 +212,7 @@ mod fork_tests {
         vec![
             entry(
                 "prefix",
-                Message::user_text(
+                Message::runtime_text(
                     "[system] Continue working toward the active `/goal` objective.",
                 ),
             ),
@@ -221,7 +221,7 @@ mod fork_tests {
             entry("new", Message::user_text("replacement")),
             entry(
                 "followup",
-                Message::user_text(
+                Message::runtime_text(
                     "[system] Continue working toward the active `/goal` objective.",
                 ),
             ),

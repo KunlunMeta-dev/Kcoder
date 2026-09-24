@@ -26,6 +26,7 @@ export function suiteEnvironmentNames(suiteId, env = process.env) {
     "KCODER_E2E_KCODER_BIN",
     "KCODER_E2E_SUITE_TIMEOUT_MS",
   ];
+  if (suiteId === "suites/gateway/windows-wine-resources.e2e.mjs") names.push("KCODER_E2E_PACKAGED_DIR");
   if (suiteId === "suites/gateway/plugin-target-ca.e2e.mjs") names.push("KCODER_E2E_PLUGIN_CA_PROBE_BIN");
   if (suiteId === "suites/browser/packaged-desktop-smoke.e2e.mjs") names.push("KCODER_E2E_PACKAGED_DIR", "KCODER_E2E_PROCESS_SUPERVISOR_BIN");
   if (suiteId === "suites/browser/right-workspace-multitool.e2e.mjs") {

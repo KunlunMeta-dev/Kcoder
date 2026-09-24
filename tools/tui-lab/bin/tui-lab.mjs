@@ -3364,6 +3364,8 @@ async function runStartupScenario(options) {
     ...options,
     runDir: artifacts.dir,
     workspaceDir: artifacts.workspace,
+    requestsDir: artifacts.requestsDir,
+    configHome: artifacts.configHome,
   };
   const command = defaultCommandString(runOptions);
   const trace = [];
@@ -3566,6 +3568,7 @@ async function runExternalEditorScenario(options) {
     runDir: artifacts.dir,
     workspaceDir: artifacts.workspace,
     requestsDir: artifacts.requestsDir,
+    configHome: artifacts.configHome,
     externalEditorCommand,
     externalEditorMarker: editorMarker,
   };
@@ -4252,6 +4255,8 @@ async function runSlashOverlayScenario(options) {
     ...options,
     runDir: artifacts.dir,
     workspaceDir: artifacts.workspace,
+    requestsDir: artifacts.requestsDir,
+    configHome: artifacts.configHome,
   };
   const command = defaultCommandString(runOptions);
   const trace = [];
@@ -4440,6 +4445,8 @@ async function runSlashAfterHistoryScenario(options) {
     ...options,
     runDir: artifacts.dir,
     workspaceDir: artifacts.workspace,
+    requestsDir: artifacts.requestsDir,
+    configHome: artifacts.configHome,
   };
   const command = defaultCommandString(runOptions);
   const trace = [];
@@ -4613,6 +4620,8 @@ async function runResizeVisualScenario(options) {
     ...options,
     runDir: artifacts.dir,
     workspaceDir: artifacts.workspace,
+    requestsDir: artifacts.requestsDir,
+    configHome: artifacts.configHome,
   };
   const command = defaultCommandString(runOptions);
   const trace = [];
@@ -4773,6 +4782,9 @@ async function runResizeVisualScenario(options) {
 }
 
 async function runGoalCommandScenario(options) {
+  // This scenario asserts the complete lifecycle footer. Compact-width behavior
+  // is covered separately by resize-visual and slash-overlay.
+  options = { ...options, cols: Math.max(options.cols, 180) };
   const artifacts = await createRunContext(
     options,
     "goal-command",
@@ -4782,6 +4794,8 @@ async function runGoalCommandScenario(options) {
     ...options,
     runDir: artifacts.dir,
     workspaceDir: artifacts.workspace,
+    requestsDir: artifacts.requestsDir,
+    configHome: artifacts.configHome,
   };
   const command = defaultCommandString(runOptions);
   const trace = [];
@@ -4790,6 +4804,12 @@ async function runGoalCommandScenario(options) {
   let browser;
   let page;
   const stageTexts = {};
+  const submitGoalLine = async (page, text) => {
+    await page.evaluate(() => window.tuiLab.focus());
+    await typeHumanText(page, text);
+    await page.waitForTimeout(120);
+    await page.evaluate(() => window.tuiLab.sendInput("\r"));
+  };
   const screenshots = {
     slashGoal: path.join(artifacts.dir, "slash-goal-filter.png"),
     invalidBudget: path.join(artifacts.dir, "goal-invalid-budget.png"),
@@ -4878,8 +4898,10 @@ async function runGoalCommandScenario(options) {
     await captureStep(page, trace, "goal-running", screenshots.goalRunning);
     stageTexts.goalRunning = await page.evaluate(() => window.tuiLab.text());
 
-    await focusTerminal(page);
-    await pressTerminalEscape(page, process.platform);
+    // Focus without clicking transcript cells: a click creates a selection,
+    // whose Escape handler intentionally clears selection before pausing.
+    await page.evaluate(() => window.tuiLab.focus());
+    await page.keyboard.press("Escape");
     await waitForTerminalText(page, "Goal paused", options.timeoutMs);
     await page.waitForTimeout(250);
     await captureStep(page, trace, "goal-paused", screenshots.goalPaused);
@@ -4932,7 +4954,7 @@ async function runGoalCommandScenario(options) {
       "TUI dev mode is running mock scenario",
       options.timeoutMs,
     );
-    await submitTerminalLine(
+    await submitGoalLine(
       page,
       "/goal-pro --answer --budget 50000 审核最终研究结论并输出可复核报告。",
     );
@@ -4948,12 +4970,14 @@ async function runGoalCommandScenario(options) {
       "goal-pro-answer-running",
       screenshots.answerRunning,
     );
-    await focusTerminal(page);
-    await pressTerminalEscape(page, process.platform);
+    // Focus without clicking transcript cells: a click creates a selection,
+    // whose Escape handler intentionally clears selection before pausing.
+    await page.evaluate(() => window.tuiLab.focus());
+    await page.keyboard.press("Escape");
     await waitForTerminalText(page, "/goal-pro resume", options.timeoutMs);
     // The pause notice precedes foreground-task cleanup; allow time for slash commands to return to the direct execution path.
     await page.waitForTimeout(2000);
-    await submitTerminalLine(page, "/goal-pro status");
+    await submitGoalLine(page, "/goal-pro status");
     await waitForTerminalText(page, "verification=answer", options.timeoutMs);
     await captureStep(
       page,
@@ -6060,6 +6084,8 @@ async function openInteractive(options) {
     ...options,
     runDir: artifacts.dir,
     workspaceDir: artifacts.workspace,
+    requestsDir: artifacts.requestsDir,
+    configHome: artifacts.configHome,
   };
   const session = await startSession(runOptions);
   const browser = await chromium.launch(browserLaunchOptions(options));
@@ -6118,6 +6144,8 @@ async function tmuxSmoke(options) {
     ...options,
     runDir: artifacts.dir,
     workspaceDir: artifacts.workspace,
+    requestsDir: artifacts.requestsDir,
+    configHome: artifacts.configHome,
   };
   const sessionName = `kcoder-tui-lab-${process.pid}`;
   const command = `cd ${shellQuote(repoRoot)} && exec ${defaultCommandString(runOptions)}`;
@@ -6290,6 +6318,8 @@ async function tmuxStartup(options) {
     ...options,
     runDir: artifacts.dir,
     workspaceDir: artifacts.workspace,
+    requestsDir: artifacts.requestsDir,
+    configHome: artifacts.configHome,
   };
   const sessionName = `kcoder-tui-lab-startup-${process.pid}`;
   const command = defaultCommandString(runOptions);

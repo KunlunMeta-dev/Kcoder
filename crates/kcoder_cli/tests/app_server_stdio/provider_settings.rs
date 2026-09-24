@@ -117,7 +117,7 @@ fn provider_validation_fixture_sequence(
     let task = std::thread::spawn(move || {
         let deadline = Instant::now() + Duration::from_secs(30);
         let mut requests = Vec::new();
-        for _ in 0..request_count {
+        while requests.len() < request_count {
             let mut socket = loop {
                 match listener.accept() {
                     Ok((socket, _)) => break socket,
@@ -134,28 +134,20 @@ fn provider_validation_fixture_sequence(
                 .set_read_timeout(Some(Duration::from_secs(10)))
                 .unwrap();
             let mut bytes = Vec::new();
-            let (body_start, length) = loop {
+            let body_start = loop {
                 let mut byte = [0];
                 socket.read_exact(&mut byte).unwrap();
                 bytes.push(byte[0]);
                 assert!(bytes.len() < 32768);
-                if bytes.ends_with(b"\r\n\r\n") {
-                    let header = String::from_utf8_lossy(&bytes).to_ascii_lowercase();
-                    let length = header
-                        .lines()
-                        .find_map(|line| {
-                            line.strip_prefix("content-length:")
-                                .map(|value| value.trim().parse::<usize>().unwrap())
-                        })
-                        .unwrap();
-                    break (bytes.len(), length);
-                }
+                if bytes.ends_with(b"\r\n\r\n") { break bytes.len(); }
             };
-            // A real main turn includes the full tool catalog, unlike a tiny save probe.
-            assert!(length < 2 * 1024 * 1024);
-            bytes.resize(body_start + length, 0);
-            socket.read_exact(&mut bytes[body_start..]).unwrap();
-            let mut input: Value = serde_json::from_slice(&bytes[body_start..]).unwrap();
+            let header = String::from_utf8_lossy(&bytes).to_ascii_lowercase();
+            if header.starts_with("head ") {
+                write!(socket, "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();
+                continue;
+            }
+            let body = read_fixture_request_body(&mut socket, &header);
+            let mut input: Value = serde_json::from_slice(&body).unwrap();
             // Retain only the presence of authentication, never the header value.
             input["_fixtureAuthenticationPresent"] = json!(
                 String::from_utf8_lossy(&bytes[..body_start])

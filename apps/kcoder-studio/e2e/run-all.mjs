@@ -40,7 +40,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
 }
 
 export async function prepareSuiteArtifacts(requested, options = {}) {
-  if (requested.length && requested.every(source => source === "suites/browser/packaged-desktop-smoke.e2e.mjs")) return;
+  if (requested.length && requested.every(source => source === "suites/browser/packaged-desktop-smoke.e2e.mjs" || source === "suites/gateway/windows-wine-resources.e2e.mjs")) return;
   const run = options.run || runPreparation;
   const caSuite = "suites/gateway/plugin-target-ca.e2e.mjs";
   if (requested.includes(caSuite)) {

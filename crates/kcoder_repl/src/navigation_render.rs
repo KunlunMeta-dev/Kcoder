@@ -906,7 +906,7 @@ mod tests {
     }
 
     #[test]
-    fn navigation_rejects_cancelled_invalid_hidden_and_oversized_blocks() {
+    fn navigation_rejects_invalid_budgets_but_preserves_literal_user_prefixes() {
         let msg = message("# 标题😀\nbody");
         assert_eq!(
             render_message_navigation_window(
@@ -946,22 +946,16 @@ mod tests {
             .unwrap_err(),
             NavigationRenderError::InvalidSource
         );
-        let hidden = DisplayMessage {
+        // DisplayMessage contains already-projected user-visible text. A user's
+        // literal runtime-looking prefix must remain navigable, never reclassified.
+        let literal = DisplayMessage {
             role: MessageRole::User,
             text: "[system] All tracked background sub-agents have finished.".into(),
         };
-        assert_eq!(
-            render_message_navigation_window(
-                &hidden,
-                options(80, true),
-                MessageSourceTarget::MessageStart,
-                8,
-                2,
-                &AtomicBool::new(false)
-            )
-            .unwrap_err(),
-            NavigationRenderError::UnsupportedMessage
-        );
+        assert!(render_message_navigation_window(
+            &literal, options(80, true), MessageSourceTarget::MessageStart, 8, 2,
+            &AtomicBool::new(false),
+        ).is_ok());
         let code = message(format!(
             "```rust\n{}\n```\n\n# target",
             "let a = 1;\n".repeat(2050)
