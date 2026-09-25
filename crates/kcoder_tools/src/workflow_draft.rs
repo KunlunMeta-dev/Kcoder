@@ -32,7 +32,7 @@ pub(crate) fn library_root(ctx: &ToolContext) -> Result<PathBuf, ToolError> {
 
 use crate::{Tool, ToolOutput, parse_input};
 use async_trait::async_trait;
-use kcoder_types::workflow::WorkflowNode;
+use kcoder_types::workflow::{WorkflowDefinition, WorkflowNode};
 use kcoder_workflow::store::WorkflowStore;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -45,6 +45,8 @@ enum Action {
     Update,
     Clone,
     Versions,
+    Export,
+    Import,
     Create,
     UpsertNode,
     RemoveNode,
@@ -62,6 +64,7 @@ struct Input {
     #[schemars(range(min = 1))]
     expected_revision: Option<u64>,
     node: Option<WorkflowNode>,
+    definition: Option<WorkflowDefinition>,
     node_id: Option<String>,
     offset: Option<usize>,
     #[schemars(range(min = 1, max = 32))]
@@ -76,7 +79,7 @@ impl Tool for WorkflowDraftTool {
         "WorkflowDraft".into()
     }
     fn description(&self) -> String {
-        "Author a persistent workflow without executing it. list discovers saved definitions across conversations (offset/limit pagination, at most 32 items). Create a draft, then upsert each node in a separate call so progress is visible. Use returned revision as expected_revision on each mutation. Read to recover from revision conflicts. upsert_node replaces the whole node; preserve unchanged fields when editing an existing node. save validates and publishes an immutable version; it never runs agents. Rich nodes use typed kind/config/runIf fields; condition and loop predicates are declarative, never code. update fully replaces title, description and input_schema (omit schema to clear it). versions lists immutable releases; clone creates a new draft from an existing id and optional version. Node dependencies reference IDs in the same draft.".into()
+        "Author a persistent workflow without executing it. list discovers saved definitions across conversations (offset/limit pagination, at most 32 items). Create a draft, then upsert each node in a separate call so progress is visible. Use returned revision as expected_revision on each mutation. read without version returns the current draft; read with version returns that immutable saved version including its input schema. Read after revision conflicts. upsert_node replaces the whole node; preserve unchanged fields when editing an existing node. save validates and publishes an immutable version; it never runs agents. Rich nodes use typed kind/config/runIf fields; condition and loop predicates are declarative, never code. update fully replaces title, description and input_schema (omit schema to clear it). versions lists immutable releases; clone creates a new draft from an existing id and optional version. export returns portable definition JSON; import accepts definition JSON and creates a new unpublished draft with a new ID. Handle create, edit, rename, save, copy, import and export requests directly in conversation; do not send users to forms or require them to write JSON. Node dependencies reference IDs in the same draft.".into()
     }
     async fn description_for_model(
         &self,
@@ -86,7 +89,7 @@ impl Tool for WorkflowDraftTool {
         let mut description = self.description();
         if ctx.available_tools.contains("Workflow") {
             description
-                .push_str(" To execute explicitly use Workflow with definition_id and version.");
+                .push_str(" For requested reuse, list by title, resolve ambiguous matches in conversation, and read the selected saved version before using Workflow with definition_id and version. Derive args from the user request and declared defaults; ask for missing or ambiguous required inputs before execution. Do not invent values or execute merely to discover missing inputs.");
         }
         description
     }
@@ -105,7 +108,10 @@ impl Tool for WorkflowDraftTool {
         }
         let input: Input = parse_input(&input)?;
         if let Some(bound) = ctx.state.workflow_definition_id() {
-            if matches!(input.action, Action::Create | Action::Clone) {
+            if matches!(
+                input.action,
+                Action::Create | Action::Clone | Action::Import
+            ) {
                 return Err(ToolError::InvalidInput(format!(
                     "This conversation is bound to draft {bound}; read and update it instead of creating another"
                 )));
@@ -146,7 +152,12 @@ impl Tool for WorkflowDraftTool {
                 input.title.as_deref().ok_or_else(|| missing("title"))?,
                 &input.description,
             ),
-            Action::Read => store.read(id()?),
+            Action::Read => match input.version {
+                Some(version) => store.read_saved(id()?, Some(version)),
+                None => store.read(id()?),
+            },
+            Action::Export => store.export(id()?, input.version),
+            Action::Import => store.import(input.definition.clone().ok_or_else(|| missing("definition"))?),
             Action::Save => {
                 validate_workflow_agent_types(
                     &store
@@ -318,6 +329,74 @@ mod tests {
                 .call(json!({"action":"read","id":created["id"]}), &ctx)
                 .await
                 .is_ok()
+        );
+    }
+
+    #[tokio::test]
+    async fn conversation_reads_exact_saved_schema_and_imports_as_new_draft() {
+        let temp = tempfile::tempdir().unwrap();
+        let ctx = ToolContext::new(kcoder_state::AppState::new(temp.path()))
+            .with_settings_persistence_path(Some(temp.path().join("owner/settings.json")));
+        let tool = WorkflowDraftTool;
+        let created = payload(
+            &tool
+                .call(json!({"action":"create","title":"Slides"}), &ctx)
+                .await
+                .unwrap(),
+        );
+        let id = created["id"].as_str().unwrap();
+        let node = payload(&tool.call(json!({"action":"upsert_node","id":id,"expected_revision":created["revision"],"node":{"id":"A","title":"Slides","prompt":"Create slides"}}), &ctx).await.unwrap());
+        let schema =
+            json!({"type":"object","required":["topic"],"properties":{"topic":{"type":"string"}}});
+        let updated = payload(&tool.call(json!({"action":"update","id":id,"expected_revision":node["revision"],"title":"Slides v1","input_schema":schema}), &ctx).await.unwrap());
+        let saved = payload(
+            &tool
+                .call(
+                    json!({"action":"save","id":id,"expected_revision":updated["revision"]}),
+                    &ctx,
+                )
+                .await
+                .unwrap(),
+        );
+        tool.call(json!({"action":"update","id":id,"expected_revision":saved["revision"],"title":"New draft","input_schema":{"type":"object"}}), &ctx).await.unwrap();
+        let historical = payload(
+            &tool
+                .call(json!({"action":"read","id":id,"version":1}), &ctx)
+                .await
+                .unwrap(),
+        );
+        assert_eq!(historical["title"], "Slides v1");
+        assert_eq!(historical["inputSchema"], schema);
+        assert!(
+            tool.call(json!({"action":"read","id":id,"version":999}), &ctx)
+                .await
+                .is_err()
+        );
+        let exported = payload(
+            &tool
+                .call(json!({"action":"export","id":id,"version":1}), &ctx)
+                .await
+                .unwrap(),
+        );
+        let imported = payload(
+            &tool
+                .call(json!({"action":"import","definition":exported}), &ctx)
+                .await
+                .unwrap(),
+        );
+        assert_ne!(imported["id"], id);
+        assert_eq!(imported["status"], "draft");
+        assert_eq!(imported["inputSchema"], schema);
+        ctx.state
+            .enter_session_mode_before_first_message(kcoder_state::SessionMode::WorkflowDraft)
+            .unwrap();
+        ctx.state
+            .bind_workflow_definition_before_first_message(id)
+            .unwrap();
+        assert!(
+            tool.call(json!({"action":"import","definition":exported}), &ctx)
+                .await
+                .is_err()
         );
     }
 

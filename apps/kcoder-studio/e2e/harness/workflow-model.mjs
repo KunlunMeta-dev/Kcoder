@@ -30,7 +30,8 @@ export async function startWorkflowModelFixture(context) {
       const system = messages.filter(message => message.role === 'system').map(text).join('\n');
       const binding = system.match(/Workflow draft binding:\s*(\{[^\n]*\})/)?.[1];
       const boundId = binding ? JSON.parse(binding).id : null;
-      const last = [...messages].reverse().find(message => message.role === 'tool');
+      const lastUser = messages.findLastIndex(message => message.role === 'user');
+      const last = messages.slice(lastUser + 1).reverse().find(message => message.role === 'tool');
       const output = result(last);
       const reply = (content, name, input) => {
         const delta = name ? { tool_calls: [{ index: 0, id: `wf-fixture-${sequence}`, type: 'function', function: { name, arguments: JSON.stringify(input) } }] } : { content };
@@ -62,7 +63,7 @@ export async function startWorkflowModelFixture(context) {
       if (users.includes('WF_NODE_A_WORK')) {
         observations.push({ kind: 'agent', node: 'A' }); return reply('WF_NODE_A_RESULT');
       }
-      const input = savedInvocation(users);
+      const input = savedInvocation(lastUser >= 0 ? text(messages[lastUser]) : '');
       if (input) {
         observations.push({ kind: 'saved-run', id: input.definition_id, version: input.version });
         if (!last) return reply(null, 'Workflow', input);

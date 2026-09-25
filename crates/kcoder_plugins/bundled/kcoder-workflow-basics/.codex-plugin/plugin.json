@@ -1,6 +1,6 @@
 {
   "name": "kcoder-workflow-basics",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Offline KCoder workflow planning skill bundle",
   "keywords": ["kcoder", "workflow", "bundled"],
   "skills": ["./skills"]

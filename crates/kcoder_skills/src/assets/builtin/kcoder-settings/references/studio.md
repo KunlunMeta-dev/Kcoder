@@ -72,3 +72,9 @@ When continuation is refused, explain the reason and preserve the conversation. 
 ## Built-in Reference Updates
 
 These files are embedded in the KCoder executable and materialized into its managed `.builtin` layer. A source edit requires a rebuilt/deployed executable to reach another installation. User, external and project same-name skill overrides retain their existing precedence; inspect the activated source instead of deleting those overrides to force this guide.
+
+## Conversation-first Workflows
+
+Prefer natural-language requests over requiring library pages or JSON forms. When attached, `WorkflowDraft` can list, read, create, update, save, clone, import and export definitions in Studio or TUI. `read` with an explicit `version` returns the immutable saved definition; without `version` it returns the editable draft. For reuse, read the chosen saved version and its input schema, ask in chat for missing required information, then execute only when requested with `Workflow`. Do not substitute the current draft's schema for a historical version. Import creates an unpublished draft with a new ID.
+
+Studio's “Reuse workflow” selector is optional assistance: it inserts a version reference into the current conversation without executing. Users can describe their requirements in chat; manual parameter forms and JSON are optional. A `workflow_draft` design session deliberately cannot execute nodes; use an ordinary conversation for execution. Operations not present in the attached registry must not be claimed as available.

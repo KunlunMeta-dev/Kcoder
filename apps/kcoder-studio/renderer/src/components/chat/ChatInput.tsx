@@ -1,3 +1,4 @@
+import { WorkflowReusePicker } from '@/features/workflows/WorkflowReusePicker'
 import type { WorkflowComposerIntent } from '@/features/workflows/useWorkflowComposerIntent'
 import { Layers, GitBranch } from 'lucide-react'
 import { SettingsSelect } from '@/components/settings/SettingsSelect'
@@ -666,6 +667,10 @@ export function ChatInput({
       {settingsTemplateBadge.status !== 'current' && <span aria-hidden>!</span>}
     </div>
   ) : null
+  const workflowReuseControl = workflowNavigationActive && projectWork?.currentRuntimeTask && sessionMode !== 'workflow_draft' && !workflowSelected ? (
+    <WorkflowReusePicker key={projectWork.currentRuntimeTask.taskId} serverId={projectWork.currentRuntimeTask.deviceId}
+      disabled={isStreaming} onInsert={text => onChange(value.trim() ? `${value}\n\n${text}` : text)} />
+  ) : null
   const workflowModeControl = !projectWork?.currentRuntimeTask && !isStreaming && sessionMode !== 'workflow_draft' ? (
     <Button type="button" size="sm" variant={workflowSelected ? 'secondary' : 'ghost'}
       data-testid="composer-workflow-mode" aria-pressed={workflowSelected}
@@ -835,6 +840,7 @@ export function ChatInput({
               {settingsTemplateSelect}
               {settingsTemplateBadgeChip}
               {workflowModeControl}
+              {workflowReuseControl}
             {executionModePill}
             </>
           }
@@ -900,6 +906,7 @@ export function ChatInput({
             {settingsTemplateSelect}
             {settingsTemplateBadgeChip}
             {workflowModeControl}
+              {workflowReuseControl}
             {executionModePill}
           </>
         }
