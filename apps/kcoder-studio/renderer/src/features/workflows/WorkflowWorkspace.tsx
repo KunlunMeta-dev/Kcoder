@@ -120,6 +120,7 @@ function WorkflowLibrary({
   const [revisionTick, setRevisionTick] = useState(0)
   const [workspacePath, setWorkspacePath] = useState(initialWorkspace)
   const [runHistoryOpen, setRunHistoryOpen] = useState(false)
+  const [advancedOpen, setAdvancedOpen] = useState(false)
   const [observedRun, setObservedRun] = useState<WorkflowRun | null>(null)
   const [runArguments, setRunArguments] = useState('{}')
   const [schemaText, setSchemaText] = useState('')
@@ -330,47 +331,54 @@ function WorkflowLibrary({
           >
             <span className="block truncate font-medium">{item.title}</span>
             <span className="text-xs text-text-muted">
-              {t(`workflowCanvas.${item.status}`)} · {item.nodeCount} · r{item.revision}
+              {t(`workflowCanvas.${item.status}`)}
+              {item.savedVersion ? ` · v${item.savedVersion}` : ''}
             </span>
           </button>
         ))}
         {!loading && !items.length && (
           <p className="text-sm text-text-muted">{t('workflowCanvas.emptyLibrary')}</p>
         )}
-        <p className="text-xs text-text-muted">
-          {t('workflowCanvas.pageCount', {
-            offset: items.length ? offset + 1 : 0,
-            end: offset + items.length,
-            total,
-          })}
-        </p>
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={!offset || busy}
-            onClick={() => {
-              setOffset(value => Math.max(0, value - 32))
-              setItems([])
-              setLoading(true)
-            }}
-          >
-            {t('workflowCanvas.previous')}
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={!truncated || nextOffset == null || busy}
-            onClick={() => {
-              setOffset(nextOffset!)
-              setItems([])
-              setLoading(true)
-            }}
-          >
-            {t('workflowCanvas.next')}
-          </Button>
-        </div>
-        {truncated && <p className="text-xs text-text-muted">{t('workflowCanvas.truncated')}</p>}
+        {(total > 32 || offset > 0) && (
+          <>
+            <p className="text-xs text-text-muted">
+              {t('workflowCanvas.pageCount', {
+                offset: items.length ? offset + 1 : 0,
+                end: offset + items.length,
+                total,
+              })}
+            </p>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={!offset || busy}
+                onClick={() => {
+                  setOffset(value => Math.max(0, value - 32))
+                  setItems([])
+                  setLoading(true)
+                }}
+              >
+                {t('workflowCanvas.previous')}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={!truncated || nextOffset == null || busy}
+                onClick={() => {
+                  setOffset(nextOffset!)
+                  setItems([])
+                  setLoading(true)
+                }}
+              >
+                {t('workflowCanvas.next')}
+              </Button>
+            </div>
+            {truncated && (
+              <p className="text-xs text-text-muted">{t('workflowCanvas.truncated')}</p>
+            )}
+          </>
+        )}
       </aside>
       <section className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
         {(error || loadError) && (
@@ -396,9 +404,13 @@ function WorkflowLibrary({
         {definition ? (
           <>
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="mr-auto truncate text-sm font-medium">{definition.title}</h2>
-              <span data-testid="workflow-revision" className="text-xs text-text-muted">
-                {t(`workflowCanvas.${definition.status}`)} · r{definition.revision}
+              <h2 className="heading-sm mr-auto min-w-0 truncate">{definition.title}</h2>
+              <span
+                data-testid="workflow-revision"
+                className="text-xs text-text-muted"
+                title={`r${definition.revision}`}
+              >
+                {t(`workflowCanvas.${definition.status}`)}
                 {definition.savedVersion ? ` · v${definition.savedVersion}` : ''}
               </span>
               <Button
@@ -414,6 +426,8 @@ function WorkflowLibrary({
               <Button
                 size="sm"
                 data-testid="workflow-publish"
+                variant="secondary"
+                title={t('workflowCanvas.saveDoesNotRun')}
                 disabled={
                   busy ||
                   dirty ||
@@ -429,156 +443,172 @@ function WorkflowLibrary({
                 {t('workflowCanvas.publish')}
               </Button>
             </div>
-            <p className="text-xs text-text-muted">{t('workflowCanvas.saveDoesNotRun')}</p>
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={busy || dirty || viewVersion != null || !workspacePath.trim()}
-              onClick={() => {
-                const id = definition.id
-                const accountValid = captureAccountContextRevision()
-                startNewChat()
-                void openStandaloneWorkspace(serverId, workspacePath.trim(), definition.title)
-                  .then(() => {
-                    if (accountValid(serverId)) {
-                      requestWorkflowComposerIntent({ active: true, definitionId: id })
-                      navigateTo(`/?workflow=new&workflowDraft=${encodeURIComponent(id)}`)
-                    }
-                  })
-                  .catch(failure => {
-                    if (isCurrent()) setError(String(failure))
-                  })
-              }}
-            >
-              {t('workflowCanvas.continueDesign')}
-            </Button>
-            <WorkflowLibraryActions
-              serverId={serverId}
-              definition={definition}
-              version={viewVersion}
-              disabled={busy || dirty}
-              isCurrent={isCurrent}
-              onError={setError}
-              onVersion={version => {
-                setViewVersion(version)
-                setDefinition(null)
-                setSelectedNode(null)
-                setObservedRun(null)
-              }}
-              onCreated={next => {
-                setViewVersion(null)
-                setSelected(next.id)
-                setDefinition(next)
-                setSelectedNode(null)
-                setItems([])
-                setOffset(0)
-                setRevisionTick(value => value + 1)
-              }}
-            />
-            <details className="rounded-xl border border-border p-3">
-              <summary className="cursor-pointer text-sm">
-                {t('workflowCanvas.inputSchema')}
-              </summary>
-              <textarea
-                aria-label={t('workflowCanvas.inputSchema')}
-                className={`${field} mt-2 font-mono`}
-                rows={6}
-                value={schemaText || JSON.stringify(definition.inputSchema ?? {}, null, 2)}
-                onChange={event => {
-                  if (schemaRevision == null) setSchemaRevision(definition.revision)
-                  setSchemaText(event.target.value)
-                }}
-              />
-              {schemaText && schemaRevision !== definition.revision && (
-                <p role="alert" className="text-xs text-destructive">
-                  {t('workflowCanvas.editorStale')}
-                </p>
-              )}
-              {schemaText && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    setSchemaText('')
-                    setSchemaRevision(null)
-                  }}
-                >
-                  {t('workflowCanvas.discardEdits')}
-                </Button>
-              )}
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 size="sm"
                 variant="secondary"
-                disabled={
-                  busy ||
-                  dirty ||
-                  viewVersion != null ||
-                  !schemaText ||
-                  schemaRevision !== definition.revision
-                }
+                disabled={busy || dirty || viewVersion != null || !workspacePath.trim()}
                 onClick={() => {
-                  try {
-                    const schema: unknown = JSON.parse(schemaText)
-                    void mutate(() => workflowApi.update(serverId, definition, schema)).then(ok => {
-                      if (ok) {
-                        setSchemaText('')
-                        setSchemaRevision(null)
+                  const id = definition.id
+                  const accountValid = captureAccountContextRevision()
+                  startNewChat()
+                  void openStandaloneWorkspace(serverId, workspacePath.trim(), definition.title)
+                    .then(() => {
+                      if (accountValid(serverId)) {
+                        requestWorkflowComposerIntent({ active: true, definitionId: id })
+                        navigateTo(`/?workflow=new&workflowDraft=${encodeURIComponent(id)}`)
                       }
                     })
-                  } catch {
-                    setError(t('workflowCanvas.invalidJsonObject'))
-                  }
+                    .catch(failure => {
+                      if (isCurrent()) setError(String(failure))
+                    })
                 }}
               >
-                {t('workflowCanvas.saveInputSchema')}
+                {t('workflowCanvas.continueDesign')}
               </Button>
-            </details>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                data-testid="workflow-run"
-                disabled={busy || !definition.savedVersion || !workspacePath.trim()}
-                onClick={() => void launch()}
-              >
-                <Play />
-                {t('workflowCanvas.runSaved', {
-                  version: viewVersion ?? definition.savedVersion ?? '—',
-                })}
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  data-testid="workflow-run"
+                  disabled={busy || !definition.savedVersion || !workspacePath.trim()}
+                  onClick={() => void launch()}
+                >
+                  <Play />
+                  {t('workflowCanvas.runSaved', {
+                    version: viewVersion ?? definition.savedVersion ?? '—',
+                  })}
+                </Button>
+              </div>
             </div>
-            <details className="rounded-xl border border-border p-3">
+            <details
+              open={advancedOpen}
+              onToggle={event => setAdvancedOpen(event.currentTarget.open)}
+            >
               <summary
-                data-testid="workflow-run-settings-toggle"
-                className="cursor-pointer text-sm"
+                data-testid="workflow-advanced-toggle"
+                className="cursor-pointer text-sm text-text-secondary"
               >
-                {t('workflowCanvas.runSettings')}
+                {t('workflowCanvas.advancedSettings')}
               </summary>
-              <div className="space-y-2">
-                <label className="block space-y-1 text-sm">
-                  {t('workflowCanvas.workspace')}
-                  <input
-                    data-testid="workflow-execution-workspace"
-                    className={field}
-                    value={workspacePath}
-                    onChange={event => setWorkspacePath(event.target.value)}
-                    placeholder={t('workflowCanvas.workspaceRequired')}
-                  />
-                </label>
-                <label className="block space-y-1 text-sm">
-                  {t('workflowCanvas.runArguments')}
-                  {definition.inputSchema != null && (
-                    <pre className="max-h-32 overflow-auto whitespace-pre-wrap text-xs text-text-muted">
-                      {JSON.stringify(definition.inputSchema, null, 2)}
-                    </pre>
-                  )}
+              <div className="mt-3 space-y-3">
+                <WorkflowLibraryActions
+                  serverId={serverId}
+                  definition={definition}
+                  version={viewVersion}
+                  disabled={busy || dirty}
+                  isCurrent={isCurrent}
+                  onError={setError}
+                  onVersion={version => {
+                    setViewVersion(version)
+                    setDefinition(null)
+                    setSelectedNode(null)
+                    setObservedRun(null)
+                  }}
+                  onCreated={next => {
+                    setViewVersion(null)
+                    setSelected(next.id)
+                    setDefinition(next)
+                    setSelectedNode(null)
+                    setItems([])
+                    setOffset(0)
+                    setRevisionTick(value => value + 1)
+                  }}
+                />
+                <details className="rounded-xl border border-border p-3">
+                  <summary className="cursor-pointer text-sm">
+                    {t('workflowCanvas.inputSchema')}
+                  </summary>
                   <textarea
-                    data-testid="workflow-run-arguments"
-                    className={`${field} font-mono`}
-                    rows={3}
-                    value={runArguments}
-                    onChange={event => setRunArguments(event.target.value)}
+                    aria-label={t('workflowCanvas.inputSchema')}
+                    className={`${field} mt-2 font-mono`}
+                    rows={6}
+                    value={schemaText || JSON.stringify(definition.inputSchema ?? {}, null, 2)}
+                    onChange={event => {
+                      if (schemaRevision == null) setSchemaRevision(definition.revision)
+                      setSchemaText(event.target.value)
+                    }}
                   />
-                </label>
+                  {schemaText && schemaRevision !== definition.revision && (
+                    <p role="alert" className="text-xs text-destructive">
+                      {t('workflowCanvas.editorStale')}
+                    </p>
+                  )}
+                  {schemaText && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setSchemaText('')
+                        setSchemaRevision(null)
+                      }}
+                    >
+                      {t('workflowCanvas.discardEdits')}
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={
+                      busy ||
+                      dirty ||
+                      viewVersion != null ||
+                      !schemaText ||
+                      schemaRevision !== definition.revision
+                    }
+                    onClick={() => {
+                      try {
+                        const schema: unknown = JSON.parse(schemaText)
+                        void mutate(() => workflowApi.update(serverId, definition, schema)).then(
+                          ok => {
+                            if (ok) {
+                              setSchemaText('')
+                              setSchemaRevision(null)
+                            }
+                          }
+                        )
+                      } catch {
+                        setError(t('workflowCanvas.invalidJsonObject'))
+                      }
+                    }}
+                  >
+                    {t('workflowCanvas.saveInputSchema')}
+                  </Button>
+                </details>
+                <details className="rounded-xl border border-border p-3">
+                  <summary
+                    data-testid="workflow-run-settings-toggle"
+                    className="cursor-pointer text-sm"
+                  >
+                    {t('workflowCanvas.runSettings')}
+                  </summary>
+                  <div className="space-y-2">
+                    <label className="block space-y-1 text-sm">
+                      {t('workflowCanvas.workspace')}
+                      <input
+                        data-testid="workflow-execution-workspace"
+                        className={field}
+                        value={workspacePath}
+                        onChange={event => setWorkspacePath(event.target.value)}
+                        placeholder={t('workflowCanvas.workspaceRequired')}
+                      />
+                    </label>
+                    <label className="block space-y-1 text-sm">
+                      {t('workflowCanvas.runArguments')}
+                      {definition.inputSchema != null && (
+                        <pre className="max-h-32 overflow-auto whitespace-pre-wrap text-xs text-text-muted">
+                          {JSON.stringify(definition.inputSchema, null, 2)}
+                        </pre>
+                      )}
+                      <textarea
+                        data-testid="workflow-run-arguments"
+                        className={`${field} font-mono`}
+                        rows={3}
+                        value={runArguments}
+                        onChange={event => setRunArguments(event.target.value)}
+                      />
+                    </label>
+                  </div>
+                </details>
               </div>
             </details>
             <details

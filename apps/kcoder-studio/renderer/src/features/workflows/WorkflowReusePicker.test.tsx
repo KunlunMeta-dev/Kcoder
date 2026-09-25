@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, expect, test, vi } from 'vitest'
 import { WorkflowReusePicker } from './WorkflowReusePicker'
 import { workflowApi, type WorkflowSummary, type WorkflowDefinition } from './workflowApi'
@@ -159,4 +159,28 @@ test('late historical-version reads cannot overwrite the current version or its 
   await waitFor(() => expect(screen.queryByText('Stale version')).not.toBeInTheDocument())
   fireEvent.click(screen.getByTestId('workflow-reuse-insert'))
   expect(JSON.parse(insert.mock.calls[0][0]).version).toBe(2)
+})
+
+test('compact selection hides the list and changing back preserves version and unsent parameters', async () => {
+  render(<WorkflowReusePicker serverId="remote" disabled={false} onInsert={vi.fn()} />)
+  fireEvent.click(screen.getByTestId('workflow-reuse-open'))
+  fireEvent.click(await screen.findByTestId('workflow-reuse-saved'))
+  await screen.findByTestId('workflow-reuse-preview')
+  expect(screen.queryByRole('textbox', { name: 'workflowReuse.search' })).not.toBeInTheDocument()
+  fireEvent.change(screen.getByTestId('workflow-reuse-version'), { target: { value: '1' } })
+  await screen.findByTestId('workflow-reuse-preview')
+  fireEvent.click(screen.getByTestId('workflow-reuse-parameters-toggle'))
+  fireEvent.change(screen.getByTestId('workflow-reuse-args'), {
+    target: { value: '{"topic":"keep me"}' },
+  })
+  fireEvent.click(screen.getByTestId('workflow-reuse-change'))
+  expect(screen.getByRole('textbox', { name: 'workflowReuse.search' })).toBeInTheDocument()
+  expect(screen.getByTestId('workflow-reuse-insert')).toBeDisabled()
+  fireEvent.click(screen.getByTestId('workflow-reuse-saved'))
+  expect(screen.getByTestId('workflow-reuse-version')).toHaveValue('1')
+  expect(screen.getByTestId('workflow-reuse-args')).toHaveValue('{"topic":"keep me"}')
+  fireEvent.mouseDown(screen.getByTestId('workflow-reuse-version'))
+  fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: 'v1' }))
+  expect(screen.getByTestId('workflow-reuse-insert')).toBeEnabled()
+  expect(screen.getByTestId('workflow-reuse-args')).toHaveValue('{"topic":"keep me"}')
 })

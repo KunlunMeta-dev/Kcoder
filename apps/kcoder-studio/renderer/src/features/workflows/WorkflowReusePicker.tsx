@@ -1,5 +1,6 @@
+import { SettingsSelect } from '@/components/settings/SettingsSelect'
 import { useEffect, useState } from 'react'
-import { GitBranch, Search, X } from 'lucide-react'
+import { GitBranch, Search, X, ChevronRight, History, ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ModalDialog } from '@/components/ui/modal-dialog'
 import { useTranslation } from '@/hooks/useTranslation'
@@ -88,6 +89,7 @@ function Picker({
   const { t } = useTranslation('common')
   const [items, setItems] = useState<WorkflowSummary[]>([])
   const [query, setQuery] = useState('')
+  const [browsing, setBrowsing] = useState(true)
   const [selected, setSelected] = useState<WorkflowSummary | null>(null)
   const [versions, setVersions] = useState<
     Array<{ version: number; title: string; nodeCount: number }>
@@ -197,73 +199,106 @@ function Picker({
   return (
     <ModalDialog title={t('workflowReuse.open')} testId="workflow-reuse-picker" onClose={onClose}>
       <p className="my-3 text-sm text-text-secondary">{t('workflowReuse.hint')}</p>
-      <label className="flex items-center gap-2 rounded-lg border border-border px-3 py-2">
-        <Search className="h-4 w-4 text-text-muted" />
-        <input
-          className="min-w-0 flex-1 bg-transparent text-sm outline-none"
-          value={query}
-          aria-label={t('workflowReuse.search')}
-          placeholder={t('workflowReuse.search')}
-          onChange={event => setQuery(event.target.value)}
-        />
-      </label>
-      <div className="my-3 max-h-64 space-y-1 overflow-y-auto">
-        {loading && (
-          <p role="status" className="p-3 text-sm text-text-muted">
-            {t('workflowReuse.loading')}
-          </p>
-        )}
-        {!loading && !error && !shown.length && (
-          <p className="p-3 text-sm text-text-muted">{t('workflowReuse.empty')}</p>
-        )}
-        {shown.map(item => (
-          <button
-            type="button"
-            key={item.id}
-            data-testid={`workflow-reuse-${item.id}`}
-            aria-pressed={selected?.id === item.id}
-            onClick={() => {
-              if (selected?.id === item.id) return
-              setSelected(item)
-              setVersions([])
-              setVersion('')
-              setError(null)
-              setArgs('{}')
-              setSnapshot(null)
-              setParametersOpen(false)
-            }}
-            className="w-full rounded-lg border border-transparent p-3 text-left hover:bg-surface aria-pressed:border-border aria-pressed:bg-surface"
-          >
-            <span className="block truncate text-sm font-medium">{item.title}</span>
-            <span className="block truncate text-xs text-text-muted">
-              {item.description || t('workflowReuse.saved')} · v{item.savedVersion}
-            </span>
-          </button>
-        ))}
-      </div>
-      {selected && (
-        <div className="space-y-3 border-t border-border pt-3">
+      {browsing && (
+        <>
+          <label className="flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2 transition-shadow focus-within:ring-2 focus-within:ring-focus/20">
+            <Search className="h-4 w-4 text-text-muted" />
+            <input
+              className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+              value={query}
+              aria-label={t('workflowReuse.search')}
+              placeholder={t('workflowReuse.search')}
+              autoFocus
+              onChange={event => setQuery(event.target.value)}
+            />
+          </label>
+          <div className="my-3 max-h-64 space-y-1 overflow-y-auto">
+            {loading && (
+              <p role="status" className="p-3 text-sm text-text-muted">
+                {t('workflowReuse.loading')}
+              </p>
+            )}
+            {!loading && !error && !shown.length && (
+              <p className="p-3 text-sm text-text-muted">{t('workflowReuse.empty')}</p>
+            )}
+            {shown.map(item => (
+              <button
+                type="button"
+                key={item.id}
+                data-testid={`workflow-reuse-${item.id}`}
+                aria-pressed={selected?.id === item.id}
+                onClick={() => {
+                  setBrowsing(false)
+                  if (selected?.id === item.id) return
+                  setSelected(item)
+                  setVersions([])
+                  setVersion('')
+                  setError(null)
+                  setArgs('{}')
+                  setSnapshot(null)
+                  setParametersOpen(false)
+                }}
+                className="group flex w-full items-center gap-3 rounded-xl border border-transparent p-3 text-left transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/40 aria-pressed:border-border aria-pressed:bg-surface"
+              >
+                <span
+                  aria-hidden="true"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-surface text-text-secondary"
+                >
+                  <GitBranch className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">{item.title}</span>
+                  <span className="mt-1 block truncate text-xs text-text-muted">
+                    {item.description || t('workflowReuse.saved')} · v{item.savedVersion}
+                  </span>
+                </span>
+                <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-text-muted" />
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      {selected && !browsing && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="min-w-0 truncate text-sm font-medium">
+              {definition?.title ?? selected.title}
+            </h3>
+            <Button
+              autoFocus
+              size="sm"
+              variant="ghost"
+              data-testid="workflow-reuse-change"
+              onClick={() => setBrowsing(true)}
+            >
+              <ArrowLeft />
+              {t('workflowReuse.change')}
+            </Button>
+          </div>
           <label className="flex items-center justify-between gap-3 text-sm">
             {t('workflowCanvas.version')}
-            <select
+            <SettingsSelect
+              icon={<History />}
+              density="compact"
               data-testid="workflow-reuse-version"
               value={version}
               disabled={!versions.length}
               onChange={event => {
+                if (event.target.value === version) return
                 setVersion(event.target.value)
                 setError(null)
                 setSnapshot(null)
                 setParametersOpen(false)
               }}
-              className="rounded-lg border border-border bg-background px-3 py-2"
             >
               {!versions.length && <option value="">{t('workflowReuse.loading')}</option>}
               {versions.map(item => (
                 <option key={item.version} value={item.version}>
-                  v{item.version} · {item.title} · {item.nodeCount}
+                  v{item.version}
+                  {item.version === versions[0]?.version ? ` · ${t('workflowReuse.latest')}` : ''}
                 </option>
               ))}
-            </select>
+            </SettingsSelect>
           </label>
           {!definition && !error && (
             <p role="status" className="text-sm text-text-muted">
@@ -272,13 +307,7 @@ function Picker({
           )}
           {definition && (
             <>
-              <div
-                data-testid="workflow-reuse-preview"
-                className="space-y-2 rounded-lg bg-surface p-3"
-              >
-                <p className="text-sm font-medium">
-                  {definition.title} · v{definition.savedVersion}
-                </p>
+              <div data-testid="workflow-reuse-preview" className="space-y-2">
                 {definition.description && (
                   <p className="whitespace-pre-wrap break-words text-sm text-text-secondary">
                     {definition.description}
@@ -297,7 +326,6 @@ function Picker({
                   </ol>
                 </details>
               </div>
-              <p className="text-sm text-text-secondary">{t('workflowReuse.conversationHint')}</p>
               <div>
                 <Button
                   type="button"
@@ -348,6 +376,7 @@ function Picker({
             size="sm"
             variant="ghost"
             onClick={() => {
+              setBrowsing(true)
               setLoading(true)
               setError(null)
               setItems([])
@@ -361,14 +390,14 @@ function Picker({
           </Button>
         </div>
       )}
-      <div className="mt-4 flex justify-end gap-2">
+      <div className="mt-4 flex justify-end gap-2 border-t border-border/60 pt-4">
         <Button size="sm" variant="ghost" onClick={onClose}>
           <X />
           {t('workflowReuse.close')}
         </Button>
         <Button
           size="sm"
-          disabled={!definition || loading}
+          disabled={browsing || !definition || loading}
           data-testid="workflow-reuse-insert"
           onClick={insert}
         >

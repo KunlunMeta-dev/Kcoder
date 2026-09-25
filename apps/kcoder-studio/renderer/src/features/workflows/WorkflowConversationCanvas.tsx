@@ -105,9 +105,8 @@ function ConversationCanvas({
           {definition?.title || t('workflowCanvas.heading')}
         </h2>
         {definition && (
-          <span className="text-xs text-text-muted">
-            r{definition.revision}
-            {definition.savedVersion ? ` · v${definition.savedVersion}` : ''}
+          <span className="text-xs text-text-muted" title={`r${definition.revision}`}>
+            {definition.savedVersion ? `v${definition.savedVersion}` : t('workflowCanvas.draft')}
           </span>
         )}
         <Button

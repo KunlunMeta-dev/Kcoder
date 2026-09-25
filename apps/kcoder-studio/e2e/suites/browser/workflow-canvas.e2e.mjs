@@ -99,6 +99,7 @@ await runE2E(import.meta.url, {
     phase = 'reuse';
     await page.getByTestId('workflows-button').click();
     await page.locator('button[data-testid^="workflow-library-"]').filter({hasText:'Build A, then B depending on A.'}).click();
+    await page.getByTestId('workflow-advanced-toggle').click();
     await page.getByTestId('workflow-run-settings-toggle').click();
     await page.getByTestId('workflow-execution-workspace').fill(workspace);
     await page.getByTestId('workflow-run').click();
@@ -118,6 +119,8 @@ await runE2E(import.meta.url, {
     await page.getByTestId('workflow-reuse-open').click();
     const reuse = page.getByTestId('workflow-reuse-picker');
     await reuse.getByRole('button', {name:/Build A, then B depending on A/}).click();
+    await page.getByTestId('workflow-reuse-version').click();
+    await page.getByRole('listbox').getByRole('option', {name:/^v1/}).click();
     await page.getByTestId('workflow-reuse-insert').click();
     await waitFor(async () => (await existingEditor.innerText()).includes('definition_id'),10000,'inserted saved workflow');
     assert.ok((await existingEditor.innerText()).includes('Keep this requirement.'));
@@ -136,6 +139,7 @@ await runE2E(import.meta.url, {
     await page.getByTestId('workflow-run-history').getByRole('button', {name:'查看输出'}).first().click();
     await page.getByTestId('workflow-run-history').locator('pre').filter({hasText:'WF_NODE_A_RESULT'}).waitFor();
     phase = 'immutable-version-and-portability';
+    await page.getByTestId('workflow-advanced-toggle').click();
     const actions = page.getByTestId('workflow-library-actions');
     await actions.getByRole('combobox').selectOption('1');
     await page.getByTestId('workflow-node-A').waitFor();
@@ -149,7 +153,7 @@ await runE2E(import.meta.url, {
     await download.saveAs(exported);
     await page.getByTestId('workflow-import-file').setInputFiles(exported);
     await page.getByTestId('workflow-node-A').waitFor();
-    await waitFor(async () => (await page.getByTestId('workflow-revision').innerText()).includes('r1'),10000,'imported independent draft');
+    await waitFor(async () => (await page.getByTestId('workflow-revision').getAttribute('title')) === 'r1',10000,'imported independent draft');
     assert.equal(await page.getByTestId('workflow-run').isDisabled(),true,'import never republishes a historical version');
     phase = 'semantic-node-colors';
     const portable = JSON.parse(await readFile(exported,'utf8'));

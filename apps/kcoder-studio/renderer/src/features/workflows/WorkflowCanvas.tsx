@@ -184,7 +184,7 @@ export function WorkflowCanvas({
         pan.current = null
       }}
     >
-      <div className="absolute inset-x-3 top-3 z-20 flex items-center justify-end gap-1">
+      <div className="absolute right-3 top-3 z-20 flex items-center gap-1 rounded-xl border border-border bg-background p-1 shadow-sm">
         <span className="mr-2 text-xs text-text-muted">{Math.round(view.zoom * 100)}%</span>
         <Button
           size="sm"
