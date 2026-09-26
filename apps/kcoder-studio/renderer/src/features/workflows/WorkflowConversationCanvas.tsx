@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Save, RefreshCw } from 'lucide-react'
+import { Save, RefreshCw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useTranslation } from '@/hooks/useTranslation'
 import { usePluginTargetScope } from '@/kcoder/usePluginTargetScope'
@@ -10,9 +10,15 @@ import { newerDefinition, workflowApi, type WorkflowDefinition } from './workflo
 export function WorkflowConversationCanvas({
   serverId,
   definitionId,
+  active = true,
+  onClose,
+  onDirtyChange,
 }: {
   serverId: string
   definitionId: string
+  active?: boolean
+  onClose?: () => void
+  onDirtyChange?: (dirty: boolean) => void
 }) {
   const scope = usePluginTargetScope(serverId)
   return (
@@ -21,6 +27,9 @@ export function WorkflowConversationCanvas({
       serverId={serverId}
       definitionId={definitionId}
       isCurrent={scope.isCurrent}
+      active={active}
+      onClose={onClose}
+      onDirtyChange={onDirtyChange}
     />
   )
 }
@@ -29,15 +38,28 @@ function ConversationCanvas({
   serverId,
   definitionId,
   isCurrent,
+  active,
+  onClose,
+  onDirtyChange,
 }: {
   serverId: string
   definitionId: string
   isCurrent: () => boolean
+  active: boolean
+  onClose?: () => void
+  onDirtyChange?: (dirty: boolean) => void
 }) {
   const { t } = useTranslation('common')
   const [definition, setDefinition] = useState<WorkflowDefinition | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
-  const [dirty, setDirty] = useState(false)
+  const [dirty, setDirtyState] = useState(false)
+  const setDirty = useCallback(
+    (value: boolean) => {
+      setDirtyState(value)
+      onDirtyChange?.(value)
+    },
+    [onDirtyChange]
+  )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [retry, setRetry] = useState(0)
@@ -52,18 +74,16 @@ function ConversationCanvas({
       inFlight = false
     let timer: ReturnType<typeof setTimeout> | undefined
     const poll = async () => {
-      if (stopped || inFlight || document.visibilityState === 'hidden') return
+      if (!active || stopped || inFlight || document.visibilityState === 'hidden') return
       inFlight = true
       try {
         const next = await workflowApi.read(serverId, definitionId)
         if (stopped || !isCurrent()) return
         apply(next)
+        setError(null)
         timer = setTimeout(() => void poll(), 750)
       } catch (failure) {
         if (stopped || !isCurrent()) return
-        setDefinition(null)
-        setSelected(null)
-        setDirty(false)
         setError(failure instanceof Error ? failure.message : String(failure))
       } finally {
         inFlight = false
@@ -80,12 +100,18 @@ function ConversationCanvas({
       if (timer) clearTimeout(timer)
       document.removeEventListener('visibilitychange', visible)
     }
-  }, [serverId, definitionId, isCurrent, apply, retry])
+  }, [serverId, definitionId, isCurrent, apply, retry, active])
   const mutate = async (action: () => Promise<WorkflowDefinition>) => {
     setBusy(true)
     setError(null)
     try {
       apply(await action())
+      if (isCurrent())
+        window.dispatchEvent(
+          new CustomEvent('kcoder:workflow-definition-changed', {
+            detail: { serverId, id: definitionId },
+          })
+        )
       return isCurrent()
     } catch (failure) {
       if (isCurrent()) setError(failure instanceof Error ? failure.message : String(failure))
@@ -98,15 +124,22 @@ function ConversationCanvas({
   return (
     <aside
       data-testid="workflow-conversation-canvas"
-      className="flex min-h-0 min-w-0 flex-1 flex-col border-l border-border bg-background lg:max-w-[50%]"
+      className="flex min-h-0 min-w-0 flex-1 flex-col border-l border-border bg-background"
     >
       <header className="flex items-center gap-2 border-b border-border px-3 py-2">
         <h2 className="min-w-0 flex-1 truncate text-sm font-medium">
           {definition?.title || t('workflowCanvas.heading')}
         </h2>
         {definition && (
-          <span className="text-xs text-text-muted" title={`r${definition.revision}`}>
-            {definition.savedVersion ? `v${definition.savedVersion}` : t('workflowCanvas.draft')}
+          <span
+            role="status"
+            aria-live="polite"
+            className="text-xs text-text-muted"
+            title={`r${definition.revision}`}
+          >
+            {definition.status === 'saved'
+              ? t('workflowFlow.savedVersion', { version: definition.savedVersion })
+              : t('workflowFlow.unsaved')}
           </span>
         )}
         <Button
@@ -123,6 +156,7 @@ function ConversationCanvas({
         <Button
           size="sm"
           data-testid="workflow-conversation-publish"
+          title={t('workflowFlow.publishHint')}
           disabled={!definition?.nodes.length || definition?.status === 'saved' || busy || dirty}
           onClick={() =>
             definition &&
@@ -132,7 +166,25 @@ function ConversationCanvas({
           <Save />
           {t('workflowCanvas.publish')}
         </Button>
+        {onClose && (
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={dirty}
+            title={dirty ? t('workflowFlow.finishEdit') : undefined}
+            aria-label={t('workflowFlow.closeCanvas')}
+            data-testid="workflow-canvas-close"
+            onClick={onClose}
+          >
+            <X />
+          </Button>
+        )}
       </header>
+      {dirty && (
+        <p role="status" className="px-3 py-2 text-xs text-text-secondary">
+          {t('workflowFlow.localEdits')}
+        </p>
+      )}
       {error && (
         <p role="alert" className="break-words p-3 text-sm text-error">
           {error}

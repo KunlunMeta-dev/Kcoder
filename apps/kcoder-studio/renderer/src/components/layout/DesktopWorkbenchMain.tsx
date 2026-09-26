@@ -1,3 +1,11 @@
+import { captureAccountContextRevision } from '@/kcoder/accountContextEvents'
+import { WorkflowConversationCards } from '@/features/workflows/WorkflowConversationCards'
+import { WorkflowExecutionCanvas } from '@/features/workflows/WorkflowExecutionCanvas'
+import {
+  workflowReferences,
+  workflowReferenceKey,
+  type WorkflowReference,
+} from '@/features/workflows/workflowReferences'
 import { sameWorkspacePath } from '@/lib/workspace-path-identity'
 import { useWorkflowComposerIntent } from '@/features/workflows/useWorkflowComposerIntent'
 import { WorkflowConversationCanvas } from '@/features/workflows/WorkflowConversationCanvas'
@@ -439,7 +447,9 @@ const MemoizedBottomWorkspacePanel = memo(function MemoizedBottomWorkspacePanel(
 })
 
 export function DesktopWorkbenchMain(props: DesktopWorkbenchMainProps) {
-  const workflowComposerIntent = useWorkflowComposerIntent(props.activePane.currentRuntimeTask?.taskId)
+  const workflowComposerIntent = useWorkflowComposerIntent(
+    props.activePane.currentRuntimeTask?.taskId
+  )
   const { state } = useWorkbenchPaneContext()
   const { services } = useWorkbench()
   const appearanceContext = useOptionalAppearance()
@@ -464,23 +474,34 @@ export function DesktopWorkbenchMain(props: DesktopWorkbenchMainProps) {
   )
   const paneWorkspaceStateRef = useRef(new Map<string, WorkbenchPaneWorkspaceState>())
   const invalidatedPaneKeys = useRef(new Set<string>())
-  useEffect(() => listenAccountContextChanges(targetId => {
-    const prefix = `runtime:${targetId}:`
-    for (const key of paneWorkspaceStateRef.current.keys()) {
-      if (key.startsWith(prefix)) {
-        invalidatedPaneKeys.current.add(key)
-        paneWorkspaceStateRef.current.delete(key)
-      }
-    }
-    try {
-      for (let i = localStorage.length - 1; i >= 0; i--) {
-        const key = localStorage.key(i)
-        if (key?.startsWith(`${PANE_WORKSPACE_STORAGE_PREFIX}${prefix}`)) localStorage.removeItem(key)
-      }
-    } catch { /* Storage may be disabled. */ }
-    setTerminalPinOwnersByPane(current => Object.fromEntries(Object.entries(current).filter(([key]) => !key.startsWith(prefix))))
-    setSummaryVisibilityByPane(current => Object.fromEntries(Object.entries(current).filter(([key]) => !key.startsWith(prefix))))
-  }), [])
+  useEffect(
+    () =>
+      listenAccountContextChanges(targetId => {
+        const prefix = `runtime:${targetId}:`
+        for (const key of paneWorkspaceStateRef.current.keys()) {
+          if (key.startsWith(prefix)) {
+            invalidatedPaneKeys.current.add(key)
+            paneWorkspaceStateRef.current.delete(key)
+          }
+        }
+        try {
+          for (let i = localStorage.length - 1; i >= 0; i--) {
+            const key = localStorage.key(i)
+            if (key?.startsWith(`${PANE_WORKSPACE_STORAGE_PREFIX}${prefix}`))
+              localStorage.removeItem(key)
+          }
+        } catch {
+          /* Storage may be disabled. */
+        }
+        setTerminalPinOwnersByPane(current =>
+          Object.fromEntries(Object.entries(current).filter(([key]) => !key.startsWith(prefix)))
+        )
+        setSummaryVisibilityByPane(current =>
+          Object.fromEntries(Object.entries(current).filter(([key]) => !key.startsWith(prefix)))
+        )
+      }),
+    []
+  )
   const terminalPinnedPaneKeys = useMemo(
     () =>
       Object.keys(terminalPinOwnersByPane).filter(key => terminalPinOwnersByPane[key].length > 0),
@@ -630,7 +651,7 @@ const DesktopWorkbenchPane = memo(function DesktopWorkbenchPane({
     createDeviceDirectory,
     startNewChat,
   } = useWorkbenchPaneContext()
-  const { services } = useWorkbench()
+  const { services, openStandaloneWorkspace } = useWorkbench()
   const { t } = useTranslation('common')
   const { t: tChat } = useTranslation('chat')
   const currentRuntimeTask = pane.currentRuntimeTask
@@ -647,6 +668,60 @@ const DesktopWorkbenchPane = memo(function DesktopWorkbenchPane({
     return () => cancelAnimationFrame(frame)
   }, [])
   const paneSession = useWorkbenchPaneSession({ currentRuntimeTask })
+  const workflowComposerInput = useRef(paneSession.input)
+  useLayoutEffect(() => {
+    workflowComposerInput.current = paneSession.input
+  }, [paneSession.input])
+  const workflowScope = `${currentRuntimeTask?.deviceId ?? ''}:${currentRuntimeTask?.taskId ?? ''}`
+  const workflowRefs = useMemo(() => {
+    const refs = workflowReferences(paneSession.messages)
+    if (
+      paneSession.workflowDefinitionId &&
+      !refs.some(ref => ref.id === paneSession.workflowDefinitionId)
+    )
+      refs.push({ id: paneSession.workflowDefinitionId, title: '' })
+    return refs
+  }, [paneSession.messages, paneSession.workflowDefinitionId])
+  const [workflowView, setWorkflowView] = useState<{
+    scope: string
+    reference?: WorkflowReference
+    closed?: string
+    canvas?: boolean
+  }>({ scope: '' })
+  const [workflowDirty, setWorkflowDirty] = useState<{
+    scope: string
+    key: string
+    dirty: boolean
+  }>({ scope: '', key: '', dirty: false })
+  const automaticWorkflow = paneSession.workflowDefinitionId
+    ? { id: paneSession.workflowDefinitionId, title: '' }
+    : [...workflowRefs].reverse().find(ref => ref.runId)
+  const requestedWorkflow =
+    workflowView.scope === workflowScope ? workflowView.reference : undefined
+  const activeWorkflow = requestedWorkflow
+    ? (workflowRefs.find(
+        ref =>
+          ref.id === requestedWorkflow.id &&
+          ref.version === requestedWorkflow.version &&
+          (requestedWorkflow.runId ? ref.runId === requestedWorkflow.runId : Boolean(ref.runId))
+      ) ?? requestedWorkflow)
+    : automaticWorkflow
+  const activeWorkflowKey = activeWorkflow ? workflowReferenceKey(activeWorkflow) : ''
+  const onWorkflowDirtyChange = useCallback(
+    (dirty: boolean) =>
+      setWorkflowDirty(previous =>
+        previous.scope === workflowScope &&
+        previous.key === activeWorkflowKey &&
+        previous.dirty === dirty
+          ? previous
+          : { scope: workflowScope, key: activeWorkflowKey, dirty }
+      ),
+    [workflowScope, activeWorkflowKey]
+  )
+  const workflowHasDirtyEditor =
+    workflowDirty.scope === workflowScope &&
+    workflowDirty.key === activeWorkflowKey &&
+    workflowDirty.dirty
   const sendPaneInput = paneSession.send
   const [subagentArtifact, setSubagentArtifact] = useState<{
     title: string
@@ -1220,9 +1295,42 @@ const DesktopWorkbenchPane = memo(function DesktopWorkbenchPane({
     onCollapse: closeRightPanel,
     defaultPanelWidth: onlyTemporaryChatOpen ? TEMPORARY_CHAT_PANEL_DEFAULT_WIDTH : undefined,
   })
-  const workflowCanvasVisible = Boolean(paneSession.workflowDefinitionId && currentRuntimeTask?.deviceId && !rightPanelOpen)
-  const chatColumnWidth = rightPanelOpen ? rightSplitChatWidth : workflowCanvasVisible ? '50%' : '100%'
-  const availableChatColumnWidth = rightPanelOpen ? rightSplitChatWidth : workbenchContentWidth
+  const workflowNarrow = workbenchContentWidth > 0 && workbenchContentWidth < 900
+  const workflowPaneExists = Boolean(
+    activeWorkflow &&
+    currentRuntimeTask?.deviceId &&
+    !(workflowView.scope === workflowScope && workflowView.closed === activeWorkflowKey)
+  )
+  const workflowCanvasVisible = workflowPaneExists && !rightPanelOpen
+  const workflowNarrowShown =
+    workflowCanvasVisible &&
+    workflowNarrow &&
+    workflowView.scope === workflowScope &&
+    Boolean(workflowView.canvas)
+  const closeWorkflowCanvas = () => {
+    setWorkflowView(current => ({
+      ...current,
+      scope: workflowScope,
+      ...(workflowNarrow ? { canvas: false } : { closed: activeWorkflowKey }),
+    }))
+    requestAnimationFrame(() =>
+      workbenchMainRef.current
+        ?.querySelector<HTMLElement>(
+          `[data-workflow-id="${CSS.escape(activeWorkflow?.id ?? '')}"] [data-testid="workflow-card-open"]`
+        )
+        ?.focus({ preventScroll: true })
+    )
+  }
+  const chatColumnWidth = rightPanelOpen
+    ? rightSplitChatWidth
+    : workflowCanvasVisible && !workflowNarrow
+      ? '50%'
+      : '100%'
+  const availableChatColumnWidth = rightPanelOpen
+    ? rightSplitChatWidth
+    : workflowCanvasVisible && !workflowNarrow
+      ? workbenchContentWidth / 2
+      : workbenchContentWidth
   const environmentInfoDocked =
     Boolean(currentRuntimeTask) &&
     availableChatColumnWidth - DOCKED_ENVIRONMENT_INFO_WIDTH >=
@@ -1240,7 +1348,8 @@ const DesktopWorkbenchPane = memo(function DesktopWorkbenchPane({
     if (currentRuntimeTask && !environmentInfoDocked) return
     onSummaryVisibilityChange(paneKey, 'overlay', false)
   }, [currentRuntimeTask, environmentInfoDocked, onSummaryVisibilityChange, paneKey])
-  const paneTitleWidth = rightPanelOpen ? chatColumnWidth : '100%'
+  const paneTitleWidth =
+    rightPanelOpen || (workflowCanvasVisible && !workflowNarrow) ? chatColumnWidth : '100%'
   const rightPanelShellWidth = rightPanelOpen ? `calc(100% - ${rightSplitChatWidth}px)` : '0px'
   const rightPanelTitlebarWidth = rightPanelOpen
     ? rightPanelShellWidth
@@ -1263,23 +1372,26 @@ const DesktopWorkbenchPane = memo(function DesktopWorkbenchPane({
       currentProject,
       standaloneDeviceId: paneProjectWork.currentStandaloneDeviceId,
     })
-  const [settingsTemplates, setSettingsTemplates] = useState<{
+  const [settingsTemplateCatalog, setSettingsTemplates] = useState<{
+    deviceId: string
     defaultId?: string
     templates: Array<{ id: string; name: string; revisionSha256: string }>
   } | null>(null)
-  const [settingsTemplateChoice, setSettingsTemplateChoice] = useState<string | undefined>(undefined)
+  const settingsTemplates =
+    settingsTemplateCatalog?.deviceId === activeDeviceId ? settingsTemplateCatalog : null
+  const [settingsTemplateChoice, setSettingsTemplateChoice] = useState<string | undefined>(
+    undefined
+  )
   useEffect(() => {
     // Only an unsent conversation offers a template choice; running sessions stay frozen but
     // still need the catalog to label the template they are bound to.
-    if (!activeDeviceId) {
-      setSettingsTemplates(null)
-      return
-    }
+    if (!activeDeviceId) return
     let cancelled = false
     void listSettingsTemplates(activeDeviceId)
       .then(catalog => {
         if (cancelled) return
         setSettingsTemplates({
+          deviceId: activeDeviceId,
           ...(catalog.defaultId ? { defaultId: catalog.defaultId } : {}),
           templates: catalog.templates.map(template => ({
             id: template.id,
@@ -1400,13 +1512,40 @@ const DesktopWorkbenchPane = memo(function DesktopWorkbenchPane({
   const pendingWorkflowRun = workflowComposerIntent.run
   useEffect(() => {
     if (!paneActive || currentRuntimeTask || !pendingWorkflowRun || !composerWorkspaceTarget) return
-    if (pendingWorkflowRun.deviceId && pendingWorkflowRun.deviceId !== composerWorkspaceTarget.deviceId) return
-    if (pendingWorkflowRun.workspacePath && !sameWorkspacePath(pendingWorkflowRun.workspacePath, composerWorkspaceTarget.path)) return
-    paneSession.setInput(t('workflowCanvas.runInstruction', {params: JSON.stringify({definition_id:pendingWorkflowRun.id,version:pendingWorkflowRun.version,...(pendingWorkflowRun.args !== undefined ? {args:pendingWorkflowRun.args} : {})})}))
-    workflowComposerIntent.onChange({active:false})
+    if (
+      pendingWorkflowRun.deviceId &&
+      pendingWorkflowRun.deviceId !== composerWorkspaceTarget.deviceId
+    )
+      return
+    if (
+      pendingWorkflowRun.workspacePath &&
+      !sameWorkspacePath(pendingWorkflowRun.workspacePath, composerWorkspaceTarget.path)
+    )
+      return
+    paneSession.setInput(
+      t('workflowCanvas.runInstruction', {
+        params: JSON.stringify({
+          definition_id: pendingWorkflowRun.id,
+          version: pendingWorkflowRun.version,
+          ...(pendingWorkflowRun.args !== undefined ? { args: pendingWorkflowRun.args } : {}),
+        }),
+      })
+    )
+    workflowComposerIntent.onChange({ active: false })
     const url = new URL(window.location.href)
-    if(url.searchParams.has('workflowRun')) {url.searchParams.delete('workflowRun');window.history.replaceState(null,'',`${url.pathname}${url.search}${url.hash}`)}
-  }, [paneActive,currentRuntimeTask,pendingWorkflowRun,composerWorkspaceTarget,paneSession.setInput,workflowComposerIntent.onChange,t])
+    if (url.searchParams.has('workflowRun')) {
+      url.searchParams.delete('workflowRun')
+      window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`)
+    }
+  }, [
+    paneActive,
+    currentRuntimeTask,
+    pendingWorkflowRun,
+    composerWorkspaceTarget,
+    paneSession.setInput,
+    workflowComposerIntent.onChange,
+    t,
+  ])
   const selectedFileWorkspaceTarget =
     fileWorkspaceTargets.find(
       target => `${target.deviceId}:${target.path}` === selectedFileWorkspaceTargetKey
@@ -2513,6 +2652,8 @@ const DesktopWorkbenchPane = memo(function DesktopWorkbenchPane({
         <div
           ref={workbenchScrollRef}
           data-testid="desktop-workbench-content"
+          inert={workflowNarrowShown || undefined}
+          aria-hidden={workflowNarrowShown || undefined}
           className={cn(
             'relative grid h-full min-w-0 flex-none grid-cols-[minmax(0,1fr)_auto]',
             hasConversation ? 'overflow-x-hidden overflow-y-auto' : 'overflow-hidden',
@@ -2602,6 +2743,56 @@ const DesktopWorkbenchPane = memo(function DesktopWorkbenchPane({
                               className="mb-2"
                             />
                           )}
+                          {paneActive &&
+                            workbenchContentWidth > 0 &&
+                            currentRuntimeTask?.deviceId &&
+                            workflowRefs.length > 0 && (
+                              <WorkflowConversationCards
+                                key={workflowScope}
+                                serverId={currentRuntimeTask.deviceId}
+                                references={workflowRefs}
+                                disabled={paneIsBusy || workflowHasDirtyEditor}
+                                onOpen={reference => {
+                                  if (
+                                    !workflowHasDirtyEditor ||
+                                    workflowReferenceKey(reference) === activeWorkflowKey
+                                  ) {
+                                    closeRightPanel()
+                                    setWorkflowView({
+                                      scope: workflowScope,
+                                      reference,
+                                      canvas: true,
+                                    })
+                                  }
+                                }}
+                                newConversation={paneSession.sessionMode === 'workflow_draft'}
+                                onUse={async (text, reference) => {
+                                  if (paneSession.sessionMode !== 'workflow_draft') {
+                                    paneSession.setInput(
+                                      workflowComposerInput.current.trim()
+                                        ? `${workflowComposerInput.current}\n\n${text}`
+                                        : text
+                                    )
+                                    return
+                                  }
+                                  if (!composerWorkspaceTarget || !reference.version)
+                                    throw new Error(t('workflowCanvas.workspaceRequired'))
+                                  const valid = captureAccountContextRevision()
+                                  const target = composerWorkspaceTarget
+                                  await openStandaloneWorkspace(target.deviceId, target.path)
+                                  if (valid(target.deviceId))
+                                    workflowComposerIntent.onChange({
+                                      active: false,
+                                      run: {
+                                        id: reference.id,
+                                        version: reference.version,
+                                        deviceId: target.deviceId,
+                                        workspacePath: target.path,
+                                      },
+                                    })
+                                }}
+                              />
+                            )}
                           {pendingRequestUserInput ? (
                             <RequestUserInputCard
                               key={
@@ -2653,8 +2844,8 @@ const DesktopWorkbenchPane = memo(function DesktopWorkbenchPane({
                               onCompactContext={compactCurrentContext}
                               goal={paneSession.goal}
                               sessionMode={paneSession.sessionMode}
-                    workflowIntent={workflowComposerIntent}
-                    workflowNavigationActive={paneActive}
+                              workflowIntent={workflowComposerIntent}
+                              workflowNavigationActive={paneActive}
                               settingsTemplatePicker={settingsTemplatePicker}
                               settingsTemplateBadge={settingsTemplateBadge}
                               onInspectExecutionModes={() =>
@@ -2876,8 +3067,49 @@ const DesktopWorkbenchPane = memo(function DesktopWorkbenchPane({
             )}
           </aside>
         </div>
-        {workflowCanvasVisible && paneSession.workflowDefinitionId && currentRuntimeTask?.deviceId && (
-          <WorkflowConversationCanvas serverId={currentRuntimeTask.deviceId} definitionId={paneSession.workflowDefinitionId} />
+        {workflowPaneExists && activeWorkflow && currentRuntimeTask?.deviceId && (
+          <div
+            key={`${workflowScope}:${activeWorkflowKey}`}
+            data-testid="workflow-pane"
+            className={cn(
+              'min-h-0 min-w-0 bg-background',
+              !workflowCanvasVisible
+                ? 'hidden'
+                : workflowNarrow
+                  ? workflowNarrowShown
+                    ? 'absolute inset-0 z-popover flex'
+                    : 'hidden'
+                  : 'flex w-1/2 flex-none'
+            )}
+          >
+            {activeWorkflow.version || activeWorkflow.runId ? (
+              <WorkflowExecutionCanvas
+                serverId={currentRuntimeTask.deviceId}
+                threadId={currentRuntimeTask.taskId}
+                reference={activeWorkflow}
+                active={
+                  paneActive &&
+                  workbenchContentWidth > 0 &&
+                  workflowCanvasVisible &&
+                  (!workflowNarrow || workflowNarrowShown)
+                }
+                onClose={closeWorkflowCanvas}
+              />
+            ) : (
+              <WorkflowConversationCanvas
+                serverId={currentRuntimeTask.deviceId}
+                definitionId={activeWorkflow.id}
+                active={
+                  paneActive &&
+                  workbenchContentWidth > 0 &&
+                  workflowCanvasVisible &&
+                  (!workflowNarrow || workflowNarrowShown)
+                }
+                onClose={closeWorkflowCanvas}
+                onDirtyChange={onWorkflowDirtyChange}
+              />
+            )}
+          </div>
         )}
         {rightPanelOpen && (
           <div

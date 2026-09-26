@@ -43,12 +43,12 @@ await runE2E(import.meta.url, {testId:'native-workflow-canvas-edit-publish',tier
   await command('click','workflow-add-node');
   await command('waitFor','workflow-node-title');
   await command('fill','workflow-node-title',{value:'Native review node'});
-  await command('fill','workflow-node-prompt',{value:'Review the example. Do not execute during editing.'});
+  await command('fill','workflow-node-prompt',{value:'WF_NODE_A_WORK: Review the example. Do not execute during editing.'});
   await command('click','workflow-node-save');
   const libraryPath=resolve(dirname(client.settingsPath),'workflow-library/library.json');
   const readDefinition=async()=>{const library=JSON.parse(await readFile(libraryPath,'utf8'));return Object.values(library.records).find(value=>value.draft.title==='Native isolated canvas')?.draft;};
   const draft=await waitFor(async()=>{const value=await readDefinition();return value?.nodes[0]?.title==='Native review node'?value:null;},10000,'native persisted node');
-  assert.equal(draft.nodes[0].prompt,'Review the example. Do not execute during editing.');
+  assert.equal(draft.nodes[0].prompt,'WF_NODE_A_WORK: Review the example. Do not execute during editing.');
   await command('waitFor','workflow-publish',{enabled:true});
   await command('click','workflow-publish');
   const saved=await waitFor(async()=>{const value=await readDefinition();return value?.status==='saved'?value:null;},10000,'native publish');
@@ -61,9 +61,12 @@ await runE2E(import.meta.url, {testId:'native-workflow-canvas-edit-publish',tier
   await command('waitFor','workflow-canvas');
   await client.capture('native-workflow-saved.png');
   await client.command('navigate',{value:'/'});
-  await command('fill','chat-message-input',{value:'Native reuse initial conversation'});
+  await command('fill','chat-message-input',{value:'Run saved workflow '+JSON.stringify({definition_id:saved.id,version:1,args:{topic:'Native',pages:8}})});
   await command('waitFor','send-message-button',{enabled:true});
   await command('click','send-message-button');
+  await command('waitFor','workflow-execution-canvas');
+  await command('waitFor',`workflow-node-${saved.nodes[0].id}`);
+  await command('click',`workflow-node-${saved.nodes[0].id}`);
   await command('waitFor','workflow-reuse-open',{enabled:true});
   await command('click','workflow-reuse-open');
   await command('waitFor',`workflow-reuse-${saved.id}`);

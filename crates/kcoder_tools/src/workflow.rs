@@ -917,7 +917,7 @@ impl Tool for WorkflowTool {
     }
 
     fn description(&self) -> String {
-        "Run a deterministic JavaScript workflow or an explicitly published library definition_id and version in an embedded QuickJS runtime. Scripts may use agent(), parallel(), pipeline(), phase(), workflow(), log(), and args. Agent calls use real KCoder sub-agents; the workflow runs in the background and persists script, arguments, state, journal, per-agent output, and final output under the current session. No Bun or Node installation is required."
+        "Run a deterministic JavaScript workflow or an explicitly published library definition_id and version in an embedded QuickJS runtime. Scripts may use agent(), parallel(), pipeline(), phase(), workflow(), log(), and args. Agent calls use real KCoder sub-agents; the workflow runs in the background and persists script, arguments, state, journal, per-agent output, and final output under the current session. Saved graph arguments are checked before creating a run; needs_input means no task or agent was started. Ask concise questions for the missing/invalid information, retain supplied values, then retry the same version. No Bun or Node installation is required."
             .to_string()
     }
 
@@ -937,7 +937,7 @@ impl Tool for WorkflowTool {
         if ctx.is_aborted() {
             return Err(ToolError::Aborted);
         }
-        let input: WorkflowInput = parse_input(&input)?;
+        let mut input: WorkflowInput = parse_input(&input)?;
         let session_cap = ctx
             .max_concurrent_subagents
             .unwrap_or(MAX_WORKFLOW_CONCURRENCY)
@@ -1084,6 +1084,27 @@ impl Tool for WorkflowTool {
                     crate::workflow_draft::validate_workflow_agent_types(&definition)?;
                     kcoder_workflow::graph::validate(&definition, true)
                         .map_err(|e| ToolError::InvalidInput(e.to_string()))?;
+                    match kcoder_workflow::graph::prepare_arguments(&definition, &input.args) {
+                        Ok(args) => input.args = args,
+                        Err(error) => {
+                            let schema = definition.input_schema.as_ref();
+                            let required = schema
+                                .and_then(|s| s.get("required"))
+                                .and_then(Value::as_array);
+                            let missing = required.into_iter().flatten().filter_map(Value::as_str)
+                            .filter(|name| input.args.get(*name).is_none() && schema.and_then(|s| s.get("properties")).and_then(|p| p.get(*name)).and_then(|p|p.get("default")).is_none())
+                            .take(32).map(|name| {
+                                let field = schema.and_then(|s|s.get("properties")).and_then(|p|p.get(name));
+                                json!({"name":name,"title":field.and_then(|p|p.get("title")),"description":field.and_then(|p|p.get("description"))})
+                            }).collect::<Vec<_>>();
+                            return Ok(ToolOutput::text(json!({
+                            "status":"needs_input", "definition_id":id, "version":version,
+                            "missing_fields":missing,
+                            "validation_error":error.to_string().chars().take(2048).collect::<String>(),
+                            "next_action":"No run or agent was started. Ask the user in conversation only for missing or invalid information; retain supplied arguments. Then retry this same definition_id and version with corrected args. Do not invent values or require the user to write JSON."
+                        }).to_string()));
+                        }
+                    }
                     pinned_definition = Some(definition.clone());
                     let script =
                         "// Executed by the pinned declarative graph runtime; see definition.json"
@@ -2472,9 +2493,11 @@ mod tests {
         let updated=library.update_metadata(&def.id,def.revision,"parallel","",Some(json!({"type":"object","required":["required_field"]}))).unwrap();
         library.save(&updated.id,updated.revision).unwrap();
         let failed=WorkflowTool.call(json!({"definition_id":def.id,"version":2,"args":{}}),&ctx).await.unwrap();
-        let kcoder_types::ContentBlock::Text{text}=&failed.content[0] else{panic!("text")};let failed:Value=serde_json::from_str(text).unwrap();let failed_id=failed["run_id"].as_str().unwrap();
-        manager.wait_for_completion(failed_id).await;
-        let failed=crate::workflow_runs::read(root.clone(),failed_id).unwrap();assert_eq!(failed.status,"failed");assert!(failed.error.is_some());assert_eq!(runner.entered.load(Ordering::SeqCst),2);
+        let kcoder_types::ContentBlock::Text{text}=&failed.content[0] else{panic!("text")};let failed:Value=serde_json::from_str(text).unwrap();assert_eq!(failed["status"],"needs_input");
+        assert!(failed.get("run_id").is_none());
+        assert_eq!(failed["missing_fields"][0]["name"],"required_field");
+        assert_eq!(runner.entered.load(Ordering::SeqCst),2);
+        assert_eq!(crate::workflow_runs::list(root.clone()).unwrap().len(),1);
         let cancelled=WorkflowTool.call(json!({"definition_id":def.id,"version":1}),&ctx).await.unwrap();
         let kcoder_types::ContentBlock::Text{text}=&cancelled.content[0] else{panic!("text")};let cancelled:Value=serde_json::from_str(text).unwrap();let cancelled_id=cancelled["run_id"].as_str().unwrap();
         tokio::time::timeout(Duration::from_secs(5),async {while runner.entered.load(Ordering::SeqCst)!=4{tokio::time::sleep(Duration::from_millis(5)).await;}}).await.unwrap();

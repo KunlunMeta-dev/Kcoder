@@ -2908,5 +2908,22 @@
     "issue_extra": "{{field}}：此版本不接受该参数。",
     "change": "更换",
     "latest": "最新"
+  },
+  "workflowFlow": {
+    "viewCanvas": "查看画布",
+    "closeCanvas": "返回对话",
+    "use": "使用",
+    "needsInput": "等待补充信息，请直接在对话中回答。尚未启动节点。",
+    "runMismatch": "运行记录与本会话或所选版本不匹配，未显示运行状态。",
+    "savedPreview": "已保存版本 · 只读预览",
+    "expectedArtifacts": "预期产物（以实际输出为准）",
+    "noOutput": "暂无输出",
+    "savedVersion": "已保存 v{{version}}",
+    "unsaved": "有未发布修改",
+    "localEdits": "节点编辑尚未应用，请先保存或放弃节点修改。",
+    "finishEdit": "请先处理未应用的节点编辑。",
+    "publishHint": "保存为新版本；已保存版本及正在运行的任务不受影响。",
+    "useNew": "新会话使用 v{{version}}",
+    "useVersion": "使用 v{{version}}"
   }
 }

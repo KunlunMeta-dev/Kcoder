@@ -386,6 +386,22 @@ mod tests {
     }
 
     #[test]
+    fn argument_preflight_applies_defaults_without_mutating_user_values() {
+        let mut def = definition();
+        def.input_schema = Some(
+            serde_json::json!({"type":"object","required":["topic","pages"],"properties":{"topic":{"type":"string"},"pages":{"type":"integer","minimum":1,"default":8},"notes":{"type":"boolean","default":false}}}),
+        );
+        assert!(prepare_arguments(&def, &serde_json::json!({})).is_err());
+        let supplied = serde_json::json!({"topic":"AI"});
+        assert_eq!(
+            prepare_arguments(&def, &supplied).unwrap(),
+            serde_json::json!({"topic":"AI","pages":8,"notes":false})
+        );
+        assert_eq!(supplied, serde_json::json!({"topic":"AI"}));
+        assert!(prepare_arguments(&def, &serde_json::json!({"topic":"AI","pages":0})).is_err());
+    }
+
+    #[test]
     fn incomplete_graphs_and_invalid_bounds_cannot_compile() {
         let mut graph = definition();
         graph.status = WorkflowStatus::Draft;
@@ -408,4 +424,39 @@ mod tests {
             .to_string()
             .contains("workflow_quota"));
     }
+}
+
+/// Resolve explicit top-level defaults and validate before admitting a saved run.
+/// Does not execute nodes or mutate persisted definitions.
+pub fn prepare_arguments(
+    definition: &WorkflowDefinition,
+    args: &serde_json::Value,
+) -> anyhow::Result<serde_json::Value> {
+    let Some(schema) = &definition.input_schema else {
+        return Ok(args.clone());
+    };
+    let mut args = if args.is_null()
+        && schema.get("type").and_then(serde_json::Value::as_str) == Some("object")
+    {
+        serde_json::json!({})
+    } else {
+        args.clone()
+    };
+    if let (Some(values), Some(properties)) = (
+        args.as_object_mut(),
+        schema
+            .get("properties")
+            .and_then(serde_json::Value::as_object),
+    ) {
+        for (name, field) in properties {
+            if !values.contains_key(name) {
+                if let Some(default) = field.get("default") {
+                    values.insert(name.clone(), default.clone());
+                }
+            }
+        }
+    }
+    crate::graph_data::bounded_value(&args, crate::graph_data::MAX_VALUE_BYTES)?;
+    crate::graph_data::validate_value(schema, &args)?;
+    Ok(args)
 }

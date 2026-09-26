@@ -2909,5 +2909,22 @@
     "issue_extra": "{{field}}: this version does not accept this argument.",
     "change": "Change",
     "latest": "Latest"
+  },
+  "workflowFlow": {
+    "viewCanvas": "View canvas",
+    "closeCanvas": "Back to chat",
+    "use": "Use",
+    "needsInput": "Waiting for information. Reply in chat; no nodes have started.",
+    "runMismatch": "The run does not match this conversation or selected version. Run state was not displayed.",
+    "savedPreview": "Saved version · Read-only preview",
+    "expectedArtifacts": "Expected artifacts (verify actual output)",
+    "noOutput": "No output yet",
+    "savedVersion": "Saved v{{version}}",
+    "unsaved": "Unpublished changes",
+    "localEdits": "Node edits are not applied yet. Save or discard them first.",
+    "finishEdit": "Resolve unapplied node edits first.",
+    "publishHint": "Save a new version without changing saved versions or active runs.",
+    "useNew": "Use v{{version}} in new chat",
+    "useVersion": "Use v{{version}}"
   }
 }

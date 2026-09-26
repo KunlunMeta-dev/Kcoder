@@ -1,5 +1,16 @@
-import { Bot, LogIn, FileCode2, GitBranch, GitMerge, Repeat2, LogOut } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  Bot,
+  LogIn,
+  FileCode2,
+  GitBranch,
+  GitMerge,
+  Repeat2,
+  LogOut,
+  LoaderCircle,
+  CheckCircle2,
+  AlertCircle,
+} from 'lucide-react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { Maximize2, Minus, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useTranslation } from '@/hooks/useTranslation'
@@ -67,6 +78,7 @@ export function WorkflowCanvas({
   onMove: (node: WorkflowNode, revision: number) => void
 }) {
   const { t } = useTranslation('common')
+  const markerId = `workflow-arrow-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`
   const root = useRef<HTMLDivElement>(null)
   const [view, setView] = useState({ x: 24, y: 24, zoom: 1 })
   const [moving, setMoving] = useState<{ id: string; x: number; y: number } | null>(null)
@@ -217,14 +229,7 @@ export function WorkflowCanvas({
         aria-hidden="true"
       >
         <defs>
-          <marker
-            id={`workflow-arrow-${definition.id}`}
-            markerWidth="8"
-            markerHeight="8"
-            refX="7"
-            refY="4"
-            orient="auto"
-          >
+          <marker id={markerId} markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
             <path d="M0,0 L8,4 L0,8" fill="context-stroke" />
           </marker>
         </defs>
@@ -253,7 +258,7 @@ export function WorkflowCanvas({
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="1.5"
-                  markerEnd={`url(#workflow-arrow-${definition.id})`}
+                  markerEnd={`url(#${markerId})`}
                 />
               )
             })
@@ -343,6 +348,24 @@ export function WorkflowCanvas({
                 <span className="min-w-0 flex-1 truncate text-sm font-medium">
                   {node.title || node.id}
                 </span>
+                {runtime?.status === 'running' && (
+                  <LoaderCircle
+                    aria-label={t('workflowCanvas.status_running')}
+                    className="h-4 w-4 shrink-0 animate-spin text-blue-600 motion-reduce:animate-none dark:text-blue-300"
+                  />
+                )}
+                {runtime?.status === 'completed' && (
+                  <CheckCircle2
+                    aria-label={t('workflowCanvas.status_completed')}
+                    className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400"
+                  />
+                )}
+                {runtime?.status === 'failed' && (
+                  <AlertCircle
+                    aria-label={t('workflowCanvas.status_failed')}
+                    className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400"
+                  />
+                )}
               </span>
               <span className={`mt-2 block truncate px-3 text-xs ${appearance.color}`}>
                 {t(`workflowCanvas.kind_${kind}`)} ·{' '}
