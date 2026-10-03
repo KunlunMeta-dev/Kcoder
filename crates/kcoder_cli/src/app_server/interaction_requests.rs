@@ -1,0 +1,625 @@
+//! Interaction requests: extracted from the app-server connection boundary.
+
+use super::*;
+
+pub(super) fn approval_response_timeout() -> Duration {
+    #[cfg(debug_assertions)]
+    {
+        let configured = std::env::var(E2E_APPROVAL_TIMEOUT_ENV).ok();
+        if let Some(timeout) = parse_e2e_approval_timeout(configured.as_deref()) {
+            return timeout;
+        }
+        if configured.is_some() {
+            tracing::warn!(
+                variable = E2E_APPROVAL_TIMEOUT_ENV,
+                "ignoring invalid E2E approval timeout and using the production default"
+            );
+        }
+    }
+    DEFAULT_APPROVAL_RESPONSE_TIMEOUT
+}
+
+#[cfg(any(debug_assertions, test))]
+pub(super) fn parse_e2e_approval_timeout(raw: Option<&str>) -> Option<Duration> {
+    let milliseconds = raw?.parse::<u64>().ok()?;
+    (10..=30_000)
+        .contains(&milliseconds)
+        .then(|| Duration::from_millis(milliseconds))
+}
+
+#[async_trait]
+impl PermissionPrompt for AppServerPermissionPrompt {
+    async fn ask(&self, tool_name: &str, description: String, input: &Value) -> PermissionResponse {
+        self.ask_context(&PermissionRequestContext {
+            tool_name: tool_name.to_string(),
+            description,
+            input: input.clone(),
+            risk: kcoder_permissions::PermissionRisk::None,
+            detail_lines: Vec::new(),
+        })
+        .await
+    }
+
+    async fn ask_context(&self, request: &PermissionRequestContext) -> PermissionResponse {
+        if self.mode != kcoder_config::PermissionMode::Ask {
+            return HeadlessPermissionPrompt { mode: self.mode }
+                .ask_context(request)
+                .await;
+        }
+
+        let Some(context) = self
+            .context
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
+        else {
+            tracing::warn!(tool = %request.tool_name, "app-server permission requested outside an active turn");
+            return PermissionResponse::DenyOnce;
+        };
+        let request_id = self.next_id.fetch_add(1, Ordering::Relaxed);
+        let approval_id = format!("approval-{request_id}");
+        let params = ApprovalRequestParams {
+            server_id: context.server_id,
+            thread_id: context.thread_id,
+            turn_id: context.turn_id,
+            approval_id,
+            action: approval_action_for(request),
+            reason: request.description.clone(),
+        };
+        let requested_at_ms = unix_timestamp_ms();
+        let resolved_approval_id = params.approval_id.clone();
+        let resolved_thread_id = params.thread_id.clone();
+        let resolved_turn_id = params.turn_id.clone();
+        let (response_tx, response_rx) = oneshot::channel();
+        self.pending
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .insert(request_id, response_tx);
+        let request_frame = json!({
+            "jsonrpc": JSONRPC_VERSION,
+            "id": request_id,
+            "method": method::APPROVAL_REQUEST,
+            "params": params,
+        });
+        self.receipts
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .track_request(
+                request_id,
+                InteractionBinding {
+                    interaction_id: params.approval_id.clone(),
+                    thread_id: params.thread_id.clone(),
+                    turn_id: params.turn_id.clone(),
+                },
+                request_frame.clone(),
+            );
+        if self.outbound_tx.send(request_frame).await.is_err() {
+            self.pending
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .remove(&request_id);
+            self.receipts
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .forget_request(request_id);
+            tracing::warn!(tool = %request.tool_name, "app-server connection closed while requesting approval");
+            return PermissionResponse::DenyOnce;
+        }
+
+        let response = tokio::time::timeout(self.response_timeout, response_rx).await;
+        // `resolve_server_response` normally removes the response path first. Perform
+        // idempotent cleanup here on timeout or sender failure so long-lived connections
+        // do not accumulate stale approvals.
+        self.pending
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .remove(&request_id);
+        self.receipts
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .forget_request(request_id);
+        let (permission, decision, reason) = match response {
+            Err(_) => {
+                tracing::warn!(tool = %request.tool_name, "app-server approval request timed out");
+                (
+                    PermissionResponse::DenyOnce,
+                    ApprovalDecision::Decline,
+                    "timeout",
+                )
+            }
+            Ok(Ok(Ok(response))) => {
+                let permission = match &response.decision {
+                    ApprovalDecision::Accept => PermissionResponse::AllowOnce,
+                    ApprovalDecision::AcceptForSession => PermissionResponse::AllowForSession,
+                    ApprovalDecision::Decline | ApprovalDecision::Cancel => {
+                        PermissionResponse::DenyOnce
+                    }
+                };
+                (permission, response.decision, "client_response")
+            }
+            Ok(Ok(Err(error))) => {
+                tracing::warn!(tool = %request.tool_name, %error, "app-server approval request failed");
+                (
+                    PermissionResponse::DenyOnce,
+                    ApprovalDecision::Cancel,
+                    "response_error",
+                )
+            }
+            Ok(Err(_)) => {
+                tracing::warn!(tool = %request.tool_name, "app-server approval request was cancelled");
+                (
+                    PermissionResponse::DenyOnce,
+                    ApprovalDecision::Cancel,
+                    "cancelled",
+                )
+            }
+        };
+        if let Err(error) = self.persist_decision(ApprovalDecisionArtifact {
+            version: 1,
+            artifact_id: hex_sha256(
+                format!(
+                    "{}\0{}\0{}\0{}",
+                    params.thread_id, params.turn_id, params.approval_id, requested_at_ms
+                )
+                .as_bytes(),
+            ),
+            thread_id: params.thread_id.clone(),
+            turn_id: params.turn_id.clone(),
+            approval_id: params.approval_id.clone(),
+            action: params.action.clone(),
+            reason: params.reason.clone(),
+            decision: decision.clone(),
+            resolution_reason: reason.into(),
+            requested_at_ms,
+            resolved_at_ms: unix_timestamp_ms(),
+        }) {
+            tracing::warn!(%error, approval_id = %params.approval_id, "failed to persist app-server approval decision");
+        }
+        let resolved = notification(
+            method::APPROVAL_RESOLVED,
+            serde_json::to_value(ApprovalResolvedParams {
+                request_id,
+                approval_id: resolved_approval_id,
+                thread_id: resolved_thread_id,
+                turn_id: resolved_turn_id,
+                decision,
+                reason: reason.into(),
+            })
+            .expect("approval resolution serializes"),
+        );
+        self.receipts
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .record(request_id, resolved.clone());
+        let _ = self.outbound_tx.send(resolved).await;
+        permission
+    }
+}
+
+impl AppServerPermissionPrompt {
+    pub(super) fn persist_decision(&self, artifact: ApprovalDecisionArtifact) -> Result<()> {
+        let Some(artifact_dir) = self
+            .artifact_dir
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
+        else {
+            return Ok(());
+        };
+        transcript_artifact_journal::write(
+            &artifact_dir,
+            &artifact.thread_id,
+            transcript_artifact_journal::Kind::ApprovalDecisions,
+            || {
+                write_private_artifact_file(
+                    &artifact_dir.join(format!("{}.json", artifact.artifact_id)),
+                    &serde_json::to_vec_pretty(&artifact)?,
+                )
+            },
+        )
+    }
+}
+
+pub(super) fn unix_timestamp_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .try_into()
+        .unwrap_or(u64::MAX)
+}
+
+pub(super) fn approval_action_for(request: &PermissionRequestContext) -> ApprovalAction {
+    let normalized = request.tool_name.to_ascii_lowercase();
+    if matches!(
+        normalized.as_str(),
+        "bash" | "bashtool" | "powershell" | "powershelltool" | "repl" | "repltool"
+    ) && let Some(command) = request.input.get("command").and_then(Value::as_str)
+    {
+        return ApprovalAction::Command {
+            command: command.to_string(),
+        };
+    }
+    if matches!(
+        normalized.as_str(),
+        "write" | "filewritetool" | "edit" | "fileedittool"
+    ) && let Some(path) = request
+        .input
+        .get("file_path")
+        .or_else(|| request.input.get("path"))
+        .and_then(Value::as_str)
+    {
+        return ApprovalAction::FileChange {
+            path: path.to_string(),
+        };
+    }
+    // apply_patch carries no `file_path`/`path` key; classify single-file
+    // patches as FileChange and let multi-file patches fall through to the
+    // generic Tool action (its input carries the full patch text).
+    if matches!(normalized.as_str(), "apply_patch" | "applypatchtool")
+        && let Some(patch) = request.input.get("patch").and_then(Value::as_str)
+    {
+        let paths = kcoder_tools::apply_patch::patch_affected_paths(patch);
+        if paths.len() == 1 {
+            return ApprovalAction::FileChange {
+                path: paths[0].clone(),
+            };
+        }
+    }
+    ApprovalAction::Tool {
+        name: request.tool_name.clone(),
+        input: request.input.clone(),
+    }
+}
+
+pub(super) fn resolve_server_response(
+    response: &Value,
+    pending_approvals: &PendingApprovalResponses,
+    pending_questions: &PendingQuestionResponses,
+    receipts: &Arc<StdMutex<InteractionReceipts>>,
+    require_binding: bool,
+) -> InteractionReply {
+    let Some(request_id) = response.get("id").and_then(Value::as_u64) else {
+        return InteractionReply::Unmatched;
+    };
+    // A connection that negotiated `interactionBindingV1` must name the
+    // interaction, so a transport id issued by an earlier connection generation
+    // can never be applied to a new turn. An error frame carries no decision and
+    // can only fail the interaction, so it stays accepted without a binding.
+    let expected = receipts
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .expected_binding(request_id)
+        .cloned();
+    let error_frame = response.get("error").is_some();
+    let verify = |reply: ReplyBinding| match (&expected, require_binding, error_frame) {
+        (Some(expected), true, false) => reply.matches(expected),
+        _ => true,
+    };
+
+    if pending_approvals
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .contains_key(&request_id)
+    {
+        let parsed = if let Some(error) = response.get("error") {
+            Err(error
+                .get("message")
+                .and_then(Value::as_str)
+                .unwrap_or("approval request failed")
+                .to_string())
+        } else {
+            match serde_json::from_value::<ApprovalResponse>(
+                response.get("result").cloned().unwrap_or(Value::Null),
+            ) {
+                Ok(reply) => {
+                    if !verify(ReplyBinding::from(&reply)) {
+                        return InteractionReply::Misattributed;
+                    }
+                    Ok(reply)
+                }
+                Err(error) => return InteractionReply::Unmatched.tap_invalid(&error),
+            }
+        };
+        return deliver_approval_response(pending_approvals, request_id, parsed);
+    }
+
+    if pending_questions
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .contains_key(&request_id)
+    {
+        let parsed = if let Some(error) = response.get("error") {
+            Err(error
+                .get("message")
+                .and_then(Value::as_str)
+                .unwrap_or("question request failed")
+                .to_string())
+        } else {
+            match serde_json::from_value::<QuestionResponse>(
+                response.get("result").cloned().unwrap_or(Value::Null),
+            ) {
+                Ok(reply) => {
+                    if !verify(ReplyBinding::from(&reply)) {
+                        return InteractionReply::Misattributed;
+                    }
+                    Ok(reply)
+                }
+                Err(error) => return InteractionReply::Unmatched.tap_invalid(&error),
+            }
+        };
+        return deliver_question_response(pending_questions, request_id, parsed);
+    }
+
+    InteractionReply::Unmatched
+}
+
+impl InteractionReply {
+    /// An unparseable result frame is not an answer; keep it observable.
+    pub(super) fn tap_invalid(self, error: &impl std::fmt::Display) -> Self {
+        tracing::warn!(%error, "app-server interaction reply was not a valid result frame");
+        self
+    }
+}
+
+impl<'a> From<&'a ApprovalResponse> for ReplyBinding<'a> {
+    fn from(reply: &'a ApprovalResponse) -> Self {
+        Self {
+            interaction_id: reply.approval_id.as_deref(),
+            thread_id: reply.thread_id.as_deref(),
+            turn_id: reply.turn_id.as_deref(),
+        }
+    }
+}
+
+impl<'a> From<&'a QuestionResponse> for ReplyBinding<'a> {
+    fn from(reply: &'a QuestionResponse) -> Self {
+        Self {
+            interaction_id: reply.question_id.as_deref(),
+            thread_id: reply.thread_id.as_deref(),
+            turn_id: reply.turn_id.as_deref(),
+        }
+    }
+}
+
+impl ReplyBinding<'_> {
+    pub(super) fn matches(&self, expected: &InteractionBinding) -> bool {
+        self.interaction_id == Some(expected.interaction_id.as_str())
+            && self.thread_id == Some(expected.thread_id.as_str())
+            && self.turn_id == Some(expected.turn_id.as_str())
+    }
+}
+
+pub(super) fn deliver_approval_response(
+    pending_approvals: &PendingApprovalResponses,
+    request_id: u64,
+    parsed: std::result::Result<ApprovalResponse, String>,
+) -> InteractionReply {
+    let Some(response_tx) = pending_approvals
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .remove(&request_id)
+    else {
+        return InteractionReply::Unmatched;
+    };
+    let _ = response_tx.send(parsed);
+    InteractionReply::Delivered
+}
+
+pub(super) fn deliver_question_response(
+    pending_questions: &PendingQuestionResponses,
+    request_id: u64,
+    parsed: std::result::Result<QuestionResponse, String>,
+) -> InteractionReply {
+    let Some(response_tx) = pending_questions
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .remove(&request_id)
+    else {
+        return InteractionReply::Unmatched;
+    };
+    let _ = response_tx.send(parsed);
+    InteractionReply::Delivered
+}
+
+impl InteractionReceipts {
+    /// Registers an interaction that is now waiting for a reply.
+    pub(super) fn track_request(
+        &mut self,
+        request_id: u64,
+        binding: InteractionBinding,
+        request: Value,
+    ) {
+        self.outstanding
+            .insert(request_id, OutstandingInteraction { binding, request });
+    }
+
+    /// Drops an interaction that ended without a terminal answer to replay
+    /// (timeout or closed connection); no receipt is kept for it.
+    pub(super) fn forget_request(&mut self, request_id: u64) {
+        self.outstanding.remove(&request_id);
+    }
+
+    pub(super) fn expected_binding(&self, request_id: u64) -> Option<&InteractionBinding> {
+        self.outstanding
+            .get(&request_id)
+            .map(|entry| &entry.binding)
+    }
+
+    pub(super) fn outstanding_request(&self, request_id: u64) -> Option<Value> {
+        self.outstanding
+            .get(&request_id)
+            .map(|entry| entry.request.clone())
+    }
+
+    pub(super) fn note_misattributed(&mut self) {
+        self.misattributed_replies = self.misattributed_replies.saturating_add(1);
+    }
+
+    pub(super) fn record(&mut self, request_id: u64, notification: Value) {
+        self.outstanding.remove(&request_id);
+        while self.resolved.len() >= INTERACTION_RECEIPT_LIMIT {
+            self.resolved.pop_front();
+        }
+        self.resolved.push_back((request_id, notification));
+    }
+
+    /// Returns the terminal answer already sent for `request_id`, if any.
+    pub(super) fn replay(&mut self, request_id: u64) -> Option<Value> {
+        let found = self
+            .resolved
+            .iter()
+            .find(|(id, _)| *id == request_id)
+            .map(|(_, notification)| notification.clone());
+        if found.is_some() {
+            self.duplicate_replies = self.duplicate_replies.saturating_add(1);
+        }
+        found
+    }
+
+    pub(super) fn note_unmatched(&mut self) {
+        self.unmatched_replies = self.unmatched_replies.saturating_add(1);
+    }
+
+    #[cfg(test)]
+    pub(super) fn len(&self) -> usize {
+        self.resolved.len()
+    }
+
+    #[cfg(test)]
+    pub(super) fn counters(&self) -> (u64, u64) {
+        (self.duplicate_replies, self.unmatched_replies)
+    }
+
+    #[cfg(test)]
+    pub(super) fn outstanding_len(&self) -> usize {
+        self.outstanding.len()
+    }
+}
+
+#[async_trait]
+impl UserQuestioner for AppServerQuestioner {
+    async fn ask(
+        &self,
+        request: UserQuestionRequest,
+    ) -> std::result::Result<UserQuestionResponse, String> {
+        let context = self
+            .context
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
+            .ok_or_else(|| {
+                "question was requested outside an active app-server turn".to_string()
+            })?;
+        let request_id = self.next_id.fetch_add(1, Ordering::Relaxed);
+        let question_id = format!("question-{request_id}");
+        let questions = request
+            .questions
+            .iter()
+            .enumerate()
+            .map(|(index, question)| Question {
+                id: format!("question-{}", index + 1),
+                header: question.header.clone(),
+                prompt: question.question.clone(),
+                options: question
+                    .options
+                    .iter()
+                    .map(|option| QuestionOption {
+                        label: option.label.clone(),
+                        value: option.label.clone(),
+                        description: option.description.clone(),
+                        preview: option.preview.clone(),
+                    })
+                    .collect(),
+                allows_freeform: true,
+                multi_select: question.multi_select,
+            })
+            .collect::<Vec<_>>();
+        let params = QuestionRequestParams {
+            server_id: context.server_id,
+            thread_id: context.thread_id,
+            turn_id: context.turn_id,
+            question_id,
+            questions,
+            annotations: request.annotations.clone(),
+        };
+        let resolved_question_id = params.question_id.clone();
+        let resolved_thread_id = params.thread_id.clone();
+        let resolved_turn_id = params.turn_id.clone();
+        let (response_tx, response_rx) = oneshot::channel();
+        self.pending
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .insert(request_id, response_tx);
+        let request_frame = json!({
+            "jsonrpc": JSONRPC_VERSION,
+            "id": request_id,
+            "method": method::QUESTION_REQUEST,
+            "params": params,
+        });
+        self.receipts
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .track_request(
+                request_id,
+                InteractionBinding {
+                    interaction_id: resolved_question_id.clone(),
+                    thread_id: resolved_thread_id.clone(),
+                    turn_id: resolved_turn_id.clone(),
+                },
+                request_frame.clone(),
+            );
+        if self.outbound_tx.send(request_frame).await.is_err() {
+            self.pending
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .remove(&request_id);
+            self.receipts
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .forget_request(request_id);
+            return Err("app-server connection closed while asking a question".to_string());
+        }
+        let response = response_rx.await;
+        let reason = match &response {
+            Ok(Ok(_)) => "client_response",
+            Ok(Err(error)) if error == "the user cancelled the question request" => "cancelled",
+            Ok(Err(_)) => "response_error",
+            Err(_) => "cancelled",
+        };
+        let resolved = notification(
+            method::QUESTION_RESOLVED,
+            serde_json::to_value(QuestionResolvedParams {
+                request_id,
+                question_id: resolved_question_id,
+                thread_id: resolved_thread_id,
+                turn_id: resolved_turn_id,
+                reason: reason.into(),
+            })
+            .expect("question resolution serializes"),
+        );
+        self.receipts
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .record(request_id, resolved.clone());
+        let _ = self.outbound_tx.send(resolved).await;
+        let response = response.map_err(|_| "app-server question was cancelled".to_string())??;
+        let mut answers = HashMap::new();
+        for (index, question) in request.questions.iter().enumerate() {
+            let id = format!("question-{}", index + 1);
+            let selected = response
+                .answers
+                .get(&id)
+                .map(|answer| answer.answers.join(", "))
+                .unwrap_or_default();
+            if !selected.trim().is_empty() {
+                answers.insert(question.question.clone(), selected);
+            }
+        }
+        Ok(UserQuestionResponse {
+            questions: request.questions,
+            answers,
+            annotations: response.annotations.or(request.annotations),
+        })
+    }
+}

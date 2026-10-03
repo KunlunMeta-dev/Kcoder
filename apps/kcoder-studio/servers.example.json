@@ -1,0 +1,20 @@
+[
+  {
+    "id": "local",
+    "label": "This machine",
+    "description": "Local KCoder app-server",
+    "transport": "local"
+  },
+  {
+    "id": "build-01",
+    "label": "Build server",
+    "description": "Authenticated via ~/.ssh/config or ssh-agent",
+    "transport": "ssh",
+    "host": "build-01",
+    "user": "developer",
+    "workspace": "/srv/project",
+    "command": "kcoder",
+    "chromiumBin": "/usr/bin/chromium",
+    "chromiumNoSandbox": false
+  }
+]

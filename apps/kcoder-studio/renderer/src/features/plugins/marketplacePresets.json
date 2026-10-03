@@ -1,0 +1,42 @@
+[
+  {
+    "id": "claude",
+    "url": "https://github.com/anthropics/claude-plugins-official"
+  },
+  {
+    "id": "openai",
+    "url": "https://github.com/openai/plugins"
+  },
+  {
+    "id": "xai",
+    "url": "https://github.com/xai-org/plugin-marketplace"
+  },
+  {
+    "id": "codebuddy",
+    "url": "https://cnb.cool/codebuddy/marketplace"
+  },
+  {
+    "id": "workbuddy",
+    "url": "https://download.codebuddy.cn/plugin-marketplace/codebuddy-plugins-official.zip"
+  },
+  {
+    "id": "workbuddy-teams",
+    "url": "https://download.codebuddy.cn/plugin-marketplace/cb_teams_marketplace.zip"
+  },
+  {
+    "id": "qoder",
+    "url": "https://qoder.com/marketplace"
+  },
+  {
+    "id": "trae-cn",
+    "url": "https://api.trae.com.cn/extensions/api/-/plugin/list"
+  },
+  {
+    "id": "anthropic-skills",
+    "url": "https://github.com/anthropics/skills"
+  },
+  {
+    "id": "superpowers",
+    "url": "https://github.com/obra/superpowers-marketplace"
+  }
+]

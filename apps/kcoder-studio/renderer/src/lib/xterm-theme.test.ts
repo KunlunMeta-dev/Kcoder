@@ -1,0 +1,118 @@
+import { afterEach, describe, expect, test, vi } from 'vitest'
+import { applyTerminalTheme, getTerminalTheme, observeTerminalTheme } from './xterm-theme'
+
+function setThemeVariables() {
+  const root = document.documentElement
+  root.style.setProperty('--color-bg-base', '17 19 22')
+  root.style.setProperty('--color-text-primary', '241 245 249')
+  root.style.setProperty('--color-primary', '45 212 191')
+}
+
+describe('xterm-theme', () => {
+  test('defines a complete readable light ANSI palette rather than inheriting bright white', () => {
+    document.documentElement.dataset.theme = 'light'
+    const theme = getTerminalTheme()
+    for (const color of [
+      'black',
+      'red',
+      'green',
+      'yellow',
+      'blue',
+      'magenta',
+      'cyan',
+      'white',
+      'brightBlack',
+      'brightRed',
+      'brightGreen',
+      'brightYellow',
+      'brightBlue',
+      'brightMagenta',
+      'brightCyan',
+      'brightWhite',
+    ]) {
+      expect(theme[color as keyof typeof theme]).toMatch(/^#[0-9a-f]{6}$/i)
+    }
+    expect(theme.brightWhite).not.toBe('#ffffff')
+    expect(theme.white).not.toBe(theme.background)
+  })
+  afterEach(() => {
+    document.documentElement.removeAttribute('data-theme')
+    document.documentElement.removeAttribute('class')
+    document.documentElement.removeAttribute('style')
+    vi.restoreAllMocks()
+  })
+
+  test('builds terminal colors from active theme tokens', () => {
+    document.documentElement.dataset.theme = 'dark'
+    setThemeVariables()
+
+    expect(getTerminalTheme()).toMatchObject({
+      background: 'rgb(17, 19, 22)',
+      foreground: 'rgb(241, 245, 249)',
+      cursor: 'rgb(45, 212, 191)',
+      selectionBackground: 'rgba(45, 212, 191, 0.28)',
+    })
+  })
+
+  test('observes root appearance changes', async () => {
+    const onChange = vi.fn()
+    const disconnect = observeTerminalTheme(onChange)
+
+    document.documentElement.dataset.theme = 'dark'
+    setThemeVariables()
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        background: 'rgb(17, 19, 22)',
+        foreground: 'rgb(241, 245, 249)',
+      })
+    )
+
+    disconnect()
+  })
+
+  test('applies terminal background to generated xterm nodes', () => {
+    document.documentElement.dataset.theme = 'dark'
+    setThemeVariables()
+    const terminal = { options: {} }
+    const container = document.createElement('div')
+    container.innerHTML = `
+      <div class="xterm">
+        <div class="xterm-viewport"></div>
+        <div class="xterm-screen"></div>
+      </div>
+    `
+
+    applyTerminalTheme(terminal as never, container)
+
+    expect(terminal.options).toEqual({
+      minimumContrastRatio: 4.5,
+      theme: expect.objectContaining({ background: 'rgb(17, 19, 22)' }),
+    })
+    expect(container.style.backgroundColor).toBe('rgb(17, 19, 22)')
+    expect(container.querySelector<HTMLElement>('.xterm-viewport')?.style.backgroundColor).toBe(
+      'rgb(17, 19, 22)'
+    )
+    expect(container.querySelector<HTMLElement>('.xterm-screen')?.style.backgroundColor).toBe(
+      'rgb(17, 19, 22)'
+    )
+  })
+
+  test('applies a transparent background to the terminal and generated nodes', () => {
+    const terminal = { options: {} }
+    const container = document.createElement('div')
+    container.innerHTML = '<div class="xterm"><div class="xterm-viewport"></div></div>'
+
+    applyTerminalTheme(terminal as never, container, getTerminalTheme(), true)
+
+    expect(terminal.options).toEqual({
+      minimumContrastRatio: 4.5,
+      theme: expect.objectContaining({ background: 'rgba(0, 0, 0, 0)' }),
+    })
+    expect(container.style.backgroundColor).toBe('rgba(0, 0, 0, 0)')
+    expect(container.querySelector<HTMLElement>('.xterm-viewport')?.style.backgroundColor).toBe(
+      'rgba(0, 0, 0, 0)'
+    )
+  })
+})

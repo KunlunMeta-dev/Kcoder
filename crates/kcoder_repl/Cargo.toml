@@ -1,0 +1,56 @@
+[package]
+name = "kcoder_repl"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+kcoder_types = { path = "../kcoder_types" }
+kcoder_api = { path = "../kcoder_api" }
+kcoder_engine = { path = "../kcoder_engine" }
+kcoder_memory = { path = "../kcoder_memory" }
+kcoder_permissions = { path = "../kcoder_permissions" }
+kcoder_config = { path = "../kcoder_config" }
+kcoder_hooks = { path = "../kcoder_hooks" }
+kcoder_plugins = { path = "../kcoder_plugins" }
+kcoder_state = { path = "../kcoder_state" }
+kcoder_tools = { path = "../kcoder_tools" }
+kcoder_specs = { path = "../kcoder_specs" }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+ratatui = { workspace = true, features = ["scrolling-regions", "unstable-rendered-line-info", "unstable-widget-ref"] }
+crossterm = { workspace = true }
+anyhow = { workspace = true }
+futures = { workspace = true }
+tracing = { workspace = true }
+unicode-width = { workspace = true }
+unicode-segmentation = { workspace = true }
+url = { workspace = true }
+pulldown-cmark = { workspace = true }
+syntect = { workspace = true }
+two-face = { workspace = true }
+serde_json = { workspace = true }
+serde = { workspace = true }
+sha2 = { workspace = true }
+chrono = { workspace = true }
+libc = { workspace = true }
+base64 = "0.22"
+tempfile = { workspace = true }
+arboard = { workspace = true }
+image = { workspace = true }
+wait-timeout = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_System_DataExchange",
+    "Win32_System_Memory",
+    "Win32_System_Ole",
+] }
+
+[dev-dependencies]
+kcoder_skills = { path = "../kcoder_skills" }

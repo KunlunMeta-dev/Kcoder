@@ -1,0 +1,19 @@
+[
+  {
+    "id": "local",
+    "label": "当前虚拟机",
+    "description": "主开发环境",
+    "transport": "local",
+    "workspace": "/data/nvme2/cyx/KCoder",
+    "settingsFile": "./app-server.settings.json",
+    "profile": "kunlunmeta"
+  },
+  {
+    "id": "isolated-lab",
+    "label": "隔离测试环境",
+    "description": "同机独立会话，用于测试服务器切换",
+    "transport": "local",
+    "workspace": "/tmp/kcoder-preview-lab",
+    "profile": "kunlunmeta"
+  }
+]

@@ -1,0 +1,4 @@
+Runtime license documentation accompanying the reviewed GNU/MinGW build.
+GCC-COPYRIGHT.txt: unmodified Ubuntu gcc-mingw-w64-base 13.2.0-6ubuntu1+26.1 copyright document; includes GCC Runtime Library Exception.
+MINGW-COPYRIGHT.txt: unmodified Ubuntu mingw-w64-common 11.0.1-3build1 copyright document; includes MinGW-w64 component notices.
+Actual compiler identity/version and source/patch hashes are recorded in BUILD-INFO.json. These compiler/runtime notices do not replace Xpdf COPYING/COPYING3 or the Adobe CMap licenses. Native MSVC builds use the installed Microsoft toolchain rather than GNU runtimes.

@@ -1,0 +1,82 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  COREPACK_ENABLE_AUTO_PIN: "0"
+
+jobs:
+  studio-windows:
+    name: KCoder Studio Windows installer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.95"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-studio-windows
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install JavaScript dependencies
+        shell: pwsh
+        run: |
+          corepack enable
+          if ($LASTEXITCODE -ne 0) { throw "Corepack setup failed" }
+          pnpm --dir apps/kcoder-studio install --frozen-lockfile
+          if ($LASTEXITCODE -ne 0) { throw "Studio dependency installation failed" }
+          pnpm --dir apps/kcoder-studio/renderer install --frozen-lockfile
+          if ($LASTEXITCODE -ne 0) { throw "Renderer dependency installation failed" }
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          pnpm --dir apps/kcoder-studio desktop:pack:win
+          if ($LASTEXITCODE -ne 0) { throw "Windows installer build failed" }
+      - name: Verify actual packaged resources
+        shell: pwsh
+        run: |
+          $packageRoot = "target/packages/kcoder-studio/windows/win-unpacked"
+          node scripts/release/artifact-manifest.mjs --verify "$packageRoot/resources" $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw "Packaged resource verification failed" }
+          $env:KCODER_E2E_PACKAGED_DIR = (Resolve-Path $packageRoot).Path
+          $env:KCODER_E2E_PROCESS_SUPERVISOR_BIN = Join-Path $env:KCODER_E2E_PACKAGED_DIR "resources/bin/kcoder-process-supervisor.exe"
+          node apps/kcoder-studio/e2e/run-all.mjs --model-independent --suite packaged-desktop-smoke
+          if ($LASTEXITCODE -ne 0) { throw "Packaged Studio acceptance failed" }
+      - name: Select only the Windows setup executable
+        shell: pwsh
+        run: |
+          $version = (Get-Content -Raw "apps/kcoder-studio/package.json" | ConvertFrom-Json).version
+          if ($env:GITHUB_REF_NAME -ne "v$version") { throw "Release tag does not match Studio version" }
+          $installer = "target/packages/kcoder-studio/windows/KCoder-Studio-Setup-$version-win-x64.exe"
+          if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) { throw "Windows installer is missing" }
+          $out = "target/dist/studio-windows"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          Copy-Item -LiteralPath $installer -Destination $out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kcoder-studio-windows-installer
+          path: target/dist/studio-windows/KCoder-Studio-Setup-*-win-x64.exe
+          if-no-files-found: error
+
+  publish:
+    needs: studio-windows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: kcoder-studio-windows-installer
+          path: artifacts
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: artifacts/KCoder-Studio-Setup-*-win-x64.exe

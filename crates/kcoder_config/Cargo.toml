@@ -1,0 +1,46 @@
+[package]
+name = "kcoder_config"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+keyring.workspace = true
+serde = { workspace = true }
+serde_json = { workspace = true }
+url = { workspace = true }
+percent-encoding = "2"
+jsonc-parser = { workspace = true }
+jsonschema = { workspace = true }
+serde_ignored = "0.1"
+anyhow = { workspace = true }
+tracing = { workspace = true }
+dirs = { workspace = true }
+dunce = { workspace = true }
+globset = { workspace = true }
+fs2 = "0.4"
+kcoder_types = { path = "../kcoder_types" }
+getrandom = "0.3"
+cap-primitives = "3.4"
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Storage_FileSystem",
+    "Win32_System_IO",
+    "Win32_System_SystemServices",
+    "Win32_System_Threading",
+    "Wdk_Foundation",
+    "Wdk_Storage_FileSystem",
+] }
+
+[dev-dependencies]
+tempfile = { workspace = true }

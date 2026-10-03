@@ -1,0 +1,5 @@
+[server]
+transport = "stdio"
+
+[tools]
+exclude = []

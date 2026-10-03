@@ -1,0 +1,25 @@
+{
+  "source": "logo/icon.png",
+  "sourceSha256": "9533cbd698ce58671ec534d6bbe9c929e49c166fa527da6e3450571c70b49150",
+  "files": {
+    "renderer/src-tauri/icons/32x32.png": "492eabe2f15d57565484224e45b1c9df91d0f0dd54065336085b7e6340be983c",
+    "renderer/src-tauri/icons/128x128.png": "cea6d61bba99ebe0e5bb9d78e89cb16f3444a3e9e9ae9920566d842c1e89f2aa",
+    "renderer/src-tauri/icons/128x128@2x.png": "2317d8986c1b99e87c7d5827cf4d2eb27c5faaf8db600afa64a2d252acc34505",
+    "renderer/src-tauri/icons/icon.png": "72fbcc0232397f5fd6ae910b0fd7b42e9d57c45d9a69ea840d1d8069e8fdb82d",
+    "renderer/src-tauri/icons/icon.ico": "6ef53014bcbb1a0027e346556185868a2178cef84af397a03b9a6d9eb38f6b7b",
+    "renderer/src-tauri/icons/icon.icns": "993f5f6539114ab30b4f98885674ada4ddecc9b2618cfdb6ec1c8945cb49be4a",
+    "renderer/src-tauri/icons/Square30x30Logo.png": "3bf820e35490504c1523ddae7ca21c538c0e043ed7888594d84903116e6f3c94",
+    "renderer/src-tauri/icons/Square44x44Logo.png": "2de08a25386efda4ee1fe37bb4835e4815a6e5a86c947b77ec3a2f2d45cc0ba5",
+    "renderer/src-tauri/icons/Square71x71Logo.png": "468d77cf254ea425425ccc71e4e0e7d7b33182bb4df8541be8a9fbe61710c356",
+    "renderer/src-tauri/icons/Square89x89Logo.png": "100e5e15d158f70fc3ebeb14d1104a238b94ca919955f221d121ba9ea27f2dce",
+    "renderer/src-tauri/icons/Square107x107Logo.png": "078a204e4963360517e0092f7f18a44812da209196a85f0b9e692b34cafc400e",
+    "renderer/src-tauri/icons/Square142x142Logo.png": "018599f0f95a99dd1a74cd6eec3fcc0c024a8a0abe5336f47b3f37fde7b4d0b4",
+    "renderer/src-tauri/icons/Square150x150Logo.png": "da26b4251f40f8dc7ad30044a6cee2a60ac2486767cfdae64034665044dc9c4d",
+    "renderer/src-tauri/icons/Square284x284Logo.png": "094387ce0b8d204dd9191b26338227481d619f07484b6b4de69ba2e0bd84cc57",
+    "renderer/src-tauri/icons/Square310x310Logo.png": "0d32ee168e584d962bb3ba9c2524dd57fb1735e1fb437c4ea04cc866f85f7077",
+    "renderer/src-tauri/icons/StoreLogo.png": "b7b6aceee138a317411083e1982fefbdd72fd9bf69d82349288578b5530fa3bc",
+    "renderer/src-tauri/icons/icon-dev.icns": "993f5f6539114ab30b4f98885674ada4ddecc9b2618cfdb6ec1c8945cb49be4a",
+    "renderer/src/assets/studio-icon.png": "2317d8986c1b99e87c7d5827cf4d2eb27c5faaf8db600afa64a2d252acc34505",
+    "renderer/public/favicon.png": "492eabe2f15d57565484224e45b1c9df91d0f0dd54065336085b7e6340be983c"
+  }
+}

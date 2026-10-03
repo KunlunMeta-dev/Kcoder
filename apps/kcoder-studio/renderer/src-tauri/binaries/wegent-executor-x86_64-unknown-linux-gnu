@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# KCODER_TAURI_DEBUG_STUB_V1
+
+set -euo pipefail
+
+printf '%s\n' '{"type":"event","event":"executor.ready","payload":{"deviceId":"local-device","ready":true,"version":"debug-stub"}}'
+
+while IFS= read -r request; do
+  request_id="$(printf '%s\n' "$request" | sed -n 's/.*"id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
+  if [[ -z "$request_id" ]]; then
+    printf '%s\n' 'debug sidecar ignored a request without a string id' >&2
+    continue
+  fi
+  printf '%s\n' \
+    "{\"type\":\"response\",\"id\":\"$request_id\",\"ok\":false,\"error\":{\"code\":\"SIDECAR_NOT_BUILT\",\"message\":\"Local executor source is unavailable in this checkout; configure KCODER_STUDIO_EXECUTOR_SIDECAR with a real executor binary.\"}}"
+done

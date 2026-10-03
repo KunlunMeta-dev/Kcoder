@@ -1,0 +1,634 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>KCoder — Open-Source AI Coding Platform</title>
+<meta name="description" content="KCoder is an open-source AI coding platform: provider-agnostic agents, tool systems, permissions and sandboxing, SQLite long-term memory, Skills, spec-driven workflows, plugin hooks, MCP, sub-agents, terminal TUI, background daemon, and desktop/Web/mobile apps (KCoder Studio)." />
+<meta name="theme-color" content="#0b0b0d" />
+<link rel="stylesheet" href="assets/style.css" />
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,&lt;svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'&gt;&lt;rect width='64' height='64' rx='14' fill='%23d97757'/&gt;&lt;text x='50%' y='56%' font-size='38' text-anchor='middle' fill='%23fff' font-family='ui-sans-serif' font-weight='700'&gt;K&lt;/text&gt;&lt;/svg&gt;" />
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap nav">
+    <a class="brand" href="#top" aria-label="KCoder home">
+      <span class="brand-mark" aria-hidden="true">K</span>
+      <span class="brand-name">KCoder <em>Code</em></span>
+    </a>
+    <nav class="primary-nav" aria-label="Primary navigation">
+      <a href="#overview">Overview</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#features">Features</a>
+      <a href="#quick-start">Quick Start</a>
+      <a href="#models">Models</a>
+      <a href="#tools">Tools</a>
+      <a href="#roadmap">Status</a>
+    </nav>
+    <a class="cta small" href="#quick-start">Get started →</a>
+  </div>
+</header>
+
+<a id="top" aria-hidden="true"></a>
+
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <p class="eyebrow">Rust · workspace v0.1.0 · edition 2024 · MIT license</p>
+      <h1>An <span class="accent">open-source AI coding platform</span>, built in Rust.</h1>
+      <p class="lede">
+        KCoder covers model providers, the agent loop, tool systems, permissions and sandboxing,
+        long-term memory, Skills, spec-driven workflows, plugin hooks, MCP, sub-agents, a terminal TUI,
+        a background daemon, Goal Pro long-objective verification — plus desktop, Web, and mobile apps
+        through KCoder Studio.
+      </p>
+      <div class="hero-cta">
+        <a class="cta" href="#quick-start">Get started</a>
+        <a class="cta ghost" href="#architecture">See the architecture</a>
+      </div>
+      <ul class="hero-stats" role="list">
+        <li><strong>19</strong><span>workspace crates</span></li>
+        <li><strong>385k+</strong><span>lines of Rust</span></li>
+        <li><strong>6</strong><span>provider families</span></li>
+        <li><strong>40+</strong><span>built-in tools</span></li>
+      </ul>
+    </div>
+    <aside class="hero-card" aria-label="Quick start example">
+      <div class="terminal" role="img" aria-label="KCoder terminal usage example">
+        <div class="terminal-bar">
+          <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+          <span class="terminal-title">~/projects/my-app</span>
+        </div>
+        <pre class="terminal-body"><code><span class="c"># Build from source (or use the release installer)</span>
+<span class="p">$</span> scripts/install/installers/cli-release.sh
+
+<span class="c"># One-shot question (headless mode)</span>
+<span class="p">$</span> kcoder <span class="s">"Explain this function"</span>
+
+<span class="c"># Or launch the interactive TUI</span>
+<span class="p">$</span> kcoder</code></pre>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<section class="section" id="overview">
+  <div class="wrap two-col">
+    <div>
+      <h2>What is KCoder?</h2>
+      <p>
+        KCoder is an auditable, extensible, locally runnable engineering agent runtime — not a wrapper
+        that just prints model output. Conversation, tool calling, permission controls, SQLite long-term
+        memory, Skills, slash commands, history search, sub-agents, spec workflows, MCP servers, plugins,
+        and scheduled tasks all ship in one statically linked binary.
+      </p>
+      <p>
+        The implementation is organized as a Cargo workspace of <strong>19 crates with clearly separated
+        responsibilities</strong> — types, API, engine, tools, memory, permissions, skills, specs, REPL,
+        CLI, workflow, process supervisor — composing a complete agent with no hidden state. The
+        machine-readable <code>app-server</code> and Gateway back KCoder Studio on desktop, Web, and mobile.
+      </p>
+    </div>
+    <div class="callouts">
+      <article class="callout">
+        <h3>Provider-agnostic</h3>
+        <p>Anthropic, OpenAI-compatible endpoints (Kimi, MiniMax), KunlunMeta, local vLLM/SGLang, Gemini, and Grok — all unified behind the <code>Provider</code> trait.</p>
+      </article>
+      <article class="callout">
+        <h3>Spec-driven</h3>
+        <p>Behavior changes are proposed as delta specs under <code>.kcoder/specs/</code>, validated against tests and drift checks, then archived with evidence.</p>
+      </article>
+      <article class="callout">
+        <h3>Multi-surface</h3>
+        <p>Interactive TUI, headless one-shot prompts, JSON event streams, a tmux-backed daemon, and the JSON-RPC app-server powering Studio clients.</p>
+      </article>
+      <article class="callout">
+        <h3>Engineering discipline</h3>
+        <p>TDD guard, permission modes, Landlock sandboxing on Linux plus a Windows sandbox, hook systems, audit logs, and bounded tool outputs.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="section alt" id="architecture">
+  <div class="wrap">
+    <header class="section-head">
+      <h2>Architecture</h2>
+      <p>
+        A Cargo workspace of 19 crates and 385k+ lines of Rust. The CLI is a thin shell; the engine
+        orchestrates providers, tools, memory, permissions, skills, and the other subsystems.
+      </p>
+    </header>
+
+    <div class="arch">
+      <div class="arch-layer arch-app">
+        <span class="arch-label">Clients</span>
+        <div class="arch-box wide">KCoder Studio<br /><small>Electron desktop · Web · mobile (Expo) — Gateway + app-server clients</small></div>
+      </div>
+
+      <div class="arch-arrow" aria-hidden="true">▼</div>
+
+      <div class="arch-layer arch-app">
+        <span class="arch-label">Machine interface</span>
+        <div class="arch-box">kcoder_cli<br /><small><code>app-server</code> JSON-RPC over stdio · JSON events · headless · daemon · Gateway</small></div>
+        <div class="arch-box">kcoder_app_protocol<br /><small>shared JSON-RPC wire types</small></div>
+      </div>
+
+      <div class="arch-arrow" aria-hidden="true">▼</div>
+
+      <div class="arch-layer arch-ux">
+        <span class="arch-label">Interaction layer</span>
+        <div class="arch-box">kcoder_repl<br /><small>TUI · slash commands · Markdown · scrolling · overlays</small></div>
+        <div class="arch-box">kcoder_hooks<br /><small>lifecycle hooks</small></div>
+        <div class="arch-box">kcoder_plugins<br /><small>plugin discovery + trust gate</small></div>
+      </div>
+
+      <div class="arch-arrow" aria-hidden="true">▼</div>
+
+      <div class="arch-layer arch-core">
+        <span class="arch-label">Core layer</span>
+        <div class="arch-box highlight">kcoder_engine<br /><small>query loop · tool dispatch · layered compaction · sub-agents · Goal Pro · MoA · TDD guard</small></div>
+        <div class="arch-box">kcoder_api<br /><small>Provider trait · streaming (SSE)</small></div>
+        <div class="arch-box">kcoder_state<br /><small>AppState · sessions · history · checkpoints</small></div>
+        <div class="arch-box">kcoder_query<br /><small>query export boundary</small></div>
+      </div>
+
+      <div class="arch-arrow" aria-hidden="true">▼</div>
+
+      <div class="arch-layer arch-svc">
+        <span class="arch-label">Service layer</span>
+        <div class="arch-box">kcoder_tools<br /><small>40+ tools · registries</small></div>
+        <div class="arch-box">kcoder_permissions<br /><small>permission engine · bash risk classification</small></div>
+        <div class="arch-box">kcoder_memory<br /><small>SQLite + FTS5 structured memory</small></div>
+        <div class="arch-box">kcoder_skills<br /><small>SkillStore · transactions · materialization</small></div>
+        <div class="arch-box">kcoder_specs<br /><small>spec-driven workflow</small></div>
+        <div class="arch-box">kcoder_mcp<br /><small>stdio / SSE / Streamable HTTP · OAuth</small></div>
+        <div class="arch-box">kcoder_workflow<br /><small>JS workflow runtime (rquickjs)</small></div>
+        <div class="arch-box">kcoder_config<br /><small>layered settings · credentials</small></div>
+      </div>
+
+      <div class="arch-arrow" aria-hidden="true">▼</div>
+
+      <div class="arch-layer arch-base">
+        <span class="arch-label">Foundation layer</span>
+        <div class="arch-box">kcoder_types<br /><small>messages · content blocks · events</small></div>
+        <div class="arch-box">kcoder_process_supervisor<br /><small>cross-platform process supervisor</small></div>
+      </div>
+    </div>
+
+    <details class="arch-table">
+      <summary>Show all 19 crates</summary>
+      <table>
+        <thead><tr><th>Crate</th><th>Responsibility</th><th>Lines</th></tr></thead>
+        <tbody>
+          <tr><td><code>kcoder_repl</code></td><td>Terminal UI, slash commands, rendering, scrolling, overlays, clipboard, external editor.</td><td>87,964</td></tr>
+          <tr><td><code>kcoder_tools</code></td><td>Tool trait and 40+ built-in tools (files, bash, search, web, agents, cron, workflow, LSP, OCR…).</td><td>70,745</td></tr>
+          <tr><td><code>kcoder_engine</code></td><td>Query main loop, streaming, layered compaction, session memory, tool repair, sub-agents, Goal Pro, MoA, TDD guard.</td><td>67,800</td></tr>
+          <tr><td><code>kcoder_cli</code></td><td><code>kcoder</code> binary: headless, JSON events, daemon, app-server, marketplace/plugin/config/auth commands.</td><td>51,113</td></tr>
+          <tr><td><code>kcoder_state</code></td><td>AppState, session snapshots, transcript, history, tasks, todos, goals, checkpoints.</td><td>34,649</td></tr>
+          <tr><td><code>kcoder_config</code></td><td>Layered settings, provider configuration, embedded schema and defaults.</td><td>13,254</td></tr>
+          <tr><td><code>kcoder_specs</code></td><td>Spec-driven development: parsing, fingerprinting, sync, processes, bundled skills.</td><td>9,170</td></tr>
+          <tr><td><code>kcoder_plugins</code></td><td>Plugin discovery (trust gate), manifests, marketplace, MCP/hook contributions.</td><td>8,702</td></tr>
+          <tr><td><code>kcoder_api</code></td><td>Provider trait, Anthropic/OpenAI/Gemini/Grok clients, streaming, typed transport failures.</td><td>8,630</td></tr>
+          <tr><td><code>kcoder_mcp</code></td><td>MCP transports (stdio / legacy SSE / Streamable HTTP), OAuth authorization, tool bridge.</td><td>7,280</td></tr>
+          <tr><td><code>kcoder_skills</code></td><td>SkillStore transactions, built-in skill materialization, external directory loading.</td><td>7,132</td></tr>
+          <tr><td><code>kcoder_memory</code></td><td>SQLite structured memory with FTS5 retrieval, observer, privacy policy.</td><td>6,949</td></tr>
+          <tr><td><code>kcoder_app_protocol</code></td><td>app-server protocol JSON-RPC wire types shared by desktop/Web/server.</td><td>3,036</td></tr>
+          <tr><td><code>kcoder_hooks</code></td><td>Hook types, matching, execution, secret redaction.</td><td>2,817</td></tr>
+          <tr><td><code>kcoder_permissions</code></td><td>Permission decisions, prompts, audit, bash risk classification (tree-sitter decomposition).</td><td>1,883</td></tr>
+          <tr><td><code>kcoder_process_supervisor</code></td><td>Cross-platform process supervisor binary (<code>kcoder-process-supervisor</code>).</td><td>1,812</td></tr>
+          <tr><td><code>kcoder_types</code></td><td>Provider/tool/TUI shared message and schema types.</td><td>1,674</td></tr>
+          <tr><td><code>kcoder_workflow</code></td><td>JavaScript workflow runtime (rquickjs, <code>Workflow</code> tool).</td><td>913</td></tr>
+          <tr><td><code>kcoder_query</code></td><td>Query-layer export boundary.</td><td>10</td></tr>
+        </tbody>
+      </table>
+    </details>
+  </div>
+</section>
+
+<section class="section" id="features">
+  <div class="wrap">
+    <header class="section-head">
+      <h2>Core Features</h2>
+      <p>A refined coding-agent capability surface built on Rust reliability, explicit permissions, and auditable workflows.</p>
+    </header>
+
+    <div class="features">
+      <article class="feature">
+        <div class="feature-icon" aria-hidden="true">🛡️</div>
+        <h3>Permissions &amp; sandbox</h3>
+        <p>Five modes: <code>ask</code>, <code>auto</code>, <code>accept-edits</code>, <code>dont-ask</code>, <code>bypass</code>; per-tool TUI dialogs with persisted allow/deny lists; Landlock sandboxing on Linux, a Windows sandbox, and bash risk classification via tree-sitter decomposition.</p>
+      </article>
+
+      <article class="feature">
+        <div class="feature-icon" aria-hidden="true">🧠</div>
+        <h3>SQLite long-term memory</h3>
+        <p>Structured facts with an FTS5 retrieval layer, model and deterministic observers, a privacy policy, validation gates, and <code>/memories status</code> — injected automatically into future system prompts.</p>
+      </article>
+
+      <article class="feature">
+        <div class="feature-icon" aria-hidden="true">🎯</div>
+        <h3>Skills &amp; SkillStore</h3>
+        <p>Markdown skills with YAML frontmatter from project, user, and bundled sources; a transactional SkillStore with canonical SHA-256 revisions, CAS updates, background curation, and lifecycle governance.</p>
+      </article>
+
+      <article class="feature">
+        <div class="feature-icon" aria-hidden="true">🔁</div>
+        <h3>Spec-driven development</h3>
+        <p>Delta specs under <code>.kcoder/specs/</code> with two schemas, fingerprinted drift detection, validation gates tied to <code>cargo test</code>, parallel drafting, and archival with verification records.</p>
+      </article>
+
+      <article class="feature">
+        <div class="feature-icon" aria-hidden="true">🔌</div>
+        <h3>MCP &amp; plugins</h3>
+        <p>MCP over stdio, legacy SSE, and Streamable HTTP with full OAuth authorization (RFC 9728 resource metadata, dynamic client registration); plugins contribute hooks and MCP servers through manifest formats with a trust gate; plugin marketplaces are first-class.</p>
+      </article>
+
+      <article class="feature">
+        <div class="feature-icon" aria-hidden="true">🤖</div>
+        <h3>Sub-agents &amp; orchestration</h3>
+        <p><code>spawn_agent</code> / <code>explore_agent</code> parallel dispatch, agent fleets, targeted steering and stopping of background sub-agents, <code>/orchestrate</code> session orchestration, and MoA (mixture of agents) plan synthesis.</p>
+      </article>
+
+      <article class="feature">
+        <div class="feature-icon" aria-hidden="true">🏁</div>
+        <h3>Goal Pro</h3>
+        <p><code>/goal</code> long objectives with <code>/goal-pro</code> strict verification: verifier rounds, test scoping, escalation rungs, and durable goal state that survives restarts.</p>
+      </article>
+
+      <article class="feature">
+        <div class="feature-icon" aria-hidden="true">⏰</div>
+        <h3>Scheduled tasks &amp; workflows</h3>
+        <p>Cron-style scheduled tasks (at / interval / cron presets with UTC compilation), a tmux-backed background daemon (<code>kcoder daemon</code>), and a JavaScript workflow runtime exposed through the <code>Workflow</code> tool.</p>
+      </article>
+
+      <article class="feature">
+        <div class="feature-icon" aria-hidden="true">🖥️</div>
+        <h3>KCoder Studio</h3>
+        <p>Desktop (Electron + Tauri), Web, and mobile clients over the Gateway and JSON-RPC app-server: workbench, account isolation, SSH/remote targets, file menus, terminals, usage dashboards, and scheduled-task management.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="section alt" id="quick-start">
+  <div class="wrap">
+    <header class="section-head">
+      <h2>Quick Start</h2>
+      <p>From clone to first answer in under a minute.</p>
+    </header>
+
+    <ol class="steps">
+      <li>
+        <h3>1 · Install</h3>
+        <pre><code><span class="c"># Local release installer (builds from the checkout)</span>
+<span class="p">$</span> scripts/install/installers/cli-release.sh
+<span class="p">$</span> export PATH="$HOME/.local/bin:$PATH"
+
+<span class="c"># Or build directly</span>
+<span class="p">$</span> cargo build --release</code></pre>
+        <p class="hint">The installer runs <code>cargo build --release --locked</code> locally — no cloud CI, no <code>sudo</code>, no credential imports.</p>
+      </li>
+
+      <li>
+        <h3>2 · Configure a provider</h3>
+        <pre><code><span class="c"># Interactive credential login</span>
+<span class="p">$</span> kcoder auth login --provider kunlunmeta
+
+<span class="c"># Or export standard environment variables</span>
+<span class="p">$</span> export ANTHROPIC_API_KEY=sk-...
+<span class="p">$</span> export OPENAI_API_KEY=...</code></pre>
+      </li>
+
+      <li>
+        <h3>3 · Ask or launch the TUI</h3>
+        <pre><code><span class="c"># Headless one-shot question</span>
+<span class="p">$</span> kcoder <span class="s">"Summarize crates/kcoder_engine/src/lib.rs"</span>
+
+<span class="c"># Auto-accept file edits and run a multi-step task</span>
+<span class="p">$</span> kcoder --permission-mode accept-edits \
+    <span class="s">"Refactor error handling in kcoder_cli"</span>
+
+<span class="c"># Launch the interactive TUI</span>
+<span class="p">$</span> kcoder</code></pre>
+        <p class="hint">TUI shortcuts: <kbd>Enter</kbd> send · <kbd>Ctrl+C</kbd> / <kbd>Esc</kbd> quit · <kbd>Ctrl+R</kbd> history search · <kbd>/</kbd> slash commands.</p>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<section class="section" id="models">
+  <div class="wrap">
+    <header class="section-head">
+      <h2>Model Providers</h2>
+      <p>Every provider hides behind the same <code>Provider</code> trait. Switch via CLI flags, settings, or environment variables — no code changes.</p>
+    </header>
+
+    <div class="providers">
+      <article class="provider">
+        <h3>KunlunMeta <small>(default)</small></h3>
+        <p>The built-in default profile (Anthropic Messages protocol). Endpoint and model are user-configurable.</p>
+<pre><code>kcoder auth login --provider kunlunmeta
+kcoder --provider kunlunmeta "hi"</code></pre>
+        <p class="hint">Override with <code>KUNLUNMETA_BASE_URL</code> and <code>KUNLUNMETA_BASE_MODEL</code>.</p>
+      </article>
+
+      <article class="provider">
+        <h3>Anthropic</h3>
+        <p>An Anthropic-compatible provider using official model IDs and the Messages protocol.</p>
+<pre><code>kcoder --provider anthropic \
+       --api-key sk-... \
+       --model &lt;anthropic-model-id&gt; \
+       "hi"</code></pre>
+        <p class="hint">Point <code>--base-url</code> at a self-hosted Anthropic-compatible endpoint.</p>
+      </article>
+
+      <article class="provider">
+        <h3>OpenAI-compatible <small>(Kimi, MiniMax…)</small></h3>
+        <p>Chat Completions and Responses protocols against any compatible endpoint.</p>
+<pre><code>kcoder --provider openai \
+       --openai-base-url https://api.kimi.com/coding/v1 \
+       --openai-api-key sk-... \
+       --model kimi-for-coding/k2p6 \
+       "hi"</code></pre>
+      </article>
+
+      <article class="provider">
+        <h3>Local vLLM / SGLang</h3>
+        <p>Local providers don't require an API key — ideal for vLLM, SGLang, or any Chat Completions-compatible service.</p>
+<pre><code>kcoder --provider local \
+       --local-base-url "http://127.0.0.1:8000/v1" \
+       --model "your-model" \
+       "hi"</code></pre>
+        <p class="hint"><code>--tool-profile auto</code> uses the smaller core tool set; for pure chat testing use <code>--tool-profile none</code>.</p>
+      </article>
+
+      <article class="provider">
+        <h3>Gemini &amp; Grok</h3>
+        <p>Native clients: Gemini streams via <code>streamGenerateContent</code>; Grok uses xAI's OpenAI-compatible endpoint. Enabled with <code>KCODER_USE_GEMINI=1</code> or <code>KCODER_USE_GROK=1</code>.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="section alt" id="tools">
+  <div class="wrap">
+    <header class="section-head">
+      <h2>Built-in Tools</h2>
+      <p>Tools implement the <code>Tool</code> trait in <code>kcoder_tools</code> and register with role-scoped registries (core, orchestrator, worker). Every tool honors the active permission mode and bounded-output rules.</p>
+    </header>
+
+    <div class="tools-grid">
+      <div class="tool-cat">
+        <h3>Files &amp; Search</h3>
+        <ul>
+          <li><code>read</code> — read file contents by line range</li>
+          <li><code>write</code> — overwrite or create files</li>
+          <li><code>edit</code> — exact string replacement with a diff preview</li>
+          <li><code>glob</code> — match files with glob patterns</li>
+          <li><code>grep</code> — content search with bounded results</li>
+        </ul>
+      </div>
+
+      <div class="tool-cat">
+        <h3>Execution</h3>
+        <ul>
+          <li><code>bash</code> — shell execution with timeouts and sandboxing</li>
+          <li><code>PowerShell</code> — Windows PowerShell support</li>
+          <li><code>process</code> — background process management</li>
+          <li><code>sandbox</code> — Landlock / Windows sandbox primitives</li>
+        </ul>
+      </div>
+
+      <div class="tool-cat">
+        <h3>Memory &amp; Skills</h3>
+        <ul>
+          <li><code>remember</code> — persist facts to long-term memory</li>
+          <li><code>memory_search</code> / <code>memory_get</code> — FTS5 retrieval</li>
+          <li><code>skill</code> — activate a skill for the session</li>
+          <li><code>skill_manage</code> — transactional skill store operations</li>
+          <li><code>DiscoverSkills</code> — discover skills by description</li>
+        </ul>
+      </div>
+
+      <div class="tool-cat">
+        <h3>Web</h3>
+        <ul>
+          <li><code>WebSearch</code> — search the web</li>
+          <li><code>WebFetch</code> — fetch and extract URL content</li>
+          <li><code>WebBrowser</code> — lightweight HTTP browser</li>
+        </ul>
+      </div>
+
+      <div class="tool-cat">
+        <h3>Agents &amp; Orchestration</h3>
+        <ul>
+          <li><code>Task</code> / <code>spawn_agent</code> — dispatch sub-agents</li>
+          <li><code>wait_agent</code> / <code>close_agent</code> — poll and release</li>
+          <li><code>SendMessage</code> — steer a running sub-agent</li>
+          <li><code>TaskOutput</code> / <code>TaskStop</code> — background tasks</li>
+          <li><code>create_goal</code> / <code>update_goal</code> — persistent goals</li>
+        </ul>
+      </div>
+
+      <div class="tool-cat">
+        <h3>Workflow &amp; UI</h3>
+        <ul>
+          <li><code>TodoWrite</code> / <code>TaskCreate</code> — task-list tracking</li>
+          <li><code>EnterPlanMode</code> — plan-mode gate</li>
+          <li><code>AskUserQuestion</code> — interactive questions</li>
+          <li><code>Workflow</code> — deterministic multi-agent JS scripts</li>
+          <li><code>CronCreate</code> / <code>CronList</code> — scheduled tasks</li>
+          <li><code>Snip</code> / <code>CtxInspect</code> — context management</li>
+        </ul>
+      </div>
+
+      <div class="tool-cat">
+        <h3>Spec Workflow</h3>
+        <ul>
+          <li><code>SpecInit</code> — initialize <code>.kcoder/specs/</code></li>
+          <li><code>SpecNewChange</code> — create a change directory</li>
+          <li><code>SpecCheck(validate)</code> — validate structure, rules, drift</li>
+          <li><code>SpecSync</code> — re-sync with the authoritative spec</li>
+          <li><code>SpecArchive</code> — sync, precheck, and archive</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="commands">
+  <div class="wrap">
+    <header class="section-head">
+      <h2>Slash Commands &amp; CLI Subcommands</h2>
+      <p>Type <code>/</code> in the TUI for one of 80+ inline commands, or run <code>kcoder &lt;subcommand&gt;</code> directly.</p>
+    </header>
+
+    <div class="commands-grid">
+      <div>
+        <h3>Selected slash commands</h3>
+        <table class="cmds">
+          <tbody>
+            <tr><td><code>/new</code> · <code>/clear</code> · <code>/compact</code></td><td>Session and context management</td></tr>
+            <tr><td><code>/model</code> · <code>/models</code></td><td>Switch and inspect models</td></tr>
+            <tr><td><code>/permission</code> · <code>/allow</code> · <code>/deny</code></td><td>Permission modes and per-tool rules</td></tr>
+            <tr><td><code>/goal</code> · <code>/goal-pro</code></td><td>Long objectives and strict verification</td></tr>
+            <tr><td><code>/orchestrate</code> · <code>/moa-plan</code></td><td>Session orchestration and MoA synthesis</td></tr>
+            <tr><td><code>/subagents</code> · <code>/tasks</code> · <code>/ps</code></td><td>Sub-agent and background task control</td></tr>
+            <tr><td><code>/skills</code> · <code>/skill</code> · <code>/skills-hub</code></td><td>Skill activation, listing, and hub</td></tr>
+            <tr><td><code>/mcp</code> · <code>/plugins</code> · <code>/hooks</code></td><td>MCP servers, plugins, and hooks</td></tr>
+            <tr><td><code>/spec</code> · <code>/workflow</code> · <code>/usage</code></td><td>Spec workflow, JS workflows, usage</td></tr>
+            <tr><td><code>/memories</code> · <code>/remember</code></td><td>Long-term memory</td></tr>
+            <tr><td><code>/resume</code> · <code>/sessions</code> · <code>/rewind</code></td><td>Session history and checkpoints</td></tr>
+            <tr><td><code>/quit</code> · <code>/help</code></td><td>Exit and help</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div>
+        <h3>CLI subcommands</h3>
+        <table class="cmds">
+          <tbody>
+            <tr><td><code>kcoder doctor</code></td><td>Run environment diagnostics (no API key needed)</td></tr>
+            <tr><td><code>kcoder auth</code></td><td>Manage provider credentials</td></tr>
+            <tr><td><code>kcoder config</code></td><td>Inspect and update layered settings</td></tr>
+            <tr><td><code>kcoder trust</code></td><td>Inspect or modify trust for a project root</td></tr>
+            <tr><td><code>kcoder plugin</code></td><td>Manage local plugins</td></tr>
+            <tr><td><code>kcoder marketplace</code></td><td>Manage plugin marketplaces</td></tr>
+            <tr><td><code>kcoder mcp</code></td><td>MCP server management</td></tr>
+            <tr><td><code>kcoder daemon</code></td><td>tmux-backed background sessions (bg/ps/attach/kill/logs)</td></tr>
+            <tr><td><code>kcoder app-server</code></td><td>JSON-RPC app server for desktop and SSH clients</td></tr>
+            <tr><td><code>kcoder moa-plan</code></td><td>Multi-model plan synthesis</td></tr>
+            <tr><td><code>kcoder &lt;prompt&gt;</code></td><td>Headless one-shot question</td></tr>
+            <tr><td><code>kcoder</code></td><td>Launch the interactive TUI</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section alt" id="roadmap">
+  <div class="wrap">
+    <header class="section-head">
+      <h2>Project Status</h2>
+      <p>What has shipped, what's in progress, and the known boundaries.</p>
+    </header>
+
+    <div class="roadmap">
+      <div class="rm-col">
+        <h3>✅ Shipped</h3>
+        <ul class="rm-list shipped">
+          <li>Six provider families behind one <code>Provider</code> trait with typed transport-failure recovery</li>
+          <li>Streaming responses, token-level TUI rendering, layered context compaction</li>
+          <li>40+ built-in tools across role-scoped registries with bounded outputs</li>
+          <li>Five permission modes, Landlock + Windows sandboxing, audit logging</li>
+          <li>SQLite + FTS5 structured memory with observers and privacy policy</li>
+          <li>Transactional SkillStore with curation and lifecycle governance</li>
+          <li>Spec-driven workflow with two schemas and drift detection</li>
+          <li>Plugins, marketplaces, lifecycle hooks with trust gates</li>
+          <li>MCP over stdio / SSE / Streamable HTTP with OAuth authorization</li>
+          <li>Sub-agents, agent fleets, orchestration, MoA, Goal Pro</li>
+          <li>Scheduled tasks, tmux daemon, JS workflow runtime, LSP (pyright)</li>
+          <li>KCoder Studio: desktop, Web, and mobile clients with account isolation</li>
+        </ul>
+      </div>
+
+      <div class="rm-col">
+        <h3>🚧 Known boundaries</h3>
+        <ul class="rm-list wip">
+          <li>LSP integration currently covers Python (pyright); more languages planned</li>
+          <li>Vector retrieval for memory is on hold; SQLite + FTS5 is the retrieval layer</li>
+          <li><code>apply_patch</code> is not built in; <code>write</code> / <code>edit</code> cover file modification</li>
+          <li>Web tools depend on real network reachability and proxy policy</li>
+          <li>Windows is covered by conditional compilation and CI contracts; deepest test coverage is Linux/macOS</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="faq">
+  <div class="wrap">
+    <header class="section-head">
+      <h2>FAQ</h2>
+    </header>
+
+    <details class="faq">
+      <summary>Where are configuration files stored?</summary>
+      <p>Settings: <code>~/.config/kcoder/settings.json</code>; memory: the config sub-directory (SQLite + FTS5); user-level skills: <code>~/.config/kcoder/skills/</code>; project-level skills: <code>.kcoder/skills/</code>; project instructions: <code>KCODER.md</code> or <code>AGENTS.md</code> (discovered upward from <code>cwd</code>).</p>
+    </details>
+
+    <details class="faq">
+      <summary>How do I avoid permission dialogs in unattended scripts?</summary>
+      <p>Use <code>--permission-mode bypass</code> — it allows every tool without prompting. Combined with headless mode it works directly in CI.</p>
+    </details>
+
+    <details class="faq">
+      <summary>Does <code>/model</code> switch providers?</summary>
+      <p>No — <code>/model</code> only switches the model identifier. To switch providers, use the <code>--provider</code> CLI flag, layered settings, or environment variables such as <code>KCODER_USE_OPENAI=1</code>.</p>
+    </details>
+
+    <details class="faq">
+      <summary>Can I use KCoder from other applications?</summary>
+      <p>Yes — <code>kcoder app-server</code> exposes a JSON-RPC interface over stdio used by KCoder Studio's desktop, Web, and mobile clients; headless mode emits JSON events for scripting.</p>
+    </details>
+
+    <details class="faq">
+      <summary>What are the key dependencies?</summary>
+      <p>Core dependencies include <code>tokio</code> (async runtime), <code>reqwest</code> + <code>reqwest-eventsource</code> (HTTP/SSE), <code>ratatui</code> + <code>crossterm</code> (TUI), <code>rusqlite</code> (SQLite memory), <code>tree-sitter</code> (bash risk classification), <code>rquickjs</code> (workflow runtime), <code>serde</code> / <code>serde_json</code> (serialization), <code>syntect</code> + <code>pulldown-cmark</code> (rendering), <code>tracing</code> (logging), plus <code>anyhow</code> / <code>thiserror</code>. Edition 2024, minimum Rust 1.95.</p>
+    </details>
+
+    <details class="faq">
+      <summary>How is the project tested?</summary>
+      <p>A workspace-wide Rust test suite, renderer/Node suites for Studio, a project-level test matrix (<code>tests/matrix.toml</code>) spanning TUI, harness, e2e, and real-model tiers, plus contract tests that guard packaging, secrets, and documentation. CI runs the PR tier on every push.</p>
+    </details>
+  </div>
+</section>
+
+<footer class="site-footer">
+  <div class="wrap footer-grid">
+    <div>
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">K</span>
+        <span class="brand-name">KCoder <em>Code</em></span>
+      </div>
+      <p class="footer-tag">Open-source AI coding platform · MIT license · Rust edition 2024</p>
+      <p class="footer-tag">v0.1.0 · 19 crates · 385k+ lines of Rust</p>
+    </div>
+    <div>
+      <h4>Project</h4>
+      <ul>
+        <li><a href="#overview">Overview</a></li>
+        <li><a href="#architecture">Architecture</a></li>
+        <li><a href="#features">Features</a></li>
+        <li><a href="#roadmap">Status</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4>Usage</h4>
+      <ul>
+        <li><a href="#quick-start">Quick start</a></li>
+        <li><a href="#models">Providers</a></li>
+        <li><a href="#tools">Tools</a></li>
+        <li><a href="#commands">Commands</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4>Resources</h4>
+      <ul>
+        <li><a href="#faq">FAQ</a></li>
+        <li><a href="https://github.com/KunlunMeta-dev/Kcoder">Repository</a></li>
+        <li><a href="repository.html">Repository map (crawler-friendly)</a></li>
+        <li><a href="https://github.com/KunlunMeta-dev/Kcoder/blob/main/README.md">Full README</a></li>
+        <li><a href="https://github.com/KunlunMeta-dev/Kcoder/releases">AGENTS.md</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="wrap footer-bottom">
+    <p>© KCoder contributors · Built with the same Rust discipline it delivers.</p>
+  </div>
+</footer>
+<script src="assets/main.js" defer></script>
+</body>
+</html>

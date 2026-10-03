@@ -1,0 +1,4 @@
+sample workspace file
+
+This file exists so TUI automation has something stable in the isolated
+workspace. Each run receives its own copy under target/tui-lab.
