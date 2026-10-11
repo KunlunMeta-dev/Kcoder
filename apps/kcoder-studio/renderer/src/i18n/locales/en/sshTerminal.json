@@ -1,0 +1,20 @@
+{
+  "menu": "SSH · {{label}}",
+  "manage": "Configure SSH connections…",
+  "loadFailed": "Unable to load SSH connections. Open settings to retry.",
+  "connect": "Connect",
+  "reconnect": "Reconnect",
+  "disconnect": "Disconnect",
+  "cancel": "Cancel",
+  "connecting": "Connecting…",
+  "connected": "Connected",
+  "disconnected": "Disconnected",
+  "password": "SSH password",
+  "passphrase": "Key passphrase (optional)",
+  "failed": "SSH connection failed",
+  "gatewayNote": "SSH runs on the Gateway. Leave the password blank to use the one saved in settings; an entered password overrides it for this connection only. Terminal output is not sent to the Agent.",
+  "savedPassword": "Use saved password",
+  "hostKeyPrompt": "Confirm the host key for {{host}}:{{port}}",
+  "hostKeyHelp": "Verify this fingerprint with the server administrator before accepting. Changed keys are rejected.",
+  "trustConnect": "Trust this host and connect"
+}

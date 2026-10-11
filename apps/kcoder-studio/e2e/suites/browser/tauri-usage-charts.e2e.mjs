@@ -1,0 +1,40 @@
+import assert from 'node:assert/strict';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
+import { startOwnedAiVerify } from '../../harness/ai-verify-client.mjs';
+import { usageChartFixture } from '../../harness/usage-chart-fixture.mjs';
+import { assertRendererBuildFresh } from '../../harness/renderer-build.mjs';
+import { appRoot, repoRoot, runE2E, waitFor } from '../../harness/run-context.mjs';
+await assertRendererBuildFresh();
+if(!process.env.KCODER_E2E_TAURI_BIN)throw new Error('Explicit Tauri binary required');
+await runE2E(import.meta.url,{testId:'tauri-usage-calendar-keyboard-and-read-failure',tier:'manual-live',modelPolicy:'model-independent actual native UI and owned durable usage counters; no model calls'},async context=>{
+  const fixture=usageChartFixture();
+  const client=await startOwnedAiVerify(context,{tauriBin:process.env.KCODER_E2E_TAURI_BIN,kcoderBin:process.env.KCODER_E2E_KCODER_BIN||resolve(repoRoot,'target/debug/kcoder'),rendererRoot:resolve(appRoot,'renderer/dist')});
+  const cmd=(action,id,args={})=>client.command(action,{selector:`[data-testid="${id}"]`,...args});
+  try{
+    const directory=resolve(dirname(client.settingsPath),'usage');await mkdir(directory,{recursive:true,mode:0o700});
+    const ledger=resolve(directory,'usage.json');await writeFile(ledger,JSON.stringify(fixture.history),{mode:0o600});
+    await client.command('navigate',{value:'/settings/usage'});
+    await cmd('waitFor','usage-totalTokens',{text:'150',timeoutMs:30000});
+    const cell=date=>`[data-testid="usage-heatmap"] [data-date="${date}"]`;
+    await client.command('click',{selector:cell(fixture.missing)});
+    assert.match(await cmd('getText','usage-day-detail'),/不代表没有消耗/);
+    await client.command('click',{selector:cell(fixture.zero)});
+    assert.match(await cmd('getText','usage-day-detail'),/没有已记录的请求/);
+    await client.command('press',{selector:cell(fixture.zero),key:'End'});
+    assert.equal(Number(await client.command('getElementCount',{selector:cell(fixture.today)+':focus'})),1);
+    await client.command('hover',{selector:'[data-testid="usage-range-30"]'});
+    assert.ok((await cmd('getText','usage-day-detail')).includes(fixture.today));
+    await client.command('press',{selector:cell(fixture.today),key:'Escape'});
+    assert.match(await cmd('getText','usage-day-detail'),/每日详情/);
+    await cmd('click','usage-range-7');
+    assert.equal(Number(await client.command('getElementCount',{selector:'[data-testid="usage-trend"] button[data-date]'})),7);
+    await client.capture('native-usage-seven-days.png');
+    await writeFile(ledger,'{invalid');await cmd('click','usage-refresh');
+    await waitFor(async()=>Number(await client.command('getElementCount',{selector:'[role="alert"]'}))===1,15000,'native usage error');
+    assert.match(await client.command('getText',{selector:'[role="alert"]'}),/无法读取用量/);
+    assert.equal(Number(await cmd('getElementCount','usage-charts')),0);
+    await client.capture('native-usage-read-error.png');
+    await writeFile(ledger,JSON.stringify(fixture.history));await cmd('click','usage-refresh');await cmd('waitFor','usage-totalTokens',{text:'150',timeoutMs:15000});
+  }catch(error){client.markFailed();await client.capture('failure.png').catch(()=>{});throw error;}
+});

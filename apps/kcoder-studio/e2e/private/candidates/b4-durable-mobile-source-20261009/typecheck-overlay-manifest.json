@@ -1,0 +1,139 @@
+{
+  "status": "PRIVATE_TYPECHECK_OVERLAY_CORRECTION_02_WAITING_ROOT_REVIEW",
+  "candidateManifestSha256": "d33d56bf0bbecac72f66e4551054c80ef5c41d018fc00d03f6ef92f92ab6213d",
+  "candidateSourceDigest": "9780dd897ff6c3f5028bcbe058ee9d4c376b8408761b2829999ce005ee649a91",
+  "existingTestInputPinsSha256": "64bc81e5bc64886e04fca5894beb040f12d28f1e5d82c89d65f9fcbb591d39f4",
+  "configPath": "apps/kcoder-studio/e2e/private/candidates/b4-durable-mobile-source-20261009/tsconfig.private.overlay.json",
+  "configSha256": "3105cd53606bcacb8b5527a77a3b1f17272c2b0e23115f4c6d947426c777c916",
+  "overlayFileCount": 18,
+  "overlayFiles": [
+    {
+      "source": "target/private-phone-ux-implementation/b4-durable-mobile-source-20261009/candidate-static02/source/apps/kcoder-studio/mobile/src/gateway/rpc.ts",
+      "destination": "typecheck-overlay/source/apps/kcoder-studio/mobile/src/gateway/rpc.ts",
+      "sourceSha256": "f86ef19018dbde0fe092b603c2898e4442fbb3af1523b782c0bce2faa2f7fbc7",
+      "overlaySha256": "f86ef19018dbde0fe092b603c2898e4442fbb3af1523b782c0bce2faa2f7fbc7",
+      "matches": true
+    },
+    {
+      "source": "target/private-phone-ux-implementation/b4-durable-mobile-source-20261009/candidate-static02/source/apps/kcoder-studio/mobile/src/components/attachment-upload.ts",
+      "destination": "typecheck-overlay/source/apps/kcoder-studio/mobile/src/components/attachment-upload.ts",
+      "sourceSha256": "c35f62aaaff4ad90f58936c53481fc143f8752de91c72a0bc017f3b8cfe3d6c5",
+      "overlaySha256": "c35f62aaaff4ad90f58936c53481fc143f8752de91c72a0bc017f3b8cfe3d6c5",
+      "matches": true
+    },
+    {
+      "source": "target/private-phone-ux-implementation/b4-durable-mobile-source-20261009/candidate-static02/source/apps/kcoder-studio/mobile/src/protocol/attachment-retention.ts",
+      "destination": "typecheck-overlay/source/apps/kcoder-studio/mobile/src/protocol/attachment-retention.ts",
+      "sourceSha256": "5559ea1445019f72072f00e167d5a2cef3937b19ec7491760e53666cbf2d6fa5",
+      "overlaySha256": "5559ea1445019f72072f00e167d5a2cef3937b19ec7491760e53666cbf2d6fa5",
+      "matches": true
+    },
+    {
+      "source": "target/private-phone-ux-implementation/b4-durable-mobile-source-20261009/candidate-static02/source/apps/kcoder-studio/mobile/src/protocol/sha256-stream.ts",
+      "destination": "typecheck-overlay/source/apps/kcoder-studio/mobile/src/protocol/sha256-stream.ts",
+      "sourceSha256": "d234eed049099d91f3fc7a3e7c66a5eacad833dc11b0ed8ee1113a59f50a2453",
+      "overlaySha256": "d234eed049099d91f3fc7a3e7c66a5eacad833dc11b0ed8ee1113a59f50a2453",
+      "matches": true
+    },
+    {
+      "source": "target/private-phone-ux-implementation/b4-durable-mobile-source-20261009/candidate-static02/source/apps/kcoder-studio/mobile/src/storage/staged-attachment-store.ts",
+      "destination": "typecheck-overlay/source/apps/kcoder-studio/mobile/src/storage/staged-attachment-store.ts",
+      "sourceSha256": "ba529b6428d32ae221d06ce7871d359992dfb1e734c3b499ce6f4390d6ed7112",
+      "overlaySha256": "ba529b6428d32ae221d06ce7871d359992dfb1e734c3b499ce6f4390d6ed7112",
+      "matches": true
+    },
+    {
+      "source": "target/private-phone-ux-implementation/b4-durable-mobile-source-20261009/candidate-static02/source/apps/kcoder-studio/mobile/src/storage/staged-attachment-bytes.ts",
+      "destination": "typecheck-overlay/source/apps/kcoder-studio/mobile/src/storage/staged-attachment-bytes.ts",
+      "sourceSha256": "5e691b30ec3533f64279ed20558c5febd47b7d1ad0f42db94bdc8ea312922942",
+      "overlaySha256": "5e691b30ec3533f64279ed20558c5febd47b7d1ad0f42db94bdc8ea312922942",
+      "matches": true
+    },
+    {
+      "source": "target/private-phone-ux-implementation/b4-durable-mobile-source-20261009/candidate-static02/source/apps/kcoder-studio/mobile/src/storage/staged-attachment-bytes.web.ts",
+      "destination": "typecheck-overlay/source/apps/kcoder-studio/mobile/src/storage/staged-attachment-bytes.web.ts",
+      "sourceSha256": "de6d5bf708adfe61916813394d750436ee7d8cf2659dfc1abb84808ddec1d08f",
+      "overlaySha256": "de6d5bf708adfe61916813394d750436ee7d8cf2659dfc1abb84808ddec1d08f",
+      "matches": true
+    },
+    {
+      "source": "target/private-phone-ux-implementation/b4-durable-mobile-source-20261009/candidate-static02/source/apps/kcoder-studio/mobile/src/storage/staged-attachment-bytes.native.ts",
+      "destination": "typecheck-overlay/source/apps/kcoder-studio/mobile/src/storage/staged-attachment-bytes.native.ts",
+      "sourceSha256": "6bd1233fa44b641acbbba1ed2f39f5f3fcc1188ae2956688eb04d75e205ca1b6",
+      "overlaySha256": "6bd1233fa44b641acbbba1ed2f39f5f3fcc1188ae2956688eb04d75e205ca1b6",
+      "matches": true
+    },
+    {
+      "source": "target/private-phone-ux-implementation/b4-durable-mobile-source-20261009/candidate-static02/source/apps/kcoder-studio/mobile/src/storage/retained-attachment-upload.ts",
+      "destination": "typecheck-overlay/source/apps/kcoder-studio/mobile/src/storage/retained-attachment-upload.ts",
+      "sourceSha256": "bb9a969d586b4ff19f09ddaa1af9f4c5e3abd2327b2640fb323b0bb23ab7390c",
+      "overlaySha256": "bb9a969d586b4ff19f09ddaa1af9f4c5e3abd2327b2640fb323b0bb23ab7390c",
+      "matches": true
+    },
+    {
+      "source": "apps/kcoder-studio/shared/gatewayConnectionBudget.ts",
+      "destination": "typecheck-overlay/source/apps/kcoder-studio/shared/gatewayConnectionBudget.ts",
+      "sourceSha256": "00384ebd57aa88952ae877a50850225d112d19a8167171b2a64a47b31e080bf2",
+      "overlaySha256": "00384ebd57aa88952ae877a50850225d112d19a8167171b2a64a47b31e080bf2",
+      "matches": true
+    },
+    {
+      "source": "apps/kcoder-studio/shared/gatewayRequestDeadline.js",
+      "destination": "typecheck-overlay/source/apps/kcoder-studio/shared/gatewayRequestDeadline.js",
+      "sourceSha256": "04bf06e144fb2f430d5b7ace78d8e7157b7a8f3308a6dfc77d859c007c6d95b2",
+      "overlaySha256": "04bf06e144fb2f430d5b7ace78d8e7157b7a8f3308a6dfc77d859c007c6d95b2",
+      "matches": true
+    },
+    {
+      "source": "apps/kcoder-studio/shared/providerFailure.ts",
+      "destination": "typecheck-overlay/source/apps/kcoder-studio/shared/providerFailure.ts",
+      "sourceSha256": "4c109bc7fcab554a677136d055bcb1637d91a85d46065c903153f3c08e1b37ff",
+      "overlaySha256": "4c109bc7fcab554a677136d055bcb1637d91a85d46065c903153f3c08e1b37ff",
+      "matches": true
+    },
+    {
+      "source": "apps/kcoder-studio/shared/threadRunSummary.ts",
+      "destination": "typecheck-overlay/source/apps/kcoder-studio/shared/threadRunSummary.ts",
+      "sourceSha256": "e7a7b0854d1e256750544afcbc2d710014e26026b43d8dd95b64f6c6556be5bc",
+      "overlaySha256": "e7a7b0854d1e256750544afcbc2d710014e26026b43d8dd95b64f6c6556be5bc",
+      "matches": true
+    },
+    {
+      "source": "apps/kcoder-studio/shared/generated/contracts.ts",
+      "destination": "typecheck-overlay/source/apps/kcoder-studio/shared/generated/contracts.ts",
+      "sourceSha256": "406728bde4f9636b266ebaf1391e7ca72883a80da95e65348836be1c1cd09678",
+      "overlaySha256": "406728bde4f9636b266ebaf1391e7ca72883a80da95e65348836be1c1cd09678",
+      "matches": true
+    },
+    {
+      "source": "apps/kcoder-studio/shared/generated/validator.mjs",
+      "destination": "typecheck-overlay/source/apps/kcoder-studio/shared/generated/validator.mjs",
+      "sourceSha256": "52ed715826cd2552bf405dcae0dbe44287ce8c9b1c75c7fce7b7461f94e04be3",
+      "overlaySha256": "52ed715826cd2552bf405dcae0dbe44287ce8c9b1c75c7fce7b7461f94e04be3",
+      "matches": true
+    },
+    {
+      "source": "apps/kcoder-studio/mobile/src/gateway/types.ts",
+      "destination": "typecheck-overlay/source/apps/kcoder-studio/mobile/src/gateway/types.ts",
+      "sourceSha256": "eb2caf2ca041feaddf9c4eb6c297040c89e24d60dba203b0308819d85a2b5310",
+      "overlaySha256": "eb2caf2ca041feaddf9c4eb6c297040c89e24d60dba203b0308819d85a2b5310",
+      "matches": true
+    },
+    {
+      "source": "apps/kcoder-studio/e2e/private/candidates/b4-durable-mobile-source-20261009/support/gateway-http.ts",
+      "destination": "typecheck-overlay/source/apps/kcoder-studio/mobile/src/gateway/http.ts",
+      "sourceSha256": "b37999ec29dfe1a20ff6c64ab947bb29a3ad374789a5a1261a6e4dcc666fa43c",
+      "overlaySha256": "b37999ec29dfe1a20ff6c64ab947bb29a3ad374789a5a1261a6e4dcc666fa43c",
+      "matches": true
+    },
+    {
+      "source": "apps/kcoder-studio/e2e/private/candidates/b4-durable-mobile-source-20261009/support/profile-fence.ts",
+      "destination": "typecheck-overlay/source/apps/kcoder-studio/mobile/src/storage/workspace-profile-fence.ts",
+      "sourceSha256": "d342a589004515ddff828d6f536b5599a441bf797d63bdb7583e8e93cb1fc347",
+      "overlaySha256": "d342a589004515ddff828d6f536b5599a441bf797d63bdb7583e8e93cb1fc347",
+      "matches": true
+    }
+  ],
+  "aliases": "Candidate @ source takes precedence; unchanged mobile source is fallback. Relative rpc ./http and store ./workspace-profile-fence are replaced only in this typecheck overlay with the exact private Vitest support modules. RN, Vitest, Expo FS, and AsyncStorage type resolution uses pinned installed Mobile dependencies.",
+  "scope": "Two private Vitest tests, their support, all nine candidate TypeScript files, and exact current gateway types/shared source inputs. No product files edited; no emit."
+}

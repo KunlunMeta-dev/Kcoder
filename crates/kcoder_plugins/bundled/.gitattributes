@@ -1,0 +1,5 @@
+# These embedded bytes have a pinned digest; preserve LF on every checkout.
+kcoder-workflow-basics/.codex-plugin/plugin.json text eol=lf
+kcoder-workflow-basics/bundle.json text eol=lf
+kcoder-workflow-basics/LICENSE text eol=lf
+kcoder-workflow-basics/skills/workflow-basics/SKILL.md text eol=lf

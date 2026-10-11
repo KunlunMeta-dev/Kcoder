@@ -1,0 +1,12 @@
+{
+  "apps": "./apps.json",
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "Agent Demo",
+    "shortDescription": "Agent fixture overlay",
+    "developerName": "KCoder tests",
+    "category": "Testing",
+    "brandColor": "#336699",
+    "logo": "./assets/logo.svg"
+  }
+}

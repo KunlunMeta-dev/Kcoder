@@ -1,0 +1,30 @@
+[package]
+name = "kcoder_test_harness"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+kcoder_process_supervisor = { path = "../../crates/kcoder_process_supervisor" }
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_Storage_FileSystem",
+  "Win32_System_JobObjects",
+  "Win32_System_Threading",
+] }
+
+[dev-dependencies]
+tempfile.workspace = true

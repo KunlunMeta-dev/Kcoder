@@ -1,0 +1,174 @@
+{
+  "schemaVersion": 1,
+  "status": "PREPARED_AWAITING_ROOT_REVIEW",
+  "preparedAtUtc": "2026-10-09T10:22:44.000Z",
+  "purpose": "One after/500/two-panel DIAGNOSTIC_ONLY full-CDP-profile capture around the existing actual core active-Markdown burst; not a formal latency sample.",
+  "cwd": "/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/phone-ux-upstream-integration-20261008",
+  "environment": {
+    "mode": "env -i",
+    "values": {
+      "PATH": "/usr/bin:/bin",
+      "KCODER_E2E_CHROMIUM_NO_SANDBOX": "1"
+    },
+    "inheritedCredentialsOrDisplay": false
+  },
+  "executable": {
+    "path": "/home/hyf/.local/opt/node-v22.17.0-linux-x64/bin/node",
+    "version": "v22.17.0",
+    "sha256": "8071ae0fca095a272ad698a90c7061801a86fb6392ddb81e922b68a91a4374b9"
+  },
+  "chromium": {
+    "requestedPath": "/usr/bin/chromium",
+    "canonicalPath": "/opt/cft/chrome-linux64/chrome",
+    "canonicalSha256": "0b20b130e7edd9dd51873be867761295fe0cfad490c2b9a64f95bd3cfc08fa71",
+    "source": "Previously verified launch pin; not rehashed in this preparation",
+    "headless": true
+  },
+  "candidate": {
+    "suitePath": "apps/kcoder-studio/e2e/private/candidates/render-profile-full-v8-capture-20261009/mobile-render-profile.full-capture.candidate.mjs",
+    "suiteSha256": "da6480efec7c636cf2ddb5427ab7d9f9de2dc6b1377a5554f5c48f82d1852915",
+    "baselineSuitePath": "apps/kcoder-studio/e2e/suites/mobile/mobile-render-profile.e2e.mjs",
+    "baselineSuiteSha256": "d560f82960f02a00365518f382e75f542e4ae90dae632fa4189810837496163d",
+    "contractHelperPath": "apps/kcoder-studio/e2e/private/candidates/render-profile-full-v8-capture-20261009/profile-capture-contract.mjs",
+    "contractHelperSha256": "935293efbbceb230529b73f276f1891ce11d144813c310b2b26417b0ac4bcf28",
+    "contractTestPath": "apps/kcoder-studio/e2e/private/candidates/render-profile-full-v8-capture-20261009/profile-capture-contract.test.mjs",
+    "contractTestSha256": "817562f02b209abfca383cb78cc1823ee046eef6f30d93fe6e47c61ad6f8a5b1",
+    "candidateDiffSha256": "393d3a7ff9f66f3018b7b28b959bd849bde5fa057b3f9e2f0569e75fead6809c",
+    "candidateEvidenceSha256": "57d88aec36e9ea80d1364aa39bfe78e7d61a874ee6a364da8d478989cf2d80e6",
+    "status": "PRIVATE_CANDIDATE_NOT_APPLIED_TO_LIVE_SUITE"
+  },
+  "harnessPins": {
+    "apps/kcoder-studio/e2e/harness/chromium.mjs": "6da43f71496317e00098780ab7e8c3bf0874e4b925c6add4e4c0e87bdf7b504c",
+    "apps/kcoder-studio/e2e/harness/mobile-web-export-input.mjs": "6f0c3e9216415b22d2ea83c02caa586d98c75d60648f53f4e7bc6cfdefb7e99e",
+    "apps/kcoder-studio/e2e/harness/render-profile-attribution-contract.mjs": "c77d7d524c1e80b78264369ca859a69e6991ee461183961db015d98e656fff35",
+    "apps/kcoder-studio/e2e/harness/run-context.mjs": "94f0c27306f8944cbd10f1835227a408c51a0b558981d846832bb297c5e5cf11",
+    "apps/kcoder-studio/e2e/harness/transcript-logical-distance.mjs": "d01272c4b70757eb3800f3837597e290bc9dc6869204f0223c168e0b596134b2",
+    "apps/kcoder-studio/e2e/harness/retention.mjs": "9df5193dc1f4bd5565731cf92d0154bb8f3993e8d3c7c3d98f530c8738716532",
+    "apps/kcoder-studio/e2e/harness/owned-process.mjs": "40a230721ead1ff78877c1b2815aafd220279bccd43d15d78303f30a59cb78af"
+  },
+  "webInput": {
+    "sourceFreeze": {
+      "path": "target/private-phone-latency-implementation/current-mobile-sessions-default-lease-20261009-062104/source-manifest.json",
+      "sha256": "604d8915c48d56ac58404990183072b73db0c63abd68821a974b311b2f4924a5",
+      "sourceTreeSha256": "effa93130e74c958a4fd6639e79efab1d1a8bc78bcd18648aa9f70fe26f2b233",
+      "entries": 336,
+      "sharedInputSha256": "5443f5e695e75b82a1365baf90a3c280239bead8855647becfa2c9d67e91fe88",
+      "dependencySourceTreeSha256": "d91f89f1237d2139ef31ee75565230105014536dc5c9a8c34bf436d0bcc7340c",
+      "credentialStateCopied": false
+    },
+    "bundleRoot": "target/private-phone-ux-implementation/mobile-web-export-current336-source-maps-20261009/bundle",
+    "exportManifest": {
+      "path": "target/private-phone-ux-implementation/mobile-web-export-current336-source-maps-20261009/export-manifest.json",
+      "sha256": "7641ceac87eb5a611388d0366a2331f2b1a54a06e4674be69f1247329aa6e03f",
+      "bundleSha256": "f33e10d2b686af7fb03228208ce06e177b54da4eecc700639d6abb18fe248458",
+      "fileCount": 38,
+      "standardBundleFileCount": 37,
+      "sourceMapFileCount": 1
+    },
+    "provenance": {
+      "path": "target/private-phone-ux-implementation/mobile-web-export-current336-source-maps-20261009/provenance.json",
+      "sha256": "d6b392e700026596e2dbdb4273b3c5c7851b90b466b21172b2db1667fe7f24a5",
+      "sourceTreeSha256": "effa93130e74c958a4fd6639e79efab1d1a8bc78bcd18648aa9f70fe26f2b233",
+      "sourceUnchanged": true,
+      "snapshotCopyMatchesSource": true,
+      "snapshotUnchangedDuringExport": true,
+      "credentialStateCopied": false
+    },
+    "sourceMap": {
+      "path": "_expo/static/js/web/entry-67946c84e825296e54a3738bb98ead33.js.map",
+      "sha256": "14f15165311df4112d561775b937f165b8bea8c8a52aa7833f0e99fc1ccd8a01",
+      "servedScriptPath": "/_expo/static/js/web/entry-67946c84e825296e54a3738bb98ead33.js",
+      "binding": "exact page-origin + normalized pathname equals map path minus .map; unmatched URLs remain unresolved"
+    },
+    "mapperDependency": {
+      "package": "@jridgewell/trace-mapping",
+      "version": "0.3.31",
+      "packageJsonSha256": "7f5eacc669d36013f9b792ab15721a97d48b26b093100122aa6c8691ebe656be",
+      "entrySha256": "5ad4ec0709f78aa806c70965d4c162270e1df605f5572aa3a1ced31fe73dd07a",
+      "bytesMatchPinnedDependencySnapshot": true
+    }
+  },
+  "gatewayInput": {
+    "runtimeRoot": "target/private-phone-ux-implementation/render-profile-gateway-runtime-c22-20261009",
+    "manifestPath": "target/private-phone-ux-implementation/render-profile-gateway-runtime-c22-20261009/gateway-runtime-freeze.json",
+    "manifestSha256": "474ea99288424030dddcba6a63f47689e8dd7f24c18ca5a9e21bb78c6262c39b",
+    "sourceTreeSha256": "02f803a6da08b5e6ee0915ed35da295b2cfd84548ff8c09d3ba67016233f0e24",
+    "sourceFileCount": 67,
+    "dependencyTreeSha256": "e4c3f6c05ae21d89fe452794dd4c507c72b4fdac6646aa8eab19874275336954",
+    "dependencyFileCount": 1034,
+    "dependencyReuseProofSha256": "e8954a38a1e0daf7a8f30e41a4319cc5a3ace33ca893baf48447aab8100a2ab0",
+    "binaryPath": "target/private-phone-ux-validation/b2-static03-build-20261008/frozen-candidate/kcoder",
+    "binarySha256": "289618f7e0670be9840b48adcd93d73261ea1c20034596ae6a95d5ed41f3b67d",
+    "evidenceBoundary": "C22 Node Mock Gateway with KCODER_STUDIO_MOCK=1; pinned binary is configuration evidence only, not a Rust/model turn"
+  },
+  "scope": {
+    "source": "after",
+    "requestedMessages": 500,
+    "samples": 1,
+    "panelStates": ["unmounted", "mounted-hidden"],
+    "captureStackDiagnostic": false,
+    "captureSeedUiDomTrace": false,
+    "runtimeConsumerDiagnostic": false,
+    "followGestureRegression": false,
+    "tailWindowProductRegression": false,
+    "tailWindowPaginationRegression": false,
+    "coreAttributionOnly": true,
+    "captureFullCpuProfile": true,
+    "classification": "DIAGNOSTIC_ONLY",
+    "performanceSample": false,
+    "performanceDistributionEligible": false,
+    "modelOrProvider": false,
+    "rustRealTurn": false,
+    "native": "NOT_RUN"
+  },
+  "command": [
+    "/home/hyf/.local/opt/node-v22.17.0-linux-x64/bin/node",
+    "apps/kcoder-studio/e2e/private/candidates/render-profile-full-v8-capture-20261009/mobile-render-profile.full-capture.candidate.mjs",
+    "--sources=after",
+    "--messages=500",
+    "--samples=1",
+    "--capture-stack-diagnostic=false",
+    "--capture-seed-ui-dom-trace=false",
+    "--runtime-consumer-diagnostic=false",
+    "--follow-gesture-regression=false",
+    "--tail-window-product-regression=false",
+    "--tail-window-product-stage=combined",
+    "--tail-window-pagination-regression=false",
+    "--core-attribution-only=true",
+    "--capture-full-cpu-profile=true",
+    "--after-manifest=/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/phone-ux-upstream-integration-20261008/target/private-phone-ux-implementation/mobile-web-export-current336-source-maps-20261009/export-manifest.json",
+    "--after-source-provenance=/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/phone-ux-upstream-integration-20261008/target/private-phone-ux-implementation/mobile-web-export-current336-source-maps-20261009/provenance.json",
+    "--after-bundle-root=/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/phone-ux-upstream-integration-20261008/target/private-phone-ux-implementation/mobile-web-export-current336-source-maps-20261009/bundle",
+    "--after-export-manifest-sha256=7641ceac87eb5a611388d0366a2331f2b1a54a06e4674be69f1247329aa6e03f",
+    "--after-source-provenance-sha256=d6b392e700026596e2dbdb4273b3c5c7851b90b466b21172b2db1667fe7f24a5",
+    "--after-source-tree-sha256=effa93130e74c958a4fd6639e79efab1d1a8bc78bcd18648aa9f70fe26f2b233",
+    "--after-shared-input-sha256=5443f5e695e75b82a1365baf90a3c280239bead8855647becfa2c9d67e91fe88",
+    "--after-source-freeze-digest=604d8915c48d56ac58404990183072b73db0c63abd68821a974b311b2f4924a5",
+    "--after-dependency-source-tree-sha256=d91f89f1237d2139ef31ee75565230105014536dc5c9a8c34bf436d0bcc7340c",
+    "--gateway-runtime-root=/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/phone-ux-upstream-integration-20261008/target/private-phone-ux-implementation/render-profile-gateway-runtime-c22-20261009",
+    "--gateway-binary=/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/phone-ux-upstream-integration-20261008/target/private-phone-ux-validation/b2-static03-build-20261008/frozen-candidate/kcoder",
+    "--gateway-binary-sha256=289618f7e0670be9840b48adcd93d73261ea1c20034596ae6a95d5ed41f3b67d",
+    "--gateway-source-tree-sha256=02f803a6da08b5e6ee0915ed35da295b2cfd84548ff8c09d3ba67016233f0e24",
+    "--gateway-dependency-tree-sha256=e4c3f6c05ae21d89fe452794dd4c507c72b4fdac6646aa8eab19874275336954",
+    "--gateway-runtime-manifest-sha256=474ea99288424030dddcba6a63f47689e8dd7f24c18ca5a9e21bb78c6262c39b"
+  ],
+  "execution": {
+    "launchMethod": "env -i with the environment values above, followed by the command array",
+    "expectedRunContextBase": "target/test/apps/kcoder-studio/e2e/private/candidates/render-profile-full-v8-capture-20261009/mobile-render-profile.full-capture.candidate.mjs",
+    "expectedProfileArtifacts": [
+      "phone-render-core-v8-full-after-500-unmounted.json",
+      "phone-render-core-v8-full-after-500-mounted-hidden.json"
+    ],
+    "expectedEvidence": "Two independently captured profile artifacts with complete sanitized nodes/samples/timeDeltas, page/profile boundary status, and exact URL-to-source-map binding result.",
+    "knownMeasurementLimit": "The CDP interval includes app-facing WebSocketMock notification dispatch, MutationObserver instrumentation and two animation-frame opportunities; it is not isolated React render time or compositor paint.",
+    "testBoundary": "Mobile Web Chromium fixture only; no provider/model/Rust turn, no public relay, Native NOT_RUN."
+  },
+  "preparationChecks": {
+    "candidateSuiteNodeCheck": "PASS",
+    "contractHelperNodeCheck": "PASS",
+    "contractTests": "4/4 PASS",
+    "physicalRelativeImportResolution": "PASS",
+    "sourceMapExportPins": "Reused from prior root-verified complete 336-source/38-file package; no export rerun",
+    "gatewayPins": "Reused from prior root-verified C22 source/dependency closure and binary; no build"
+  }
+}

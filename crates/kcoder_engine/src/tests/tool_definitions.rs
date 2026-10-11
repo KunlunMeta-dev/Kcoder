@@ -1,0 +1,271 @@
+#[tokio::test]
+async fn input_hint_cache_matches_uncached_definitions_across_modes() {
+    let root = tempfile::tempdir().unwrap();
+    let engine = crate::test_support::engine_builder::TestEngineBuilder::new(root.path())
+        .tool_registry(kcoder_tools::default_registry()).build();
+    let mut uncached = engine.clone();
+    uncached.tool_input_hints = Arc::new(crate::tool_input_hints::ToolInputHints::default());
+    for luna in [false, true] {
+        engine.set_luna_mode(luna);
+        uncached.set_luna_mode(luna);
+        assert_eq!(serde_json::to_value(engine.tool_definitions_for_model().await).unwrap(),
+            serde_json::to_value(uncached.tool_definitions_for_model().await).unwrap());
+    }
+}
+
+#[tokio::test]
+async fn effective_tool_catalog_matches_model_definitions_across_filters() {
+    let temp = tempfile::tempdir().unwrap();
+    let mut settings = Settings {
+        goal_enabled: false,
+        permission_mode: PermissionMode::Yolo,
+        ..Settings::default()
+    };
+    settings.tools.luna.allowed = vec!["read".into()];
+    settings.enable_training_mode();
+    let engine = crate::test_support::engine_builder::TestEngineBuilder::new(temp.path())
+        .settings(settings)
+        .tool_registry(kcoder_tools::default_registry())
+        .build();
+    for luna in [false, true, false] {
+        engine.set_luna_mode(luna);
+        let mut expected = engine
+            .tool_definitions_for_model()
+            .await
+            .into_iter()
+            .map(|tool| tool.name)
+            .collect::<Vec<_>>();
+        expected.sort();
+        let actual = engine
+            .effective_tool_catalog()
+            .await
+            .into_iter()
+            .map(|tool| tool.name)
+            .collect::<Vec<_>>();
+        assert_eq!(actual, expected);
+        assert!(
+            !actual
+                .iter()
+                .any(|name| is_goal_tool_name(name) || is_user_elicitation_tool_name(name))
+        );
+        if luna {
+            assert_eq!(actual, vec!["read"]);
+        }
+    }
+    engine
+        .state
+        .enter_orchestrate_before_first_message()
+        .unwrap();
+    let mut expected = engine
+        .tool_definitions_for_model()
+        .await
+        .into_iter()
+        .map(|tool| tool.name)
+        .collect::<Vec<_>>();
+    expected.sort();
+    assert_eq!(
+        engine
+            .effective_tool_catalog()
+            .await
+            .into_iter()
+            .map(|tool| tool.name)
+            .collect::<Vec<_>>(),
+        expected
+    );
+    engine.settings.write().unwrap().model_capabilities.tools = false;
+    assert!(engine.effective_tool_catalog().await.is_empty());
+}
+
+fn schema_ref_paths(value: &Value) -> Vec<String> {
+    fn visit(value: &Value, path: &str, refs: &mut Vec<String>) {
+        match value {
+            Value::Object(map) => {
+                if map.contains_key("$ref") {
+                    refs.push(format!("{path}.$ref"));
+                }
+                for (key, child) in map {
+                    visit(child, &format!("{path}.{key}"), refs);
+                }
+            }
+            Value::Array(values) => {
+                for (index, child) in values.iter().enumerate() {
+                    visit(child, &format!("{path}[{index}]"), refs);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let mut refs = Vec::new();
+    visit(value, "$", &mut refs);
+    refs
+}
+
+async fn tool_definition_for_model(tool: &dyn kcoder_tools::Tool) -> kcoder_types::ToolDefinition {
+    let name = tool.name();
+    let input_format = tool.input_format();
+    let input_schema = model_schema_for_tool_input(&name, &tool.input_schema(), &input_format);
+    let ctx = ToolDescriptionContext {
+        permission_mode: ToolPermissionMode::Ask,
+        is_non_interactive: false,
+        active_skills: Vec::new(),
+        available_tools: Default::default(),
+    };
+    let description = tool.description_for_model(None, &ctx).await;
+    let description =
+        description_for_model_with_input_format(&description, &input_schema, &tool.input_format());
+    kcoder_types::ToolDefinition {
+        name,
+        description,
+        input_schema,
+    }
+}
+
+#[test]
+fn messages_request_serializes_tools() {
+    let tools = vec![kcoder_types::ToolDefinition {
+        name: "read".to_string(),
+        description: "read a file".to_string(),
+        input_schema: serde_json::json!({"type":"object","properties":{}}),
+    }];
+    let request = MessagesRequest::new("kcoder-test", vec![])
+        .with_system("test")
+        .with_tools(tools);
+    let json = serde_json::to_value(request).unwrap();
+    assert!(json.get("tools").is_some());
+    assert_eq!(json["tools"].as_array().unwrap().len(), 1);
+    assert_eq!(json["tools"][0]["name"], "read");
+}
+
+#[tokio::test]
+async fn tool_definition_for_model_uses_schema_without_repeating_shape_guidance() {
+    let registry = kcoder_tools::default_registry();
+    let tool = registry.get("TodoWrite").unwrap();
+    let definition = tool_definition_for_model(tool.as_ref()).await;
+
+    assert_eq!(definition.name, "TodoWrite");
+    assert!(!definition.description.contains("Input format:"));
+    assert!(!definition.description.contains("JSON shape example:"));
+    assert!(!definition.description.contains("Required fields:"));
+    assert!(definition.description.contains("placeholder strings"));
+    assert_eq!(definition.input_schema["properties"]["TodoList"]["type"], "array");
+    assert!(definition.input_schema["required"].as_array().unwrap().contains(&serde_json::json!("TodoList")));
+    assert!(
+        definition.input_schema["properties"]["TodoList"]["description"]
+            .as_str()
+            .unwrap()
+            .contains("Complete replacement TodoList")
+    );
+    assert!(
+        definition.input_schema["properties"]["TodoList"]["description"]
+            .as_str()
+            .unwrap()
+            .contains("null-valued fields")
+    );
+    assert!(
+            definition.input_schema["properties"]["TodoList"]["items"]["properties"]["activeForm"]
+                ["description"]
+                .as_str()
+                .unwrap()
+                .contains("Present-continuous")
+        );
+    assert!(
+            definition.input_schema["properties"]["TodoList"]["items"]["properties"]["status"]
+                ["description"]
+                .as_str()
+                .unwrap()
+                .contains("do not send `null`")
+        );
+    assert!(
+        definition
+            .input_schema
+            .pointer("/properties/TodoList/items/$ref")
+            .is_none()
+    );
+    assert!(
+        definition
+            .input_schema
+            .pointer("/properties/TodoList/items/properties/status/allOf")
+            .is_none()
+    );
+}
+
+#[test]
+fn model_tool_definitions_inline_local_refs_for_every_default_tool() {
+    let registry = kcoder_tools::default_registry();
+    let (definitions, _, _) = build_tool_caches(&registry);
+
+    assert!(!definitions.is_empty());
+    for definition in definitions {
+        if definition.name == "WorkflowDraft" {
+            // Graph nodes recursively contain other nodes. Bounded inlining
+            // intentionally retains those references and their definitions.
+            let mut pending = vec![&definition.input_schema];
+            let mut refs = 0;
+            while let Some(value) = pending.pop() {
+                match value {
+                    Value::Object(map) => {
+                        if let Some(reference) = map.get("$ref") {
+                            let reference = reference.as_str().expect("schema reference is a string");
+                            let pointer = reference.strip_prefix('#').expect("workflow schema references are local");
+                            assert!(definition.input_schema.pointer(pointer).is_some(), "unresolved WorkflowDraft schema reference: {reference}");
+                            refs += 1;
+                        }
+                        pending.extend(map.values());
+                    }
+                    Value::Array(values) => pending.extend(values),
+                    _ => {}
+                }
+            }
+            assert!(refs > 0, "recursive workflow definitions must remain available");
+        } else {
+            assert!(
+                schema_ref_paths(&definition.input_schema).is_empty(),
+                "model-facing schema for tool `{}` still contains local refs: {}",
+                definition.name,
+                schema_ref_paths(&definition.input_schema).join(", ")
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn turn_scoped_tools_refresh_schema_cache_without_leaking_to_resident_or_subagents() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    struct SchemaProbe(Arc<AtomicUsize>);
+    #[async_trait::async_trait]
+    impl kcoder_tools::Tool for SchemaProbe {
+        fn name(&self) -> String { "desktop_schema_probe".into() }
+        fn description(&self) -> String { "Observe an owned test fixture".into() }
+        fn input_schema(&self) -> Value {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            serde_json::json!({"type":"object","properties":{"label":{"type":"integer","minimum":1}},"additionalProperties":false})
+        }
+        fn input_schema_is_stable(&self) -> bool { true }
+        async fn call(&self, _:Value, _: &kcoder_tools::ToolContext) -> Result<kcoder_tools::ToolOutput,kcoder_tools::ToolError> {
+            Ok(kcoder_tools::ToolOutput::text("fixture"))
+        }
+    }
+    let root = tempfile::tempdir().unwrap();
+    let resident = crate::test_support::engine_builder::TestEngineBuilder::new(root.path())
+        .tool_registry(kcoder_tools::default_registry()).build();
+    let count=Arc::new(AtomicUsize::new(0));
+    let mut tools=resident.tools.clone();
+    tools.try_register(Arc::new(SchemaProbe(count.clone()))).unwrap();
+    let scoped=resident.clone().with_turn_tools(tools);
+    let built=count.load(Ordering::SeqCst);
+    assert!(built>0);
+    let expected=scoped.tool_definitions_for_model().await;
+    assert!(expected.iter().any(|tool| tool.name=="desktop_schema_probe"));
+    for _ in 0..3 {
+        assert_eq!(serde_json::to_value(scoped.tool_definitions_for_model().await).unwrap(),serde_json::to_value(&expected).unwrap());
+    }
+    assert_eq!(count.load(Ordering::SeqCst),built,"stable schemas must not rebuild on each model request");
+    assert!(resident.tools.get("desktop_schema_probe").is_none());
+    assert!(resident.subagent_tools.read().unwrap().get("desktop_schema_probe").is_none());
+    let mut uncached=scoped.clone();
+    uncached.tool_schema_revision=ToolRegistry::new().revision();
+    assert_eq!(serde_json::to_value(uncached.tool_definitions_for_model().await).unwrap(),serde_json::to_value(expected).unwrap());
+    scoped.settings.write().unwrap().model_capabilities.tools=false;
+    assert!(scoped.tool_definitions_for_model().await.is_empty(),"live capability changes must still apply");
+}

@@ -1,0 +1,11 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "agent-demo",
+  "version": "1.2.3",
+  "description": "Agent Plugins v1 compatibility fixture",
+  "author": {
+    "name": "KCoder tests"
+  },
+  "homepage": "https://example.invalid/agent-demo",
+  "keywords": ["fixture", "agent-plugin"]
+}

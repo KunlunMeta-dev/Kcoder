@@ -1,0 +1,53 @@
+/target
+**/*.rs.bk
+__pycache__/
+*.py[cod]
+*.pdb
+.DS_Store
+.env
+.env.*
+!.env.example
+*_local.jsonc
+.worktrees/
+reference_repo/
+tools/tui-lab/node_modules/
+tests/fixtures/**/target/
+tests/fixtures/**/node_modules/
+tests/fixtures/**/.git/
+tests/fixtures/**/.cache/
+tests/fixtures/**/test-results/
+tests/fixtures/**/playwright-report/
+tools/ssh/
+# Keep historical runtime artifacts ignored after launchers moved under install/.
+scripts/launch/.kcoder/
+scripts/install/launch/.kcoder/
+/session_*.zip
+
+# Local-only build/working artifacts (not part of the source release)
+/vendor/
+/vendor-config.toml
+/vendor.stderr
+/.playwright-mcp/
+/.kcoder/tmp/
+/config/
+/docs/Snipaste_*.png
+/logo/download.png
+
+# Cleanup working draft (not tracked; delete this line along with the file once done)
+/docs/public-release-cleanup-plan.md
+
+# file-viewer build-time manifest (embeds build-machine paths)
+**/flyfish-viewer-assets.json
+
+# Vite plugin test output directories.
+apps/kcoder-studio/renderer/dummy-non-existing-folder/
+
+# Local work directories retained across branch switches (public tree uses renderer/).
+apps/kcoder-studio/wework/
+
+# Local Vitest cache.
+node_modules/.vite/
+
+# Generated release inventories are embedded in packages, not source control.
+/apps/kcoder-studio/kcoder-release-manifest.json
+/apps/kcoder-studio/mobile/kcoder-release-manifest.json

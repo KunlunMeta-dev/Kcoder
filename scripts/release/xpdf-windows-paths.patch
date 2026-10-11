@@ -1,0 +1,254 @@
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -13,6 +13,10 @@
+ project(xpdf)
+ 
+ include(cmake-config.txt)
++# KCoder 2026-09-24: keep source paths out of the standalone redistributable.
++if (MINGW)
++  add_compile_options("-ffile-prefix-map=${PROJECT_SOURCE_DIR}=xpdf-4.06")
++endif ()
+ 
+ add_subdirectory(goo)
+ add_subdirectory(fofi)
+--- a/goo/gfile.cc
++++ b/goo/gfile.cc
+@@ -37,6 +37,35 @@
+ #include "gmempp.h"
+ #include "GString.h"
+ #include "gfile.h"
++#ifdef _WIN32
++#include <string>
++#include <vector>
++#include <algorithm>
++#include <errno.h>
++
++// KCoder 2026-09-24: use explicit UTF-8/UTF-16 and dynamically sized paths.
++static std::wstring kcoderFullWindowsPath(const char *utf8) {
++  int n = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, utf8, -1, NULL, 0);
++  if (n <= 0 || n > 32768) return std::wstring();
++  std::vector<wchar_t> input(n);
++  if (!MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, utf8, -1, input.data(), n)) return std::wstring();
++  std::replace(input.begin(), input.end(), L'/', L'\\');
++  DWORD required = GetFullPathNameW(input.data(), 0, NULL, NULL);
++  if (!required || required > 32768) return std::wstring();
++  std::vector<wchar_t> output(required);
++  DWORD length = GetFullPathNameW(input.data(), required, output.data(), NULL);
++  if (!length || length >= required) return std::wstring();
++  return std::wstring(output.data(), length);
++}
++static std::wstring kcoderExtendedWindowsPath(const char *utf8) {
++  std::wstring path = kcoderFullWindowsPath(utf8);
++  if (path.empty() || path.compare(0, 4, L"\\\\?\\") == 0) return path;
++  if (path.compare(0, 2, L"\\\\") == 0) path = L"\\\\?\\UNC\\" + path.substr(2);
++  else if (path.size() > 2 && path[1] == L':') path = L"\\\\?\\" + path;
++  else return std::wstring();
++  return path.size() < 32768 ? path : std::wstring();
++}
++#endif
+ 
+ // Some systems don't define this, so just make it something reasonably
+ // large.
+@@ -158,17 +187,14 @@
+ 
+ #elif defined(_WIN32)
+   //---------- Win32 ----------
+-  GString *tmp;
+-  char buf[256];
+-  char *fp;
+-
+-  tmp = new GString(path);
+-  tmp->append('/');
+-  tmp->append(fileName);
+-  GetFullPathNameA(tmp->getCString(), sizeof(buf), buf, &fp);
+-  delete tmp;
++  GString tmp(path);
++  tmp.append('/');
++  tmp.append(fileName);
++  std::wstring full = kcoderFullWindowsPath(tmp.getCString());
++  GString *utf8 = fileNameToUTF8(const_cast<wchar_t *>(full.c_str()));
+   path->clear();
+-  path->append(buf);
++  path->append(utf8);
++  delete utf8;
+   return path;
+ 
+ #elif defined(ACORN)
+@@ -339,16 +365,11 @@
+ 
+ #elif defined(_WIN32)
+   //---------- Win32 ----------
+-  char buf[MAX_PATH];
+-  char *fp;
+-
+-  buf[0] = '\0';
+-  if (!GetFullPathNameA(path->getCString(), MAX_PATH, buf, &fp)) {
+-    path->clear();
+-    return path;
+-  }
++  std::wstring full = kcoderFullWindowsPath(path->getCString());
++  GString *utf8 = fileNameToUTF8(const_cast<wchar_t *>(full.c_str()));
+   path->clear();
+-  path->append(buf);
++  path->append(utf8);
++  delete utf8;
+   return path;
+ 
+ #elif defined(ACORN)
+@@ -590,23 +611,11 @@
+ }
+ 
+ GString *fileNameToUTF8(wchar_t *path) {
+-  GString *s;
+-  wchar_t *p;
+-
+-  s = new GString();
+-  for (p = path; *p; ++p) {
+-    if (*p < 0x80) {
+-      s->append((char)*p);
+-    } else if (*p < 0x800) {
+-      s->append((char)(0xc0 | ((*p >> 6) & 0x1f)));
+-      s->append((char)(0x80 | (*p & 0x3f)));
+-    } else {
+-      s->append((char)(0xe0 | ((*p >> 12) & 0x0f)));
+-      s->append((char)(0x80 | ((*p >> 6) & 0x3f)));
+-      s->append((char)(0x80 | (*p & 0x3f)));
+-    }
+-  }
+-  return s;
++  int n = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, path, -1, NULL, 0, NULL, NULL);
++  if (n <= 0) return new GString();
++  std::vector<char> out(n);
++  if (!WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, path, -1, out.data(), n, NULL, NULL)) return new GString();
++  return new GString(out.data());
+ }
+ 
+ GString *fileNameMultiByteToUTF8(char *path) {
+@@ -621,30 +630,14 @@
+ }
+ 
+ wchar_t *fileNameToUCS2(const char *path, wchar_t *out, size_t outSize) {
+-  const char *p;
+-  size_t i;
+-
+-  for (p = path, i = 0; *p && i < outSize - 1; ++i) {
+-    if ((p[0] & 0xe0) == 0xc0 &&
+-	p[1] && (p[1] & 0xc0) == 0x80) {
+-      out[i] = (wchar_t)(((p[0] & 0x1f) << 6) |
+-			  (p[1] & 0x3f));
+-      p += 2;
+-    } else if ((p[0] & 0xf0) == 0xe0 &&
+-	       (p[1] & 0xc0) == 0x80 &&
+-	       (p[2] & 0xc0) == 0x80) {
+-      out[i] = (wchar_t)(((p[0] & 0x0f) << 12) |
+-			 ((p[1] & 0x3f) << 6) |
+-			  (p[2] & 0x3f));
+-      p += 3;
+-    } else {
+-      out[i] = (wchar_t)(p[0] & 0xff);
+-      p += 1;
+-    }
+-  }
+-  out[i] = (wchar_t)0;
++  if (!outSize) return out;
++  out[0] = 0;
++  int n = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, NULL, 0);
++  if (n <= 0 || (size_t)n > outSize) return out;
++  if (!MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, out, n)) out[0] = 0;
+   return out;
+ }
++
+ #endif
+ 
+ FILE *openFile(const char *path, const char *mode) {
+@@ -659,7 +652,11 @@
+   }
+   wMode[i] = (wchar_t)0;
+   readWindowsShortcut(wPath, winMaxLongPath + 1);
+-  return _wfopen(wPath, wMode);
++  GString *resolved = fileNameToUTF8(wPath);
++  std::wstring extended = kcoderExtendedWindowsPath(resolved->getCString());
++  delete resolved;
++  if (extended.empty()) { errno = EINVAL; return NULL; }
++  return _wfopen(extended.c_str(), wMode);
+ #elif defined(VMS)
+   return fopen(path, mode, "ctx=stm");
+ #else
+--- a/xpdf/PDFDoc.cc
++++ b/xpdf/PDFDoc.cc
+@@ -129,19 +129,16 @@
+   int wPathLen = (int)wcslen(wPath);
+ 
+   // save both Unicode and 8-bit copies of the file name
+-  fileName = new GString();
++  fileName = fileNameToUTF8(wPath);
+   fileNameU = (wchar_t *)gmallocn(wPathLen + 1, sizeof(wchar_t));
+   memcpy(fileNameU, wPath, (wPathLen + 1) * sizeof(wchar_t));
+-  for (i = 0; i < wPathLen; ++i) {
+-    fileName->append((char)fileNameA[i]);
+-  }
+ 
+   // try to open file
+   // NB: _wfopen is only available in NT
+   version.dwOSVersionInfoSize = sizeof(version);
+   GetVersionEx(&version);
+   if (version.dwPlatformId == VER_PLATFORM_WIN32_NT) {
+-    file = _wfopen(fileNameU, wfopenReadMode);
++    file = openFile(fileName->getCString(), fopenReadMode);
+   } else {
+     file = fopen(fileName->getCString(), fopenReadMode);
+   }
+@@ -176,12 +173,8 @@
+ 
+ #if defined(_WIN32)
+   wchar_t wPath[winMaxLongPath + 1];
+-  i = 0;
+-  j = 0;
+-  while (j < winMaxLongPath && getUTF8(fileName, &i, &u)) {
+-    wPath[j++] = (wchar_t)u;
+-  }
+-  wPath[j] = L'\0';
++  // KCoder 2026-09-24: preserve UTF-16 surrogate pairs in UTF-8 filenames.
++  fileNameToUCS2(fileNameA, wPath, winMaxLongPath + 1);
+   readWindowsShortcut(wPath, winMaxLongPath + 1);
+   int wPathLen = (int)wcslen(wPath);
+ 
+@@ -192,7 +185,7 @@
+   version.dwOSVersionInfoSize = sizeof(version);
+   GetVersionEx(&version);
+   if (version.dwPlatformId == VER_PLATFORM_WIN32_NT) {
+-    file = _wfopen(fileNameU, wfopenReadMode);
++    file = openFile(fileName->getCString(), fopenReadMode);
+   } else {
+     file = fopen(fileName->getCString(), fopenReadMode);
+   }
+--- a/xpdf/CMakeLists.txt
++++ b/xpdf/CMakeLists.txt
+@@ -23,7 +23,12 @@
+ else ()
+   set(COLOR_MANAGER_SOURCE "")
+ endif ()
+-if (WIN32)
++if (MINGW)
++  # KCoder 2026-09-24: MinGW needs an explicit RC resource to retain longPathAware.
++  enable_language(RC)
++  configure_file(winLongPath.rc.in winLongPath.rc @ONLY)
++  set(MANIFEST "${CMAKE_CURRENT_BINARY_DIR}/winLongPath.rc")
++elseif (WIN32)
+   set(MANIFEST "winLongPath.exe.manifest")
+ else ()
+   set(MANIFEST "")
+@@ -156,6 +161,9 @@
+                       ${LCMS_LIBRARY}
+                       ${FONTCONFIG_LIBRARY}
+                       ${CMAKE_THREAD_LIBS_INIT})
++if (MINGW)
++  target_link_options(pdftotext PRIVATE -static -static-libgcc -static-libstdc++ -Wl,--no-insert-timestamp)
++endif ()
+ install(TARGETS pdftotext RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+ install(FILES ${PROJECT_SOURCE_DIR}/doc/pdftotext.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
+ 
+--- a/xpdf/winLongPath.rc.in
++++ b/xpdf/winLongPath.rc.in
+@@ -0,0 +1 @@
++1 24 "@CMAKE_CURRENT_SOURCE_DIR@/winLongPath.exe.manifest"

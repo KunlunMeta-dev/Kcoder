@@ -1,0 +1,23 @@
+[Unit]
+Description=KCoder Studio Web Client
+After=network-online.target kcoder-studio-web.service
+Wants=network-online.target kcoder-studio-web.service
+
+[Service]
+Type=simple
+User=@KCODER_STUDIO_SERVICE_USER@
+Group=@KCODER_STUDIO_SERVICE_GROUP@
+WorkingDirectory=@KCODER_STUDIO_REPO_DIR@/apps/kcoder-studio/renderer
+Environment=HOME=@KCODER_STUDIO_SERVICE_HOME@
+Environment=PATH=@KCODER_STUDIO_SERVICE_PATH@
+RuntimeDirectory=kcoder-studio-client
+RuntimeDirectoryMode=0750
+ExecStartPre=/usr/sbin/nginx -t -c @KCODER_STUDIO_REPO_DIR@/scripts/launch/services/systemd/kcoder-studio-client.nginx.conf
+ExecStart=/usr/sbin/nginx -c @KCODER_STUDIO_REPO_DIR@/scripts/launch/services/systemd/kcoder-studio-client.nginx.conf -g "daemon off;"
+Restart=on-failure
+RestartSec=2s
+TimeoutStopSec=20s
+KillMode=control-group
+
+[Install]
+WantedBy=multi-user.target

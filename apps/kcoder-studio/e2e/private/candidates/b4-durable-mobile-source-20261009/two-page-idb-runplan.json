@@ -1,0 +1,214 @@
+{
+  "status": "BROWSER_CANDIDATE_RUN_PASSED",
+  "candidate": {
+    "suite": "apps/kcoder-studio/e2e/private/candidates/b4-durable-mobile-source-20261009/staged-attachment-idb-two-page.review.e2e.mjs",
+    "suiteSha256": "eabf70a28abed00679d856fcbf086cc28189c5c207ba993196fdbb7ba5b50a25",
+    "inputPinsPath": "apps/kcoder-studio/e2e/private/candidates/b4-durable-mobile-source-20261009/source-snapshot/inputs.json",
+    "inputPinsSha256": "6aaef0bba4b1ed3dd4c37b4ea07d981018194d037043dc90f678c53bc8456138",
+    "productCandidate": {
+      "revision": "static02",
+      "productCount": 9,
+      "sourceDigest": "9780dd897ff6c3f5028bcbe058ee9d4c376b8408761b2829999ce005ee649a91",
+      "manifestSha256": "d33d56bf0bbecac72f66e4551054c80ef5c41d018fc00d03f6ef92f92ab6213d",
+      "productsDiffSha256": "02660e5014de895ed2c142e96a23abbf446070da0efef495e94c072cd58e117f",
+      "appliedToLive": false
+    },
+    "testHarnessAndShimPins": {
+      "apps/kcoder-studio/e2e/harness/chromium.mjs": "6da43f71496317e00098780ab7e8c3bf0874e4b925c6add4e4c0e87bdf7b504c",
+      "apps/kcoder-studio/e2e/harness/run-context.mjs": "94f0c27306f8944cbd10f1835227a408c51a0b558981d846832bb297c5e5cf11",
+      "apps/kcoder-studio/e2e/private/candidates/b4-durable-mobile-source-20261009/support/react-native-web.ts": "e1154d6e49cffd446666818bf9b2c4ac1297e0093ca23b360262ac36691114a9",
+      "apps/kcoder-studio/e2e/private/candidates/b4-durable-mobile-source-20261009/support/gateway-http.ts": "7656f933141fcb0604afdb8d9693c3b91a03134acd703b21991af10ed499740b"
+    },
+    "runtimeDependencySnapshot": {
+      "packageJsonResolutionAnchors": {
+        "mobile": "apps/kcoder-studio/mobile/package.json (createRequire base only; hosting build:web script is not executed)",
+        "renderer": "apps/kcoder-studio/renderer/package.json (createRequire base only)"
+      },
+      "lockfiles": {
+        "apps/kcoder-studio/mobile/package-lock.json": "848076f520f165128b601b27d96d4d32cf25e8929ee54b672f198b9a4c224e26",
+        "apps/kcoder-studio/renderer/pnpm-lock.yaml": "f6128644c058f2dfa579c55f2ebca8384d0f63335b9c930bbf991fe1d83ca586"
+      },
+      "resolvedRuntimeVersions": {
+        "esbuild": "0.28.1",
+        "ws": "7.5.13",
+        "@playwright/test": "1.62.0",
+        "playwright": "1.62.0",
+        "playwright-core": "1.62.0"
+      },
+      "resolvedEntryAndPackageFiles": {
+        "mobile/esbuild": [
+          "package.json",
+          "lib/main.js",
+          "@esbuild/linux-x64/package.json",
+          "@esbuild/linux-x64/bin/esbuild"
+        ],
+        "mobile/ws": [
+          "package.json",
+          "index.js",
+          "lib/websocket-server.js",
+          "lib/websocket.js",
+          "lib/receiver.js",
+          "lib/sender.js",
+          "lib/validation.js"
+        ],
+        "renderer/playwright": [
+          "@playwright/test/package.json",
+          "@playwright/test/index.mjs",
+          "playwright/package.json",
+          "playwright/test.mjs",
+          "playwright/test.js",
+          "playwright/index.js",
+          "playwright-core/package.json",
+          "playwright-core/index.js",
+          "playwright-core/lib/bootstrap.js",
+          "playwright-core/lib/coreBundle.js"
+        ]
+      }
+    }
+  },
+  "proposedInvocation": {
+    "cwd": "target/phone-ux-upstream-integration-20261008",
+    "env": {
+      "KCODER_E2E_CHROMIUM_NO_SANDBOX": "1"
+    },
+    "argv": [
+      "/home/hyf/.local/opt/node-v22.17.0-linux-x64/bin/node",
+      "apps/kcoder-studio/e2e/private/candidates/b4-durable-mobile-source-20261009/staged-attachment-idb-two-page.review.e2e.mjs"
+    ],
+    "browser": {
+      "path": "/opt/cft/chrome-linux64/chrome",
+      "version": "Google Chrome for Testing 151.0.7922.34",
+      "sha256": "0b20b130e7edd9dd51873be867761295fe0cfad490c2b9a64f95bd3cfc08fa71"
+    },
+    "proposedWallClockBudgetSeconds": 240,
+    "budgetIsMeasured": false
+  },
+  "cases": [
+    "actual IndexedDB readwrite abort leaves no row/blob and sends zero retention RPCs",
+    "two separate same-origin pages load one revision and race the actual IndexedDB/Web Locks CAS; one winner",
+    "real Blob rows race the 100 MiB application-store cap at 40+40+15+15 MiB; one 15 MiB contender is rejected; exact unsent discard deletes source bytes",
+    "source/row and exact durable start intent are visible from page B before the held loopback start response",
+    "start ACK loss after peer-side state commit retains original ID/intent; reconnect reads the same ID, then sends one contiguous hashed chunk and finish without a second start",
+    "persisted profile generation/device changes while start response is held; late response is rejected by the actual Web profile fence and old row/blob/intent remain unchanged"
+  ],
+  "executionBoundary": {
+    "browserStorage": "two real Chromium pages in one browser context/origin using the actual candidate Web IndexedDB backend and browser Web Locks",
+    "rpc": "actual candidate GatewayRpcClient and uploader over one owned loopback HTTP/WebSocket peer with scripted JSON-RPC replies",
+    "shims": "ensureGatewayAuthorization is a no-op and react-native Platform.OS is pinned to web; product RPC/uploader/profile-fence/IDB modules are not stubbed",
+    "notCovered": [
+      "production Rust app-server, Gateway, Relay, capability deployment, or Provider",
+      "Native filesystem copy/durability behavior (Native backend is pinned but excluded from the browser bundle)",
+      "50 MiB/100-chunk Browser transfer or end-user attachment UI/accepted-consumer proof",
+      "server-side capacity release or retry-after-reserve guarantees"
+    ],
+    "externalNetwork": false,
+    "credentials": "four ephemeral random fixture tokens registered for RunContext redaction; no credential file or external account"
+  },
+  "prerequisites": {
+    "node": "exact executable /home/hyf/.local/opt/node-v22.17.0-linux-x64/bin/node, v22.17.0",
+    "chromium": "/opt/cft/chrome-linux64/chrome (Google Chrome for Testing 151.0.7922.34; SHA-256 is pinned in proposedInvocation.browser)",
+    "browser": "IndexedDB, Web Locks, secure loopback context, and >=120 MiB reported storage headroom",
+    "headroomClarification": "120 MiB is a browser-storage precondition for real Blob materialization; the asserted 100 MiB quota is the Mobile store's own transactional accounting, not a claim about Chromium's origin quota"
+  },
+  "priorAttempt": {
+    "runRoot": "target/test/apps/kcoder-studio/e2e/private/candidates/b4-durable-mobile-source-20261009/staged-attachment-idb-two-page.review.e2e.mjs/20261009-113004.065Z",
+    "status": "failed-before-browser",
+    "failure": "esbuild snapshot alias resolver returned extensionless @/protocol paths; no HTTP origin or Chromium was started",
+    "resultSha256": "e0ec33327a1584adbb4426f190edcbceb9be8568b3b4f991e837ac11dd472226"
+  },
+  "bundlePreflightInvocation": {
+    "cwd": "target/phone-ux-upstream-integration-20261008",
+    "env": {
+      "KCODER_B4_BUILD_ONLY": "1"
+    },
+    "argv": [
+      "/home/hyf/.local/opt/node-v22.17.0-linux-x64/bin/node",
+      "apps/kcoder-studio/e2e/private/candidates/b4-durable-mobile-source-20261009/staged-attachment-idb-two-page.review.e2e.mjs"
+    ],
+    "expectedResult": "BUNDLE_PREFLIGHT_ONLY_NOT_BROWSER_EVIDENCE",
+    "proposedWallClockBudgetSeconds": 60
+  },
+  "aliasResolution": {
+    "mapping": "@ -> source-snapshot/apps/kcoder-studio/mobile/src",
+    "resolver": "esbuild built-in alias so normal extension/index resolution applies; no extensionless onResolve interception",
+    "compilePreflight": {
+      "runRoot": "target/test/apps/kcoder-studio/e2e/private/candidates/b4-durable-mobile-source-20261009/staged-attachment-idb-two-page.review.e2e.mjs/20261009-113452.918Z",
+      "result": "BUNDLE_PREFLIGHT_ONLY_NOT_BROWSER_EVIDENCE",
+      "bundleBytes": 79902,
+      "bundleSha256": "41202015d39141ae699953c90779ab4502f93fe83fc0d68f8f91eaae6bd5708f",
+      "resultSha256": "c8db8f59064fd9864d4bf60ef308594d95ae366b70958864a73f1cfbc3128e12",
+      "provenanceSha256": "3a263d6476302cf53555b2f4aa78137a59bf32d74c1bf4943ca17b19ff0e1538",
+      "requiredFrozenImportsPresent": [
+        "protocol/attachment-retention.ts",
+        "protocol/sha256-stream.ts"
+      ],
+      "browserStarted": false,
+      "externalNetwork": false
+    }
+  },
+  "browserAttempts": [
+    {
+      "runRoot": "target/test/apps/kcoder-studio/e2e/private/candidates/b4-durable-mobile-source-20261009/staged-attachment-idb-two-page.review.e2e.mjs/20261009-113004.065Z",
+      "status": "failed-before-browser",
+      "cause": "snapshot @/ alias used extensionless onResolve path; esbuild could not resolve protocol imports",
+      "resultSha256": "e0ec33327a1584adbb4426f190edcbceb9be8568b3b4f991e837ac11dd472226",
+      "manifestSha256": "ed9008762697b13529a0395bba5273c2a2d868464b1fe09c460744513af10753"
+    },
+    {
+      "runRoot": "target/test/apps/kcoder-studio/e2e/private/candidates/b4-durable-mobile-source-20261009/staged-attachment-idb-two-page.review.e2e.mjs/20261009-113540.000Z",
+      "status": "failed-during-page-setup",
+      "cause": "startChromium wrapper newPage created a single-page owned context; candidate attempted context.newPage on it",
+      "resultSha256": "6bc31a4565e5396cb6705f99eeff67a6f53e9b8284d6c1706ea628c70ec59706",
+      "manifestSha256": "8239b685236c61f447ebb276202b38ff2b41bd758609b7c395570249855e8635",
+      "cleanupErrors": []
+    }
+  ],
+  "pageContextFix": "Create one explicit chromium.browser.newContext(), register its close cleanup immediately, then create both pages from that shared context.",
+  "finalBrowserRun": {
+    "runRoot": "target/test/apps/kcoder-studio/e2e/private/candidates/b4-durable-mobile-source-20261009/staged-attachment-idb-two-page.review.e2e.mjs/20261009-113725.481Z",
+    "outerRunStatus": "passed",
+    "durationMs": 9603,
+    "result": {
+      "inputSourceCount": 17,
+      "phases": [
+        "transactionAbort",
+        "crossPageCas",
+        "twoPageQuota",
+        "lostAckRecovery",
+        "scopeChangedLateAck"
+      ],
+      "loopbackRpcFrames": 9,
+      "uncaughtPageErrorCount": 0,
+      "ownedSocketsAfterClientsClosed": 0
+    },
+    "resultJsonSha256": "84597f2075401fad9460a442fc8ce5a2b17754355921a6c3ae0e08a32eb80fdd",
+    "summaryJsonSha256": "81335b04d41ca91aadf1a8b577397eafb4116b97f6bb5309ecc6c5cc5fe322e1",
+    "manifestSha256": "634fd129eeeb6b8cc44b35de77a00d09cb32467f7077caefbaaf1acb561db2bc",
+    "bundleProvenanceSha256": "7bc31271607fdd539d3c173903e571e2fac2826ed4eca2d0999bfef5d13fb707",
+    "runtimeInputsSha256": "4752dc27c1776994789e6c10b0aff31bc1600e853d3e94a349f03ec05ff27e49",
+    "frozenInputsSha256": "a7df2892eb52459173599173fed689a65619926e6f92c6b1f2d31dd76d11b62d",
+    "chromium": {
+      "executable": "/opt/cft/chrome-linux64/chrome",
+      "sha256": "0b20b130e7edd9dd51873be867761295fe0cfad490c2b9a64f95bd3cfc08fa71",
+      "pid": 2443136,
+      "cleanupStatus": "RunContext stopOwned completed; process absent after run"
+    },
+    "ports": [
+      {
+        "label": "b4-two-page-idb-loopback",
+        "port": 38329,
+        "cleanupStatus": "HTTP server cleanup completed; no listener after run"
+      },
+      {
+        "label": "chromium-cdp",
+        "port": 34389,
+        "cleanupStatus": "Browser/CDP cleanup completed; no listener after run"
+      }
+    ],
+    "evidenceBoundary": "real local Chromium two-page IndexedDB/Web Locks and actual static02 Mobile Web modules; one owned loopback HTTP/WebSocket scripted peer; not production Rust/Gateway/Relay/Provider/Native or external-network evidence",
+    "nestedResultLabelCaveat": "The preserved RunContext result artifact contains the pre-correction nested label PRIVATE_BROWSER_CANDIDATE_READY_NOT_RUN; its outer status is passed and its summary contains all five executed phases.",
+    "executionSuiteSha256": "64de15c6739e693be52ba530b854c448cab567a7b08aab3d71ad49361371f881",
+    "currentCandidateSha256": "eabf70a28abed00679d856fcbf086cc28189c5c207ba993196fdbb7ba5b50a25",
+    "postRunChange": "Only the returned status literal changed from PRIVATE_BROWSER_CANDIDATE_READY_NOT_RUN to PRIVATE_BROWSER_CANDIDATE_EXECUTED_PASSED; the five completed assertions and their source paths are unchanged. This metadata-only candidate correction was syntax-checked and not rerun."
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "kcoder-windows-computer-use",
+  "version": "0.1.6",
+  "description": "Windows desktop operation guidance for KCoder's bundled Windows-MCP host",
+  "author": {
+    "name": "KCoder"
+  },
+  "license": "MIT",
+  "keywords": [
+    "windows",
+    "desktop",
+    "computer-use",
+    "bundled"
+  ],
+  "skills": [
+    "./skills"
+  ],
+  "interface": {
+    "displayName": "Computer Use",
+    "shortDescription": "Operate the current Windows desktop with KCoder",
+    "developerName": "KCoder",
+    "longDescription": "Desktop control uses the Windows-MCP community project and KCoder's conversation authorization and per-turn control leases. Requires the bundled Windows runtime. This is not the OpenAI Computer Use plugin."
+  }
+}

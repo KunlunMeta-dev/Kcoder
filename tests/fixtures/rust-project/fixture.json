@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "name": "rust-project",
+  "version": "2",
+  "description": "不依赖网络的最小 Rust library 工作区"
+}

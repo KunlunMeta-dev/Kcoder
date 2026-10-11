@@ -1,0 +1,51 @@
+$ /home/hyf/.local/opt/node-v22.17.0-linux-x64/bin/node --check /data1/hyf/20260822_agent/Kunlun-Code-CYX/target/phone-ux-upstream-integration-20261008/apps/kcoder-studio/e2e/private/candidates/render-profile-full-v8-capture-20261009/mobile-render-profile.full-capture.candidate.mjs
+exit=0
+
+$ /home/hyf/.local/opt/node-v22.17.0-linux-x64/bin/node --check /data1/hyf/20260822_agent/Kunlun-Code-CYX/target/phone-ux-upstream-integration-20261008/apps/kcoder-studio/e2e/private/candidates/render-profile-full-v8-capture-20261009/profile-capture-contract.mjs
+exit=0
+
+$ /home/hyf/.local/opt/node-v22.17.0-linux-x64/bin/node --check /data1/hyf/20260822_agent/Kunlun-Code-CYX/target/phone-ux-upstream-integration-20261008/apps/kcoder-studio/e2e/private/candidates/render-profile-full-v8-capture-20261009/profile-capture-contract.test.mjs
+exit=0
+
+$ /home/hyf/.local/opt/node-v22.17.0-linux-x64/bin/node --test /data1/hyf/20260822_agent/Kunlun-Code-CYX/target/phone-ux-upstream-integration-20261008/apps/kcoder-studio/e2e/private/candidates/render-profile-full-v8-capture-20261009/profile-capture-contract.test.mjs
+exit=0
+TAP version 13
+# Subtest: candidate relative imports resolve from its actual private directory
+ok 1 - candidate relative imports resolve from its actual private directory
+  ---
+  duration_ms: 11.056154
+  type: 'test'
+  ...
+# Subtest: complete profile keeps all samples and only exact approved bundle-relative URL identities
+ok 2 - complete profile keeps all samples and only exact approved bundle-relative URL identities
+  ---
+  duration_ms: 2.285883
+  type: 'test'
+  ...
+# Subtest: complete-profile contract rejects incomplete or malformed sample streams
+ok 3 - complete-profile contract rejects incomplete or malformed sample streams
+  ---
+  duration_ms: 1.86325
+  type: 'test'
+  ...
+# Subtest: full-capture gate failure evidence preserves the helper error before throwing
+ok 4 - full-capture gate failure evidence preserves the helper error before throwing
+  ---
+  duration_ms: 0.357464
+  type: 'test'
+  ...
+# Subtest: profile-window validation accepts only aligned ordered event boundaries
+ok 5 - profile-window validation accepts only aligned ordered event boundaries
+  ---
+  duration_ms: 0.715523
+  type: 'test'
+  ...
+1..5
+# tests 5
+# suites 0
+# pass 5
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 126.848744

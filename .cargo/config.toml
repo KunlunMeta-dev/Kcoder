@@ -1,0 +1,7 @@
+[env]
+# Tests resolve the current checkout at runtime so repository renames cannot reuse stale compile-time absolute paths from target.
+KCODER_WORKSPACE_ROOT = { value = ".", relative = true }
+# Cap libtest parallelism. On very large hosts the default per-core fan-out lets
+# session-history tests collide on their non-blocking flock fences (EAGAIN) and
+# destabilizes timing-sensitive journal assertions; four workers matches CI.
+RUST_TEST_THREADS = "4"

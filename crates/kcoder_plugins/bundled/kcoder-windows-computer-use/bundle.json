@@ -1,0 +1,7 @@
+{
+  "bundle": "kcoder-windows-computer-use",
+  "source": "KCoder repository; desktop backend: CursorTouch/Windows-MCP",
+  "version": "0.1.6",
+  "license": "MIT",
+  "build": "Embedded operation guidance; native desktop runtime is packaged separately with its own dependency notices"
+}

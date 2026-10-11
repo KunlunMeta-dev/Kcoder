@@ -1,0 +1,168 @@
+{
+  "fixtureKind": "authored-rust-serde-shaped-contract-not-captured-output",
+  "sourcePins": {
+    "candidateManifestSha256": "d33d56bf0bbecac72f66e4551054c80ef5c41d018fc00d03f6ef92f92ab6213d",
+    "candidateSourceDigest": "9780dd897ff6c3f5028bcbe058ee9d4c376b8408761b2829999ce005ee649a91",
+    "rustAttachmentRetentionSha256": "19c1ca2377ec82dd42f5a02dc6a04c3e2ec12ed591e25c5da4f65bce948ab8db",
+    "rustProtocolLibSha256": "b6091deab8e7bdb8db37487cb73fea23b048ca746ce4b556a163a0e316926fd2"
+  },
+  "admission": {
+    "version": 1,
+    "rootNamespace": "fixture_root",
+    "admissionEpoch": 7
+  },
+  "localOwner": {
+    "profile": {
+      "id": "fixture-profile",
+      "baseUrl": "https://gateway.invalid",
+      "authorizationGeneration": "fixture-auth-generation-1",
+      "deviceId": "fixture-device-1"
+    },
+    "serverId": "fixture-target-1",
+    "workspacePath": "/fixture/workspace"
+  },
+  "source": {
+    "label": "fixture.bin",
+    "utf8": "hello",
+    "size": 5,
+    "sha256": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+    "base64": "aGVsbG8="
+  },
+  "ownerRequest": {
+    "clientOwnerRequestId": "o1.fixture_root.7.00000000000000000000000000000001",
+    "immutableParameters": {
+      "purpose": "mobile-attachment",
+      "localAttachmentId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  "clientUploadId": "u1.fixture_root.7.00000000000000000000000000000002",
+  "scopeId": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "publicParams": {
+    "save": {
+      "ownerRequest": {
+        "clientOwnerRequestId": "o1.fixture_root.7.00000000000000000000000000000001",
+        "immutableParameters": {
+          "purpose": "mobile-attachment",
+          "localAttachmentId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "clientUploadId": "u1.fixture_root.7.00000000000000000000000000000002",
+      "filename": "fixture.bin",
+      "size": 5,
+      "contentSha256": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+      "contentBase64": "aGVsbG8="
+    },
+    "read": {
+      "ownerRequest": {
+        "clientOwnerRequestId": "o1.fixture_root.7.00000000000000000000000000000001",
+        "immutableParameters": {
+          "purpose": "mobile-attachment",
+          "localAttachmentId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "clientUploadId": "u1.fixture_root.7.00000000000000000000000000000002"
+    },
+    "chunkHello": {
+      "ownerRequest": {
+        "clientOwnerRequestId": "o1.fixture_root.7.00000000000000000000000000000001",
+        "immutableParameters": {
+          "purpose": "mobile-attachment",
+          "localAttachmentId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "clientUploadId": "u1.fixture_root.7.00000000000000000000000000000002",
+      "offset": 0,
+      "length": 5,
+      "chunkSha256": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+      "contentBase64": "aGVsbG8="
+    },
+    "finish": {
+      "ownerRequest": {
+        "clientOwnerRequestId": "o1.fixture_root.7.00000000000000000000000000000001",
+        "immutableParameters": {
+          "purpose": "mobile-attachment",
+          "localAttachmentId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "clientUploadId": "u1.fixture_root.7.00000000000000000000000000000002"
+    },
+    "cancel": {
+      "ownerRequest": {
+        "clientOwnerRequestId": "o1.fixture_root.7.00000000000000000000000000000001",
+        "immutableParameters": {
+          "purpose": "mobile-attachment",
+          "localAttachmentId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "clientUploadId": "u1.fixture_root.7.00000000000000000000000000000002"
+    }
+  },
+  "responses": {
+    "absent": {
+      "clientOwnerRequestId": "o1.fixture_root.7.00000000000000000000000000000001",
+      "clientUploadId": "u1.fixture_root.7.00000000000000000000000000000002",
+      "scopeId": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "lookup": { "outcome": "absent" }
+    },
+    "uploadingAtThreeBytes": {
+      "clientOwnerRequestId": "o1.fixture_root.7.00000000000000000000000000000001",
+      "clientUploadId": "u1.fixture_root.7.00000000000000000000000000000002",
+      "scopeId": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "lookup": {
+        "outcome": "present",
+        "filename": "fixture.bin",
+        "size": 5,
+        "contentSha256": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+        "recovery": {
+          "rootNamespace": "fixture_root",
+          "epoch": 7,
+          "state": "uploading",
+          "confirmedBytes": 3
+        }
+      }
+    },
+    "sealed": {
+      "clientOwnerRequestId": "o1.fixture_root.7.00000000000000000000000000000001",
+      "clientUploadId": "u1.fixture_root.7.00000000000000000000000000000002",
+      "scopeId": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "lookup": {
+        "outcome": "present",
+        "filename": "fixture.bin",
+        "size": 5,
+        "contentSha256": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+        "recovery": {
+          "rootNamespace": "fixture_root",
+          "epoch": 7,
+          "state": "sealed",
+          "confirmedBytes": 5,
+          "stageRef": {
+            "rootNamespace": "fixture_root",
+            "epoch": 7,
+            "ownerId": "owner-fixture-1",
+            "entryId": "entry-fixture-1",
+            "revision": 1,
+            "path": "/private/fixture/entry-fixture-1"
+          }
+        }
+      }
+    },
+    "epochRetired": {
+      "clientOwnerRequestId": "o1.fixture_root.7.00000000000000000000000000000001",
+      "clientUploadId": "u1.fixture_root.7.00000000000000000000000000000002",
+      "scopeId": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "lookup": {
+        "outcome": "epochRetired",
+        "proof": { "rootNamespace": "fixture_root", "epoch": 7, "retiredThrough": 7 }
+      }
+    }
+  },
+  "invalidMutations": [
+    { "case": "unknown-admission-field", "path": "admission.untrusted", "value": true },
+    { "case": "wrong-upload-epoch", "path": "clientUploadId", "value": "u1.fixture_root.8.00000000000000000000000000000002" },
+    { "case": "wrong-owner", "path": "responses.sealed.clientOwnerRequestId", "value": "o1.fixture_root.7.00000000000000000000000000000003" },
+    { "case": "wrong-scope", "path": "responses.sealed.scopeId", "value": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" },
+    { "case": "stage-ref-epoch-mismatch", "path": "responses.sealed.lookup.recovery.stageRef.epoch", "value": 8 },
+    { "case": "public-trusted-context", "path": "publicParams.read.trustedContext", "value": { "deviceId": "forbidden" } },
+    { "case": "oversized-chunk", "path": "publicParams.chunkHello.length", "value": 524289 }
+  ]
+}

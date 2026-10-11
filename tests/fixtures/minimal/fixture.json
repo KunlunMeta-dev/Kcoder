@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "name": "minimal",
+  "version": "1",
+  "description": "仅包含一个文本文件的最小工作区"
+}

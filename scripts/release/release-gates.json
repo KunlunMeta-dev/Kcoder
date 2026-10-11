@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "scope": "KCoder product consolidation release; versions remain independent",
+  "commands": [
+    {
+      "id": "rust",
+      "command": "cargo test --workspace --locked"
+    },
+    {
+      "id": "packaging-contract",
+      "command": "bash scripts/release/test-packaging-contract.sh"
+    },
+    {
+      "id": "source-secret-gate",
+      "command": "bash scripts/audit/audit_release_check.sh --current-source-only"
+    },
+    {
+      "id": "studio-unit",
+      "command": "pnpm --dir apps/kcoder-studio test"
+    },
+    {
+      "id": "renderer-unit",
+      "command": "pnpm --dir apps/kcoder-studio test:renderer"
+    },
+    {
+      "id": "mobile-unit",
+      "command": "npm --prefix apps/kcoder-studio/mobile test -- --run"
+    },
+    {
+      "id": "e2e-harness",
+      "command": "node --test apps/kcoder-studio/e2e/harness/*.test.mjs"
+    }
+  ],
+  "studioGroups": {
+    "core": {
+      "registrySet": "modelIndependentSuites",
+      "environment": [
+        "KCODER_E2E_DOCKER_BUILD_NETWORK"
+      ]
+    },
+    "native": {
+      "registrySet": "manualLiveSuites",
+      "pathIncludes": [
+        "/tauri-",
+        "/tui-",
+        "/legacy-tauri-"
+      ],
+      "environment": [
+        "KCODER_E2E_TAURI_BIN"
+      ]
+    },
+    "windows": {
+      "suites": [
+        "suites/gateway/windows-workspace-probe.e2e.mjs",
+        "suites/gateway/windows-remote-models.e2e.mjs",
+        "suites/gateway/windows-remote-oauth-failure.e2e.mjs",
+        "suites/gateway/windows-installer-lifecycle.e2e.mjs"
+      ],
+      "environment": [
+        "KCODER_E2E_WINDOWS_SSH_TARGET",
+        "KCODER_E2E_WINDOWS_SSH_CONTROL_PATH",
+        "KCODER_E2E_WINDOWS_BINARY",
+        "KCODER_E2E_WINDOWS_STUDIO_DIRECTORY",
+        "KCODER_E2E_WINDOWS_NODE",
+        "KCODER_E2E_WINDOWS_MODEL_SCOPE",
+        "KCODER_E2E_WINDOWS_NATIVE_INPUT",
+        "KCODER_E2E_WINDOWS_INTERACTIVE_INPUT",
+        "KCODER_E2E_WINDOWS_SHORT_PATHS",
+        "KCODER_E2E_WINDOWS_OLD_INSTALLER",
+        "KCODER_E2E_WINDOWS_NEW_INSTALLER",
+        "KCODER_E2E_WINDOWS_INSTALLER_UI",
+        "KCODER_E2E_WINDOWS_EXPECTED_COMMIT",
+        "KCODER_E2E_WINDOWS_EXPECTED_CLI_SHA256"
+      ]
+    },
+    "packaged": {
+      "suites": [
+        "suites/browser/packaged-desktop-smoke.e2e.mjs"
+      ],
+      "environment": [
+        "KCODER_E2E_PACKAGED_DIR",
+        "KCODER_E2E_PROCESS_SUPERVISOR_BIN"
+      ]
+    },
+    "real-model": {
+      "suites": [
+        "suites/model/real-model-protocol-matrix.e2e.mjs"
+      ],
+      "consent": "--real-model and KCODER_E2E_REAL_MODEL=1; existing bounded runner policy applies"
+    }
+  },
+  "evidencePolicy": "Required acceptance must be supported by actual run manifests. Source-level evidence may be reused only where its tested implementation and affected contracts remain unchanged; changed paths require fresh focused validation. Final packaged-resource and install/upgrade/uninstall checks must use the fixed release artifact and record its source identity and hashes. Missing prerequisites, skipped required platform checks or a checklist alone do not count as passed. This manifest does not publish automatically.",
+  "artifactGate": {
+    "program": "node",
+    "arguments": [
+      "scripts/release/artifact-manifest.mjs",
+      "--verify"
+    ],
+    "requiredArguments": [
+      "unpackedPayloadDirectory",
+      "expectedSourceCommit"
+    ],
+    "appliesTo": [
+      "cli",
+      "studio-desktop",
+      "studio-remote",
+      "studio-web",
+      "mobile-web"
+    ],
+    "mustVerifyOnTarget": "CLI embedded build_commit/build_dirty/executable_sha256 and negotiated initialize capabilities; packagingSource alone is insufficient"
+  },
+  "historicalMaintenance": {
+    "script": "scripts/audit/audit_manual_release_gate.sh",
+    "scope": "Separate historical remediation (third-party key rotation, CI secret rotation and Git history rewriting); not a gate in the existing release workflow or this product-consolidation plan. Do not fabricate its absent manual signoff."
+  }
+}

@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 1,
+  "reviewStatus": "pending",
+  "components": [
+    {
+      "name": "openssl",
+      "version": "3.5.7",
+      "versionEvidence": {
+        "kind": "binary-string",
+        "value": "OpenSSL 3.5.7 9 Jun 2026",
+        "upstreamBuildReference": "https://raw.githubusercontent.com/python/cpython/v3.14.6/PCbuild/python.props"
+      },
+      "binaries": [
+        {
+          "path": "runtime/cpython-3.14.6-windows-x86_64-none/DLLs/libcrypto-3-x64.dll",
+          "sha256": "4dc790ec01c5eb5aa1daceb8352fd44150503e9dd1415d9a1b78e440ffd725da"
+        },
+        {
+          "path": "runtime/cpython-3.14.6-windows-x86_64-none/DLLs/libssl-3-x64.dll",
+          "sha256": "9333d159a4c80102c2f07770b4cf1ecd38ccd06c3628cf33481ccc7b9c93a9c0"
+        }
+      ],
+      "notices": [
+        {
+          "file": "openssl-3.5.7.LICENSE.txt",
+          "sha256": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a",
+          "source": "https://raw.githubusercontent.com/openssl/openssl/openssl-3.5.7/LICENSE.txt"
+        }
+      ]
+    },
+    {
+      "name": "sqlite",
+      "version": "3.53.1",
+      "versionEvidence": {
+        "kind": "runtime-observation",
+        "value": "Windows sqlite3.sqlite_version = 3.53.1; _sqlite3.pyd imports sqlite3.dll"
+      },
+      "binaries": [
+        {
+          "path": "runtime/cpython-3.14.6-windows-x86_64-none/DLLs/sqlite3.dll",
+          "sha256": "1bb80c7ffe2dafef2b38f7c7e2760c7b9f99889b5193e894511b4cde3ca67192"
+        },
+        {
+          "path": "runtime/cpython-3.14.6-windows-x86_64-none/DLLs/_sqlite3.pyd",
+          "sha256": "7a32826f23215e0fdec801f1e5ece90651e771e23033e80e10bb31ed45e69439"
+        }
+      ],
+      "notices": [
+        {
+          "file": "sqlite-3.53.1.LICENSE.txt",
+          "sha256": "ee6af51062b30d532991face5164136ae6f84e265ecf8abe89dc69dac45ca1e7",
+          "source": "https://raw.githubusercontent.com/sqlite/sqlite/version-3.53.1/LICENSE.md"
+        }
+      ]
+    },
+    {
+      "name": "zlib-ng",
+      "version": "2.2.4",
+      "versionEvidence": {
+        "kind": "runtime-observation",
+        "value": "Windows zlib.ZLIBNG_VERSION = 2.2.4; zlib is a built-in module"
+      },
+      "binaries": [
+        {
+          "path": "runtime/cpython-3.14.6-windows-x86_64-none/python314.dll",
+          "sha256": "4638a16439060863c6598019119ccf3423ff287f22119922ed6bc90ee7bbe8c8"
+        }
+      ],
+      "notices": [
+        {
+          "file": "zlib-ng-2.2.4.LICENSE.txt",
+          "sha256": "6c9f0d975b41afaa34d22f55bb8986ce69e5cb7ad327cb2b28820cd425edf5ee",
+          "source": "https://raw.githubusercontent.com/zlib-ng/zlib-ng/2.2.4/LICENSE.md"
+        }
+      ]
+    },
+    {
+      "name": "zlib",
+      "version": "1.3.1",
+      "versionEvidence": {
+        "kind": "runtime-observation",
+        "value": "zlib1.dll contains deflate/inflate 1.3.1 version strings; separate from the Python zlib-ng built-in"
+      },
+      "binaries": [
+        {
+          "path": "runtime/cpython-3.14.6-windows-x86_64-none/DLLs/zlib1.dll",
+          "sha256": "76828f023f90a417632519c8f24f5af8999b4e598ffd5ddf4a1eae04a5744231"
+        }
+      ],
+      "notices": [
+        {
+          "file": "zlib-1.3.1.LICENSE.txt",
+          "sha256": "845efc77857d485d91fb3e0b884aaa929368c717ae8186b66fe1ed2495753243",
+          "source": "https://raw.githubusercontent.com/madler/zlib/v1.3.1/LICENSE"
+        }
+      ]
+    }
+  ]
+}

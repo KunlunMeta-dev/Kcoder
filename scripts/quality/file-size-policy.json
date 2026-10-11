@@ -1,0 +1,129 @@
+{
+  "maxLines": 3000,
+  "warnLines": 2400,
+  "baselineCommit": "0a2e1d5b0cadf6073c487ec79bc43d1f9f6ba6de",
+  "debt": {},
+  "resources": {
+    "apps/kcoder-studio/renderer/packages/chat-core/public/vendor/pdf/pdf.worker.mjs": {
+      "category": "third-party-pdf-worker",
+      "reason": "Preserve upstream/resource and native package-manager format; tracked separately in splitting plan section 8.",
+      "sha256": "913e24da1c2a5cc0c3fd595c83eaee15694438001b68ba8cadd4f583af53a15e"
+    },
+    "apps/kcoder-studio/renderer/src-tauri/public/vendor/pdf/pdf.worker.mjs": {
+      "category": "third-party-pdf-worker",
+      "reason": "Preserve upstream/resource and native package-manager format; tracked separately in splitting plan section 8.",
+      "sha256": "913e24da1c2a5cc0c3fd595c83eaee15694438001b68ba8cadd4f583af53a15e"
+    },
+    "dist/vendor/pdf/pdf.worker.mjs": {
+      "category": "third-party-pdf-worker",
+      "reason": "Preserve upstream/resource and native package-manager format; tracked separately in splitting plan section 8.",
+      "sha256": "913e24da1c2a5cc0c3fd595c83eaee15694438001b68ba8cadd4f583af53a15e"
+    },
+    "apps/kcoder-studio/mobile/package-lock.json": {
+      "category": "lockfile",
+      "reason": "Preserve upstream/resource and native package-manager format; tracked separately in splitting plan section 8."
+    },
+    "apps/kcoder-studio/renderer/pnpm-lock.yaml": {
+      "category": "lockfile",
+      "reason": "Preserve upstream/resource and native package-manager format; tracked separately in splitting plan section 8."
+    },
+    "apps/kcoder-studio/renderer/src-tauri/Cargo.lock": {
+      "category": "lockfile",
+      "reason": "Preserve upstream/resource and native package-manager format; tracked separately in splitting plan section 8."
+    },
+    "Cargo.lock": {
+      "category": "lockfile",
+      "reason": "Preserve upstream/resource and native package-manager format; tracked separately in splitting plan section 8."
+    },
+    "skills/docx/scripts/office/schemas/ISO-IEC29500-4_2016/sml.xsd": {
+      "category": "third-party-schema",
+      "reason": "Preserve upstream/resource and native package-manager format; tracked separately in splitting plan section 8.",
+      "sha256": "beffeed56945c22a77440122c8bdc426f3fcbe7f3b12ea0976c770d1f8d54578"
+    },
+    "skills/pptx/scripts/office/schemas/ISO-IEC29500-4_2016/sml.xsd": {
+      "category": "third-party-schema",
+      "reason": "Preserve upstream/resource and native package-manager format; tracked separately in splitting plan section 8.",
+      "sha256": "beffeed56945c22a77440122c8bdc426f3fcbe7f3b12ea0976c770d1f8d54578"
+    },
+    "skills/xlsx/scripts/office/schemas/ISO-IEC29500-4_2016/sml.xsd": {
+      "category": "third-party-schema",
+      "reason": "Preserve upstream/resource and native package-manager format; tracked separately in splitting plan section 8.",
+      "sha256": "beffeed56945c22a77440122c8bdc426f3fcbe7f3b12ea0976c770d1f8d54578"
+    },
+    "skills/docx/scripts/office/schemas/ISO-IEC29500-4_2016/wml.xsd": {
+      "category": "third-party-schema",
+      "reason": "Preserve upstream/resource and native package-manager format; tracked separately in splitting plan section 8.",
+      "sha256": "c2dd9f61f892deae6acd8d20771ea79b12018af25f3bf8d06639c8542d218cfd"
+    },
+    "skills/pptx/scripts/office/schemas/ISO-IEC29500-4_2016/wml.xsd": {
+      "category": "third-party-schema",
+      "reason": "Preserve upstream/resource and native package-manager format; tracked separately in splitting plan section 8.",
+      "sha256": "c2dd9f61f892deae6acd8d20771ea79b12018af25f3bf8d06639c8542d218cfd"
+    },
+    "skills/xlsx/scripts/office/schemas/ISO-IEC29500-4_2016/wml.xsd": {
+      "category": "third-party-schema",
+      "reason": "Preserve upstream/resource and native package-manager format; tracked separately in splitting plan section 8.",
+      "sha256": "c2dd9f61f892deae6acd8d20771ea79b12018af25f3bf8d06639c8542d218cfd"
+    },
+    "skills/docx/scripts/office/schemas/ISO-IEC29500-4_2016/dml-main.xsd": {
+      "category": "third-party-schema",
+      "reason": "Preserve upstream/resource and native package-manager format; tracked separately in splitting plan section 8.",
+      "sha256": "5375417f0f5394b8dd1a7035b9679151f19a6b65df309dec10cfb4a420cb00e9"
+    },
+    "skills/pptx/scripts/office/schemas/ISO-IEC29500-4_2016/dml-main.xsd": {
+      "category": "third-party-schema",
+      "reason": "Preserve upstream/resource and native package-manager format; tracked separately in splitting plan section 8.",
+      "sha256": "5375417f0f5394b8dd1a7035b9679151f19a6b65df309dec10cfb4a420cb00e9"
+    },
+    "skills/xlsx/scripts/office/schemas/ISO-IEC29500-4_2016/dml-main.xsd": {
+      "category": "third-party-schema",
+      "reason": "Preserve upstream/resource and native package-manager format; tracked separately in splitting plan section 8.",
+      "sha256": "5375417f0f5394b8dd1a7035b9679151f19a6b65df309dec10cfb4a420cb00e9"
+    },
+    "apps/kcoder-studio/renderer/packages/chat-core/public/vendor/pdf/cmaps/CNS2-V.bcmap": {
+      "category": "third-party-binary-cmap",
+      "reason": "PDF.js binary character mapping; not UTF-8 source.",
+      "sha256": "2e4f70a8afd23a121030fc2e5b5f3816e903b11e7ba8b8c09654b31c80399c38"
+    },
+    "apps/kcoder-studio/renderer/packages/chat-core/public/vendor/pdf/cmaps/ETenms-B5-H.bcmap": {
+      "category": "third-party-binary-cmap",
+      "reason": "PDF.js binary character mapping; not UTF-8 source.",
+      "sha256": "d5f5a73da4173b7da9a3a20e16f26f9cd5d12deb1553409919e0cec6fd37fdee"
+    },
+    "apps/kcoder-studio/renderer/packages/chat-core/public/vendor/pdf/cmaps/GB-H.bcmap": {
+      "category": "third-party-binary-cmap",
+      "reason": "PDF.js binary character mapping; not UTF-8 source.",
+      "sha256": "1018c777a8910b5bb46d7d54a4aee9d51ca5cff8addb2b41c969d9101cb3fd1c"
+    },
+    "apps/kcoder-studio/renderer/src-tauri/public/vendor/pdf/cmaps/CNS2-V.bcmap": {
+      "category": "third-party-binary-cmap",
+      "reason": "PDF.js binary character mapping; not UTF-8 source.",
+      "sha256": "2e4f70a8afd23a121030fc2e5b5f3816e903b11e7ba8b8c09654b31c80399c38"
+    },
+    "apps/kcoder-studio/renderer/src-tauri/public/vendor/pdf/cmaps/ETenms-B5-H.bcmap": {
+      "category": "third-party-binary-cmap",
+      "reason": "PDF.js binary character mapping; not UTF-8 source.",
+      "sha256": "d5f5a73da4173b7da9a3a20e16f26f9cd5d12deb1553409919e0cec6fd37fdee"
+    },
+    "apps/kcoder-studio/renderer/src-tauri/public/vendor/pdf/cmaps/GB-H.bcmap": {
+      "category": "third-party-binary-cmap",
+      "reason": "PDF.js binary character mapping; not UTF-8 source.",
+      "sha256": "1018c777a8910b5bb46d7d54a4aee9d51ca5cff8addb2b41c969d9101cb3fd1c"
+    },
+    "dist/vendor/pdf/cmaps/CNS2-V.bcmap": {
+      "category": "third-party-binary-cmap",
+      "reason": "PDF.js binary character mapping; not UTF-8 source.",
+      "sha256": "2e4f70a8afd23a121030fc2e5b5f3816e903b11e7ba8b8c09654b31c80399c38"
+    },
+    "dist/vendor/pdf/cmaps/ETenms-B5-H.bcmap": {
+      "category": "third-party-binary-cmap",
+      "reason": "PDF.js binary character mapping; not UTF-8 source.",
+      "sha256": "d5f5a73da4173b7da9a3a20e16f26f9cd5d12deb1553409919e0cec6fd37fdee"
+    },
+    "dist/vendor/pdf/cmaps/GB-H.bcmap": {
+      "category": "third-party-binary-cmap",
+      "reason": "PDF.js binary character mapping; not UTF-8 source.",
+      "sha256": "1018c777a8910b5bb46d7d54a4aee9d51ca5cff8addb2b41c969d9101cb3fd1c"
+    }
+  }
+}

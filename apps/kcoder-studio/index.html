@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <title>KCoder Studio</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand"><span class="brand-mark">K</span><span>KCoder Studio</span></div>
+        <button class="new-thread" id="new-thread" type="button"><span>＋</span> 新建会话</button>
+        <section class="side-section">
+          <div class="side-label">服务器</div>
+          <div id="server-list" class="server-list" aria-live="polite">
+            <div class="server-loading">正在加载服务器…</div>
+          </div>
+        </section>
+        <section class="side-section sessions">
+          <div class="side-label">最近会话</div>
+          <button class="session active" type="button"><span class="session-glyph">⌁</span><span id="session-title-side">第一版远程客户端</span></button>
+        </section>
+        <div class="sidebar-footer">
+          <div class="avatar">HY</div><div><strong>开发环境</strong><small>本地 SSH 网关</small></div>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <h1 id="session-title">第一版远程客户端</h1>
+            <div class="breadcrumb"><span id="connection-label">等待连接</span><span>·</span><span id="thread-label">尚未创建会话</span></div>
+          </div>
+          <div class="top-actions">
+            <button class="icon-button" id="reconnect" type="button" title="重新连接">↻</button>
+            <span class="connection-pill"><span class="status-dot"></span><span id="pill-label">离线</span></span>
+          </div>
+        </header>
+
+        <section class="transcript" id="transcript" aria-live="polite">
+          <div class="welcome" id="welcome">
+            <div class="welcome-symbol">山</div>
+            <h2>从这里开始远程工作</h2>
+            <p>连接虚拟机上的 KCoder app-server，查看流式回复、工具调用并随时中断任务。</p>
+            <div class="suggestions">
+              <button data-prompt="检查当前项目状态并总结关键模块">检查项目状态</button>
+              <button data-prompt="运行相关测试并解释失败原因">运行并分析测试</button>
+              <button data-prompt="帮我定位最近一次构建失败">定位构建失败</button>
+            </div>
+          </div>
+        </section>
+
+        <footer class="composer-wrap">
+          <form class="composer" id="composer">
+            <textarea id="prompt" rows="1" placeholder="给 KCoder 发送消息…" aria-label="消息"></textarea>
+            <div class="composer-bottom">
+              <div class="composer-meta"><span class="mode-chip">代理模式</span><span>Enter 发送 · Shift+Enter 换行</span></div>
+              <div class="composer-actions">
+                <button class="stop-button" id="stop" type="button" hidden>■ 停止</button>
+                <button class="send-button" id="send" type="submit" disabled aria-label="发送">↑</button>
+              </div>
+            </div>
+          </form>
+          <div class="safety-note">KCoder 可能会犯错，请检查重要变更。</div>
+        </footer>
+      </main>
+
+      <aside class="activity-panel">
+        <header><div><span class="eyebrow">实时</span><h2>活动</h2></div><span class="event-count" id="event-count">0</span></header>
+        <div class="activity-empty" id="activity-empty"><span>⌁</span><p>工具调用和服务器事件会显示在这里</p></div>
+        <div class="activity-list" id="activity-list"></div>
+      </aside>
+    </div>
+    <script type="module" src="/src/app.js"></script>
+  </body>
+</html>

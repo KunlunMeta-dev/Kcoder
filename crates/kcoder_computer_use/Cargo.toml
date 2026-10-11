@@ -1,0 +1,29 @@
+[package]
+name = "kcoder_computer_use"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+serde = { workspace = true }
+sha2 = { workspace = true }
+async-trait = { workspace = true }
+getrandom = "0.3"
+subtle = "2"
+zeroize = "1"
+tokio = { workspace = true }
+serde_json = { workspace = true }
+kcoder_types = { path = "../kcoder_types" }
+uuid = { version = "1", features = ["v4"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Globalization", "Win32_System_Threading", "Win32_System_LibraryLoader", "Win32_System_RemoteDesktop", "Win32_System_StationsAndDesktops", "Win32_Security", "Win32_Security_Authorization", "Win32_System_Pipes", "Win32_System_JobObjects", "Win32_System_DataExchange", "Win32_System_Memory", "Win32_System_SystemServices", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
+
+[target.'cfg(windows)'.dev-dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Graphics_Gdi"] }

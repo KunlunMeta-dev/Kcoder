@@ -1,0 +1,3 @@
+export const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
+export const DIRECT_ATTACHMENT_BYTES = 256 * 1024;
+export const ATTACHMENT_CHUNK_BYTES = 512 * 1024;

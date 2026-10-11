@@ -1,0 +1,22 @@
+[package]
+name = "kcoder_app_protocol"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[features]
+json-schema = ["dep:schemars", "kcoder_types/json-schema"]
+
+[dependencies]
+schemars = { version = "0.8", optional = true }
+kcoder_types = { path = "../kcoder_types" }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[[example]]
+name = "export_contracts"
+required-features = ["json-schema"]

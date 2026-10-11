@@ -1,0 +1,311 @@
+{
+  "checked_at": "2026-10-02",
+  "rules": [
+    {
+      "plugin_id": "earnings-interpretation@trae-remote-official",
+      "source": {
+        "type": "trae",
+        "id": "fe4da821-9a4e-4c48-a052-1a5b3904bebd",
+        "version": "9.8.4"
+      },
+      "version": "9.8.4",
+      "code": "installation_package_integrity",
+      "message": "This tested package does not match its declared size or SHA-256. Installation is unavailable until the publisher corrects the package and it is verified again.",
+      "credential_env": []
+    },
+    {
+      "plugin_id": "vefaas@trae-remote-official",
+      "source": {
+        "type": "trae",
+        "id": "ca08d3e0-f917-474d-b211-b43e0e991bf5",
+        "version": "0.0.2"
+      },
+      "version": "0.0.2",
+      "code": "installation_package_integrity",
+      "message": "This tested package does not match its declared size or SHA-256. Installation is unavailable until the publisher corrects the package and it is verified again.",
+      "credential_env": []
+    },
+    {
+      "plugin_id": "gitee@trae-remote-official",
+      "source": {
+        "type": "trae",
+        "id": "0f8003a1-ebe2-40d9-a618-2bcbe5414db2",
+        "version": "0.0.3"
+      },
+      "version": "0.0.3",
+      "code": "installation_credentials",
+      "message": "MCP connector credential `connector.gitee.ACCESS_TOKEN` is not configured; set `KCODER_CONNECTOR_GITEE_ACCESS_TOKEN` or `GITEE_ACCESS_TOKEN` on the execution target. Host application login is not shared with KCoder",
+      "credential_env": [
+        "KCODER_CONNECTOR_GITEE_ACCESS_TOKEN",
+        "GITEE_ACCESS_TOKEN"
+      ]
+    },
+    {
+      "plugin_id": "tianyancha@trae-remote-official",
+      "source": {
+        "type": "trae",
+        "id": "0217f089-068d-44e7-a9c1-284953a648b1",
+        "version": "0.1.1"
+      },
+      "version": "0.1.1",
+      "code": "installation_credentials",
+      "message": "MCP connector credential `connector.tianyancha.ACCESS_TOKEN` is not configured; set `KCODER_CONNECTOR_TIANYANCHA_ACCESS_TOKEN` or `TIANYANCHA_ACCESS_TOKEN` on the execution target. Host application login is not shared with KCoder",
+      "credential_env": [
+        "KCODER_CONNECTOR_TIANYANCHA_ACCESS_TOKEN",
+        "TIANYANCHA_ACCESS_TOKEN"
+      ]
+    },
+    {
+      "plugin_id": "eastmoney@trae-remote-official",
+      "source": {
+        "type": "trae",
+        "id": "d361ef4b-8139-4498-ae83-85234611e453",
+        "version": "0.0.3"
+      },
+      "version": "0.0.3",
+      "code": "installation_credentials",
+      "message": "MCP connector credential `connector.eastmoney.ACCESS_TOKEN` is not configured; set `KCODER_CONNECTOR_EASTMONEY_ACCESS_TOKEN` or `EASTMONEY_ACCESS_TOKEN` on the execution target. Host application login is not shared with KCoder",
+      "credential_env": [
+        "KCODER_CONNECTOR_EASTMONEY_ACCESS_TOKEN",
+        "EASTMONEY_ACCESS_TOKEN"
+      ]
+    },
+    {
+      "plugin_id": "tdx@trae-remote-official",
+      "source": {
+        "type": "trae",
+        "id": "b5250da8-ee8c-4b38-bcc2-f441a41a9b55",
+        "version": "0.1.2"
+      },
+      "version": "0.1.2",
+      "code": "installation_credentials",
+      "message": "MCP connector credential `connector.tdx.ACCESS_TOKEN` is not configured; set `KCODER_CONNECTOR_TDX_ACCESS_TOKEN` or `TDX_ACCESS_TOKEN` on the execution target. Host application login is not shared with KCoder",
+      "credential_env": [
+        "KCODER_CONNECTOR_TDX_ACCESS_TOKEN",
+        "TDX_ACCESS_TOKEN"
+      ]
+    },
+    {
+      "plugin_id": "postman@trae-remote-official",
+      "source": {
+        "type": "trae",
+        "id": "081f58bf-4352-4656-b72b-78f3d69a1c99",
+        "version": "0.1.0"
+      },
+      "version": "0.1.0",
+      "code": "installation_credentials",
+      "message": "MCP connector credential `connector.postman.ACCESS_TOKEN` is not configured; set `KCODER_CONNECTOR_POSTMAN_ACCESS_TOKEN` or `POSTMAN_ACCESS_TOKEN` on the execution target. Host application login is not shared with KCoder",
+      "credential_env": [
+        "KCODER_CONNECTOR_POSTMAN_ACCESS_TOKEN",
+        "POSTMAN_ACCESS_TOKEN"
+      ]
+    },
+    {
+      "plugin_id": "tt-ads@trae-remote-official",
+      "source": {
+        "type": "trae",
+        "id": "e04043af-6088-4776-be13-0392adb566d5",
+        "version": "0.0.1"
+      },
+      "version": "0.0.1",
+      "code": "installation_credentials",
+      "message": "MCP connector credential `connector.tt-ads.ACCESS_TOKEN` is not configured; set `KCODER_CONNECTOR_TT_ADS_ACCESS_TOKEN` or `TT_ADS_ACCESS_TOKEN` on the execution target. Host application login is not shared with KCoder",
+      "credential_env": [
+        "KCODER_CONNECTOR_TT_ADS_ACCESS_TOKEN",
+        "TT_ADS_ACCESS_TOKEN"
+      ]
+    },
+    {
+      "plugin_id": "gitlab@trae-remote-official",
+      "source": {
+        "type": "trae",
+        "id": "fe04d2e2-b147-45a9-8394-42b4feaca75e",
+        "version": "0.0.0"
+      },
+      "version": "0.0.0",
+      "code": "installation_credentials",
+      "message": "MCP connector credential `connector.gitlab.ACCESS_TOKEN` is not configured; set `KCODER_CONNECTOR_GITLAB_ACCESS_TOKEN` or `GITLAB_ACCESS_TOKEN` on the execution target. Host application login is not shared with KCoder",
+      "credential_env": [
+        "KCODER_CONNECTOR_GITLAB_ACCESS_TOKEN",
+        "GITLAB_ACCESS_TOKEN"
+      ]
+    },
+    {
+      "plugin_id": "weiyun@trae-remote-official",
+      "source": {
+        "type": "trae",
+        "id": "7377d640-93d5-4813-8f45-9192d410470f",
+        "version": "1.0.3"
+      },
+      "version": "1.0.3",
+      "code": "installation_credentials",
+      "message": "MCP connector credential `connector.weiyun.ACCESS_TOKEN` is not configured; set `KCODER_CONNECTOR_WEIYUN_ACCESS_TOKEN` or `WEIYUN_ACCESS_TOKEN` on the execution target. Host application login is not shared with KCoder",
+      "credential_env": [
+        "KCODER_CONNECTOR_WEIYUN_ACCESS_TOKEN",
+        "WEIYUN_ACCESS_TOKEN"
+      ]
+    },
+    {
+      "plugin_id": "sorftime@trae-remote-official",
+      "source": {
+        "type": "trae",
+        "id": "f6fbf874-ee1d-4cde-a3a5-773126773f34",
+        "version": "0.1.0"
+      },
+      "version": "0.1.0",
+      "code": "installation_credentials",
+      "message": "MCP connector credential `connector.sorftime.ACCESS_TOKEN` is not configured; set `KCODER_CONNECTOR_SORFTIME_ACCESS_TOKEN` or `SORFTIME_ACCESS_TOKEN` on the execution target. Host application login is not shared with KCoder",
+      "credential_env": [
+        "KCODER_CONNECTOR_SORFTIME_ACCESS_TOKEN",
+        "SORFTIME_ACCESS_TOKEN"
+      ]
+    },
+    {
+      "plugin_id": "n8n-mcp-synta-codex@trae-remote-official",
+      "source": {
+        "type": "trae",
+        "id": "bc14dac1-3e55-40d6-ad6e-6081ef025187",
+        "version": "1.0.0"
+      },
+      "version": "1.0.0",
+      "code": "installation_credentials",
+      "message": "MCP connector credential `connector.synta-mcp.ACCESS_TOKEN` is not configured; set `KCODER_CONNECTOR_SYNTA_MCP_ACCESS_TOKEN` or `SYNTA_MCP_ACCESS_TOKEN` on the execution target. Host application login is not shared with KCoder",
+      "credential_env": [
+        "KCODER_CONNECTOR_SYNTA_MCP_ACCESS_TOKEN",
+        "SYNTA_MCP_ACCESS_TOKEN"
+      ]
+    },
+    {
+      "plugin_id": "qibook@trae-remote-official",
+      "source": {
+        "type": "trae",
+        "id": "aa7a40b4-9824-457c-9cca-2a6663c53df1",
+        "version": "0.0.2"
+      },
+      "version": "0.0.2",
+      "code": "installation_credentials",
+      "message": "MCP connector credential `connector.qibook.ACCESS_TOKEN` is not configured; set `KCODER_CONNECTOR_QIBOOK_ACCESS_TOKEN` or `QIBOOK_ACCESS_TOKEN` on the execution target. Host application login is not shared with KCoder",
+      "credential_env": [
+        "KCODER_CONNECTOR_QIBOOK_ACCESS_TOKEN",
+        "QIBOOK_ACCESS_TOKEN"
+      ]
+    },
+    {
+      "plugin_id": "tavily@trae-remote-official",
+      "source": {
+        "type": "trae",
+        "id": "90ab5007-e1a3-4226-91f7-b17823aa320b",
+        "version": "0.4.0"
+      },
+      "version": "0.4.0",
+      "code": "installation_credentials",
+      "message": "MCP connector credential `connector.tavily.ACCESS_TOKEN` is not configured; set `KCODER_CONNECTOR_TAVILY_ACCESS_TOKEN` or `TAVILY_ACCESS_TOKEN` on the execution target. Host application login is not shared with KCoder",
+      "credential_env": [
+        "KCODER_CONNECTOR_TAVILY_ACCESS_TOKEN",
+        "TAVILY_ACCESS_TOKEN"
+      ]
+    },
+    {
+      "plugin_id": "yuandian@trae-remote-official",
+      "source": {
+        "type": "trae",
+        "id": "f3fc7a45-9c89-4742-8e7c-72cfbfe1670e",
+        "version": "1.0.0"
+      },
+      "version": "1.0.0",
+      "code": "installation_credentials",
+      "message": "MCP connector credential `connector.yuandian.ACCESS_TOKEN` is not configured; set `KCODER_CONNECTOR_YUANDIAN_ACCESS_TOKEN` or `YUANDIAN_ACCESS_TOKEN` on the execution target. Host application login is not shared with KCoder",
+      "credential_env": [
+        "KCODER_CONNECTOR_YUANDIAN_ACCESS_TOKEN",
+        "YUANDIAN_ACCESS_TOKEN"
+      ]
+    },
+    {
+      "plugin_id": "wemeet@trae-remote-official",
+      "source": {
+        "type": "trae",
+        "id": "a1d23ae5-8f3b-401c-8eb9-7cfcef071b14",
+        "version": "1.0.11"
+      },
+      "version": "1.0.11",
+      "code": "installation_credentials",
+      "message": "MCP connector credential `connector.wemeet.ACCESS_TOKEN` is not configured; set `KCODER_CONNECTOR_WEMEET_ACCESS_TOKEN` or `WEMEET_ACCESS_TOKEN` on the execution target. Host application login is not shared with KCoder",
+      "credential_env": [
+        "KCODER_CONNECTOR_WEMEET_ACCESS_TOKEN",
+        "WEMEET_ACCESS_TOKEN"
+      ]
+    },
+    {
+      "plugin_id": "claude-asana@trae-remote-official",
+      "source": {
+        "type": "trae",
+        "id": "9a3a6ea1-f494-4f9e-9b84-86118788d382",
+        "version": "0.0.0"
+      },
+      "version": "0.0.0",
+      "code": "installation_credentials",
+      "message": "MCP connector credential `connector.asana.ACCESS_TOKEN` is not configured; set `KCODER_CONNECTOR_ASANA_ACCESS_TOKEN` or `ASANA_ACCESS_TOKEN` on the execution target. Host application login is not shared with KCoder",
+      "credential_env": [
+        "KCODER_CONNECTOR_ASANA_ACCESS_TOKEN",
+        "ASANA_ACCESS_TOKEN"
+      ]
+    },
+    {
+      "plugin_id": "hyperframes@claude-plugins-official",
+      "source": {
+        "type": "git",
+        "url": "https://github.com/heygen-com/hyperframes.git",
+        "path": null,
+        "ref_name": null,
+        "sha": "8d2b6e7bdc1c2c26d1abf64ef075c00a1bb230a2"
+      },
+      "version": null,
+      "code": "installation_download_unverified",
+      "message": "Installation verification for this source timed out on the tested network. This is a download failure, not a permanent capability limitation; this revision remains unavailable until revalidated.",
+      "credential_env": [],
+      "target": "linux-x86_64"
+    },
+    {
+      "plugin_id": "liquid-lsp@claude-plugins-official",
+      "source": {
+        "type": "git",
+        "url": "https://github.com/Shopify/liquid-skills.git",
+        "path": "plugins/liquid-lsp",
+        "ref_name": "main",
+        "sha": "ae3e4cc3f454923e388bbd841fd931f0c7bf5be4"
+      },
+      "version": null,
+      "code": "installation_unsupported",
+      "message": "This plugin only declares LSP capabilities that are not activated by the current plugin runtime.",
+      "credential_env": []
+    },
+    {
+      "plugin_id": "mintlify@claude-plugins-official",
+      "source": {
+        "type": "git",
+        "url": "https://github.com/mintlify/mintlify-claude-plugin.git",
+        "path": null,
+        "ref_name": null,
+        "sha": "acd6d2e0128c4f235d55cfb8d8c91ecbdd5df8cc"
+      },
+      "version": null,
+      "code": "installation_missing_manifest",
+      "message": "The tested source has no supported plugin manifest; it cannot currently be installed as a KCoder plugin.",
+      "credential_env": []
+    },
+    {
+      "plugin_id": "private-journal-mcp@superpowers-marketplace",
+      "source": {
+        "type": "git",
+        "url": "https://github.com/obra/private-journal-mcp.git",
+        "path": null,
+        "ref_name": null,
+        "sha": null
+      },
+      "version": "2.0.1",
+      "code": "installation_missing_manifest",
+      "message": "The tested source has no supported plugin manifest; it cannot currently be installed as a KCoder plugin.",
+      "credential_env": []
+    }
+  ]
+}

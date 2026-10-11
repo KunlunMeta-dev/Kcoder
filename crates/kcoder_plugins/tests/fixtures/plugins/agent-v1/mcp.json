@@ -1,0 +1,6 @@
+{
+  "fixture": {
+    "command": "fixture-mcp",
+    "args": []
+  }
+}
