@@ -1,0 +1,15 @@
+{
+  "gateways": [
+    {
+      "id": "cyx",
+      "secret": "",
+      "pairingToken": "",
+      "maxConnections": 128,
+      "maxBytesPerWindow": 67108864,
+      "trafficWindowMs": 60000
+    }
+  ],
+  "sharedHosts": [
+    "hyf2333.top:8451"
+  ]
+}

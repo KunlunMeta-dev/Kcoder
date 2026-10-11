@@ -1,0 +1,23 @@
+{
+  "name": "@kcoder/relay",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "server": "node src/server.mjs",
+    "client": "node src/client.mjs",
+    "pair": "node src/pair.mjs",
+    "test": "node --test test/*.test.mjs",
+    "gateway": "node src/gateway.mjs",
+    "deploy": "node src/deploy.mjs",
+    "install:local": "node src/install-local.mjs",
+    "verify": "node src/verify.mjs"
+  },
+  "dependencies": {
+    "qrcode": "1.5.4",
+    "ws": "8.22.0"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "status": "FROZEN_TEST_INPUTS_NOT_PRODUCT_APPLIED",
+  "candidate": {
+    "revision": "static02",
+    "manifestSha256": "d33d56bf0bbecac72f66e4551054c80ef5c41d018fc00d03f6ef92f92ab6213d",
+    "productsDiffSha256": "02660e5014de895ed2c142e96a23abbf446070da0efef495e94c072cd58e117f",
+    "sourceDigest": "9780dd897ff6c3f5028bcbe058ee9d4c376b8408761b2829999ce005ee649a91",
+    "fileCount": 9
+  },
+  "sourceFiles": {
+    "apps/kcoder-studio/mobile/src/components/attachment-upload.ts": "c35f62aaaff4ad90f58936c53481fc143f8752de91c72a0bc017f3b8cfe3d6c5",
+    "apps/kcoder-studio/mobile/src/gateway/rpc.ts": "f86ef19018dbde0fe092b603c2898e4442fbb3af1523b782c0bce2faa2f7fbc7",
+    "apps/kcoder-studio/mobile/src/gateway/types.ts": "eb2caf2ca041feaddf9c4eb6c297040c89e24d60dba203b0308819d85a2b5310",
+    "apps/kcoder-studio/mobile/src/protocol/attachment-retention.ts": "5559ea1445019f72072f00e167d5a2cef3937b19ec7491760e53666cbf2d6fa5",
+    "apps/kcoder-studio/mobile/src/protocol/sha256-stream.ts": "d234eed049099d91f3fc7a3e7c66a5eacad833dc11b0ed8ee1113a59f50a2453",
+    "apps/kcoder-studio/mobile/src/storage/context-lock.ts": "ae31282aef0cacb618303086b2d3f6f7790857db8022c92ee3c2a60a0a0d7163",
+    "apps/kcoder-studio/mobile/src/storage/profile-state-removal.ts": "8705ccae24e58a4638df652678c8584619dacf34380cbae69cd01ca6e4eee5dd",
+    "apps/kcoder-studio/mobile/src/storage/profile-store.ts": "45b8eb54d5de2b36cb6580056cf972db73611156b05915a12017bb6151f2c413",
+    "apps/kcoder-studio/mobile/src/storage/retained-attachment-upload.ts": "bb9a969d586b4ff19f09ddaa1af9f4c5e3abd2327b2640fb323b0bb23ab7390c",
+    "apps/kcoder-studio/mobile/src/storage/secure.ts": "f396c1b36594b8e6e2fe84ad775fa816d748d6e6e19ea095a0b2e519bfde04b6",
+    "apps/kcoder-studio/mobile/src/storage/staged-attachment-bytes.native.ts": "6bd1233fa44b641acbbba1ed2f39f5f3fcc1188ae2956688eb04d75e205ca1b6",
+    "apps/kcoder-studio/mobile/src/storage/staged-attachment-bytes.ts": "5e691b30ec3533f64279ed20558c5febd47b7d1ad0f42db94bdc8ea312922942",
+    "apps/kcoder-studio/mobile/src/storage/staged-attachment-bytes.web.ts": "de6d5bf708adfe61916813394d750436ee7d8cf2659dfc1abb84808ddec1d08f",
+    "apps/kcoder-studio/mobile/src/storage/staged-attachment-store.ts": "ba529b6428d32ae221d06ce7871d359992dfb1e734c3b499ce6f4390d6ed7112",
+    "apps/kcoder-studio/mobile/src/storage/workspace-profile-fence.ts": "58c461e9272cfd7380b5bf0938b422812af3e6135a306a5791e187c6714e2ca0",
+    "apps/kcoder-studio/shared/gatewayConnectionBudget.ts": "00384ebd57aa88952ae877a50850225d112d19a8167171b2a64a47b31e080bf2",
+    "apps/kcoder-studio/shared/gatewayRequestDeadline.js": "04bf06e144fb2f430d5b7ace78d8e7157b7a8f3308a6dfc77d859c007c6d95b2"
+  },
+  "runtimeBoundary": {
+    "backend": "candidate Web IndexedDB backend and real Browser Web Locks",
+    "nativeBackend": "pinned for provenance, excluded from browser bundle",
+    "gateway": "actual candidate GatewayRpcClient and WebSocket transport against a loopback scripted protocol peer",
+    "authorization": "only ensureGatewayAuthorization is replaced by a no-op shim; no production Gateway, Relay, Provider, credential or external network"
+  }
+}

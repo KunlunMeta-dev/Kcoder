@@ -1,0 +1,10 @@
+[package]
+name = "kcoder-e2e-rust-fixture"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+
+# Materialized fixtures usually remain under the KCoder repository; an empty workspace prevents automatic inclusion by a parent workspace.
+[workspace]

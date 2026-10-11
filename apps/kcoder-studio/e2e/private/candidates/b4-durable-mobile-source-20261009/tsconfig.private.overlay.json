@@ -1,0 +1,46 @@
+{
+  "extends": "../../../../mobile/tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "incremental": false,
+    "allowJs": true,
+    "checkJs": false,
+    "resolveJsonModule": true,
+    "baseUrl": "./typecheck-overlay",
+    "paths": {
+      "@/*": [
+        "source/apps/kcoder-studio/mobile/src/*",
+        "../../../../../mobile/src/*"
+      ],
+      "react-native": [
+        "../support/react-native.ts"
+      ],
+      "vitest": [
+        "../../../../../mobile/node_modules/vitest"
+      ],
+      "@react-native-async-storage/async-storage": [
+        "../../../../../mobile/node_modules/@react-native-async-storage/async-storage"
+      ],
+      "expo-file-system": [
+        "../../../../../mobile/node_modules/expo-file-system"
+      ]
+    },
+    "typeRoots": [
+      "../../../../mobile/node_modules/@types"
+    ],
+    "types": [
+      "node"
+    ]
+  },
+  "include": [
+    "*.review.test.ts",
+    "support/**/*.ts",
+    "typecheck-overlay/source/apps/kcoder-studio/mobile/src/**/*.ts",
+    "typecheck-overlay/source/apps/kcoder-studio/mobile/src/**/*.tsx",
+    "typecheck-overlay/source/apps/kcoder-studio/shared/**/*.ts",
+    "typecheck-overlay/source/apps/kcoder-studio/shared/**/*.js"
+  ],
+  "exclude": [
+    "**/node_modules/**"
+  ]
+}

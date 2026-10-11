@@ -1,0 +1,18 @@
+{
+  "id": "kcoder-legacy",
+  "name": "KCoder Legacy",
+  "version": "0.1.0",
+  "description": "Existing KCoder hook-only manifest",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo legacy"
+          }
+        ]
+      }
+    ]
+  }
+}

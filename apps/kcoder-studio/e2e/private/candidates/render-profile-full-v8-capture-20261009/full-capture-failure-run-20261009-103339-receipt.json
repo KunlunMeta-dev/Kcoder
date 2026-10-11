@@ -1,0 +1,181 @@
+{
+  "schemaVersion": 1,
+  "status": "FAILED_DIAGNOSTIC_PRESERVED_NO_RETRY",
+  "classification": "DIAGNOSTIC_ONLY",
+  "performanceSample": false,
+  "performanceDistributionEligible": false,
+  "scope": {
+    "source": "after",
+    "messages": 500,
+    "samples": 1,
+    "panels": [
+      "unmounted",
+      "mounted-hidden"
+    ],
+    "captureFullCpuProfile": true,
+    "modelOrProvider": false,
+    "rustRealTurn": false,
+    "native": "NOT_RUN"
+  },
+  "execution": {
+    "execSessionId": 79215,
+    "command": [
+      "/home/hyf/.local/opt/node-v22.17.0-linux-x64/bin/node",
+      "apps/kcoder-studio/e2e/private/candidates/render-profile-full-v8-capture-20261009/mobile-render-profile.full-capture.candidate.mjs",
+      "--sources=after",
+      "--messages=500",
+      "--samples=1",
+      "--capture-stack-diagnostic=false",
+      "--capture-seed-ui-dom-trace=false",
+      "--runtime-consumer-diagnostic=false",
+      "--follow-gesture-regression=false",
+      "--tail-window-product-regression=false",
+      "--tail-window-product-stage=combined",
+      "--tail-window-pagination-regression=false",
+      "--core-attribution-only=true",
+      "--capture-full-cpu-profile=true",
+      "--after-manifest=/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/phone-ux-upstream-integration-20261008/target/private-phone-ux-implementation/mobile-web-export-current336-source-maps-20261009/export-manifest.json",
+      "--after-source-provenance=/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/phone-ux-upstream-integration-20261008/target/private-phone-ux-implementation/mobile-web-export-current336-source-maps-20261009/provenance.json",
+      "--after-bundle-root=/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/phone-ux-upstream-integration-20261008/target/private-phone-ux-implementation/mobile-web-export-current336-source-maps-20261009/bundle",
+      "--after-export-manifest-sha256=7641ceac87eb5a611388d0366a2331f2b1a54a06e4674be69f1247329aa6e03f",
+      "--after-source-provenance-sha256=d6b392e700026596e2dbdb4273b3c5c7851b90b466b21172b2db1667fe7f24a5",
+      "--after-source-tree-sha256=effa93130e74c958a4fd6639e79efab1d1a8bc78bcd18648aa9f70fe26f2b233",
+      "--after-shared-input-sha256=5443f5e695e75b82a1365baf90a3c280239bead8855647becfa2c9d67e91fe88",
+      "--after-source-freeze-digest=604d8915c48d56ac58404990183072b73db0c63abd68821a974b311b2f4924a5",
+      "--after-dependency-source-tree-sha256=d91f89f1237d2139ef31ee75565230105014536dc5c9a8c34bf436d0bcc7340c",
+      "--gateway-runtime-root=/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/phone-ux-upstream-integration-20261008/target/private-phone-ux-implementation/render-profile-gateway-runtime-c22-20261009",
+      "--gateway-binary=/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/phone-ux-upstream-integration-20261008/target/private-phone-ux-validation/b2-static03-build-20261008/frozen-candidate/kcoder",
+      "--gateway-binary-sha256=289618f7e0670be9840b48adcd93d73261ea1c20034596ae6a95d5ed41f3b67d",
+      "--gateway-source-tree-sha256=02f803a6da08b5e6ee0915ed35da295b2cfd84548ff8c09d3ba67016233f0e24",
+      "--gateway-dependency-tree-sha256=e4c3f6c05ae21d89fe452794dd4c507c72b4fdac6646aa8eab19874275336954",
+      "--gateway-runtime-manifest-sha256=474ea99288424030dddcba6a63f47689e8dd7f24c18ca5a9e21bb78c6262c39b"
+    ],
+    "environment": {
+      "mode": "env -i",
+      "values": {
+        "PATH": "/usr/bin:/bin",
+        "KCODER_E2E_CHROMIUM_NO_SANDBOX": "1"
+      },
+      "inheritedCredentialsOrDisplay": false
+    },
+    "workingDirectory": "/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/phone-ux-upstream-integration-20261008",
+    "runContext": "target/test/apps/kcoder-studio/e2e/private/candidates/render-profile-full-v8-capture-20261009/mobile-render-profile.full-capture.candidate.mjs/20261009-103339.395Z",
+    "runManifestSha256": "558a2ada1d1af02c9288d33cc9cab3b2cd5350e7f38007627625ba5c1f9517d8",
+    "resultSha256": "36371c06408b12ae3b697a439e10756d91b062a311613c44a12afd7f2e8529cd"
+  },
+  "candidatePinsAtExecution": {
+    "suiteSha256": "1c582444f7ae62ef94783700a3b7a367d6aff5d187132f3a4532aeb9876fc1db",
+    "helperSha256": "1b45dd050eae4f251480b129a408dd91b28f7d18d3ea6461c33eb46bb9464897",
+    "testSha256": "2e2d40bdec9f8ade4c42ef92d88ab73487026f9e2e858015dfc1a71b0705bc3b",
+    "launchPlanSha256": "e4c8a1cfce01f1c5e52eebcfbfa99be619a51871f5ca15c3573e088229ab430e"
+  },
+  "inputs": {
+    "exportManifestSha256": "7641ceac87eb5a611388d0366a2331f2b1a54a06e4674be69f1247329aa6e03f",
+    "bundleSha256": "f33e10d2b686af7fb03228208ce06e177b54da4eecc700639d6abb18fe248458",
+    "bundleFileCount": 38,
+    "sourceProvenanceSha256": "d6b392e700026596e2dbdb4273b3c5c7851b90b466b21172b2db1667fe7f24a5",
+    "gatewayManifestSha256": "474ea99288424030dddcba6a63f47689e8dd7f24c18ca5a9e21bb78c6262c39b",
+    "gatewaySourceTreeSha256": "02f803a6da08b5e6ee0915ed35da295b2cfd84548ff8c09d3ba67016233f0e24",
+    "gatewayDependencyTreeSha256": "e4c3f6c05ae21d89fe452794dd4c507c72b4fdac6646aa8eab19874275336954",
+    "gatewayBinarySha256": "289618f7e0670be9840b48adcd93d73261ea1c20034596ae6a95d5ed41f3b67d"
+  },
+  "failure": {
+    "stage": "required full profile artifact gate after the unmounted-panel active burst",
+    "message": "AssertionError [ERR_ASSERTION]: full CDP profile capture must preserve sanitized nodes, samples, and timeDeltas\n    at file:///data1/hyf/20260822_agent/Kunlun-Code-CYX/target/phone-ux-upstream-integration-20261008/apps/kcoder-studio/e2e/private/candidates/render-profile-full-v8-capture-20261009/mobile-render-profile.full-capture.candidate.mjs:672:20\n    at async runE2E (file:///data1/hyf/20260822_agent/Kunlun-Code-CYX/target/phone-ux-upstream-integration-20261008/apps/kcoder-studio/e2e/harness/run-context.mjs:46:14)\n    at async file:///data1/hyf/20260822_agent/Kunlun-Code-CYX/target/phone-ux-upstream-integration-20261008/apps/kcoder-studio/e2e/private/candidates/render-profile-full-v8-capture-20261009/mobile-render-profile.full-capture.candidate.mjs:122:1",
+    "captureFailureEvidence": {
+      "schemaVersion": 1,
+      "classification": "DIAGNOSTIC_ONLY",
+      "performanceSample": false,
+      "performanceDistributionEligible": false,
+      "source": "after",
+      "requestedMessages": 500,
+      "panelState": "unmounted",
+      "captureRequested": true,
+      "rawCpuProfileArtifactPresent": false,
+      "cpuProfileSummaryPresent": false,
+      "cpuProfileSampleCount": null,
+      "profileWindow": null,
+      "cpuProfileError": "pinned served bundle paths are required",
+      "cpuProfileErrorPresent": true
+    },
+    "rawCpuProfileArtifact": null,
+    "cpuProfileSummary": null,
+    "mountedHiddenPanelReached": false,
+    "interpretation": "makeCompleteCpuProfileArtifact rejected an empty approved bundle path list. The full export manifest has bundleFiles; the caller converted it to a Set and passed that Set to a helper requiring an Array. No profile timeDeltas validation occurred."
+  },
+  "cleanup": {
+    "cleanupErrors": [],
+    "cleanupSteps": [
+      {
+        "label": "stop process render-profile-after-gateway",
+        "status": "completed"
+      },
+      {
+        "label": "close mobile-render-profile-chromium CDP client",
+        "status": "completed"
+      },
+      {
+        "label": "stop process mobile-render-profile-chromium",
+        "status": "completed"
+      }
+    ],
+    "ownedProcesses": [
+      {
+        "label": "mobile-render-profile-chromium",
+        "pid": 2053650,
+        "stopped": true,
+        "procExistsAfterRun": false
+      },
+      {
+        "label": "render-profile-after-gateway",
+        "pid": 2054116,
+        "stopped": true,
+        "procExistsAfterRun": false
+      }
+    ],
+    "ports": [
+      {
+        "label": "chromium-cdp",
+        "port": 33939,
+        "postflightConnectable": false
+      },
+      {
+        "label": "render-profile-after-gateway",
+        "port": 33983,
+        "postflightConnectable": false
+      }
+    ]
+  },
+  "artifacts": {
+    "manifest": {
+      "path": "target/test/apps/kcoder-studio/e2e/private/candidates/render-profile-full-v8-capture-20261009/mobile-render-profile.full-capture.candidate.mjs/20261009-103339.395Z/manifest.json",
+      "sha256": "558a2ada1d1af02c9288d33cc9cab3b2cd5350e7f38007627625ba5c1f9517d8"
+    },
+    "result": {
+      "path": "target/test/apps/kcoder-studio/e2e/private/candidates/render-profile-full-v8-capture-20261009/mobile-render-profile.full-capture.candidate.mjs/20261009-103339.395Z/artifacts/result.json",
+      "sha256": "36371c06408b12ae3b697a439e10756d91b062a311613c44a12afd7f2e8529cd"
+    },
+    "failureEvidence": {
+      "path": "target/test/apps/kcoder-studio/e2e/private/candidates/render-profile-full-v8-capture-20261009/mobile-render-profile.full-capture.candidate.mjs/20261009-103339.395Z/artifacts/phone-render-core-v8-capture-failure-after-500-unmounted.json",
+      "sha256": "a00ffe2ec67ce504b02e1ea3adf84cc64d3168f1f8be305950dabc354470df3b"
+    },
+    "seedTrace": {
+      "path": "target/test/apps/kcoder-studio/e2e/private/candidates/render-profile-full-v8-capture-20261009/mobile-render-profile.full-capture.candidate.mjs/20261009-103339.395Z/artifacts/phone-render-profile-seed-ui-trace-after-500-unmounted.json",
+      "sha256": "2082494b301f13bb9ea11da0cad92fc8978f4ca044faaddc0f246f38c4b5c326"
+    },
+    "sourceProvenanceArtifact": {
+      "path": "target/test/apps/kcoder-studio/e2e/private/candidates/render-profile-full-v8-capture-20261009/mobile-render-profile.full-capture.candidate.mjs/20261009-103339.395Z/artifacts/render-profile-after-bundle-provenance.json",
+      "sha256": "f75533afbdf988f4b778a64c1a43783fd571a1579b90239614ac3d02d0792b58"
+    },
+    "chromiumLog": {
+      "path": "target/test/apps/kcoder-studio/e2e/private/candidates/render-profile-full-v8-capture-20261009/mobile-render-profile.full-capture.candidate.mjs/20261009-103339.395Z/logs/mobile-render-profile-chromium.log",
+      "sha256": "8c5b90df1f50e699c58db67f2788e85a5024f832a566e3ffd109d5e089bf46cb"
+    },
+    "gatewayLog": {
+      "path": "target/test/apps/kcoder-studio/e2e/private/candidates/render-profile-full-v8-capture-20261009/mobile-render-profile.full-capture.candidate.mjs/20261009-103339.395Z/logs/render-profile-after-gateway.log",
+      "sha256": "f14e3d529b797eecc138b288258dd109494eb7f415273a761f1bb22ebf5ad336"
+    }
+  },
+  "liveSuiteChanged": false,
+  "automaticRetry": "NOT_RUN"
+}

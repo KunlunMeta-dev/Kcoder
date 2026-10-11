@@ -1,0 +1,65 @@
+[package]
+name = "kcoder_system_tests"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+async-trait.workspace = true
+futures.workspace = true
+kcoder_app_protocol = { path = "../../crates/kcoder_app_protocol" }
+kcoder_api = { path = "../../crates/kcoder_api" }
+kcoder_config = { path = "../../crates/kcoder_config" }
+kcoder_engine = { path = "../../crates/kcoder_engine" }
+kcoder_hooks = { path = "../../crates/kcoder_hooks" }
+kcoder_memory = { path = "../../crates/kcoder_memory" }
+kcoder_mcp = { path = "../../crates/kcoder_mcp" }
+kcoder_permissions = { path = "../../crates/kcoder_permissions" }
+kcoder_plugins = { path = "../../crates/kcoder_plugins" }
+kcoder_query = { path = "../../crates/kcoder_query" }
+kcoder_repl = { path = "../../crates/kcoder_repl" }
+kcoder_state = { path = "../../crates/kcoder_state" }
+kcoder_test_harness = { path = "../harness" }
+kcoder_skills = { path = "../../crates/kcoder_skills" }
+kcoder_specs = { path = "../../crates/kcoder_specs" }
+kcoder_tools = { path = "../../crates/kcoder_tools" }
+kcoder_types = { path = "../../crates/kcoder_types" }
+kcoder_workflow = { path = "../../crates/kcoder_workflow" }
+serde_json.workspace = true
+serde_yaml.workspace = true
+tempfile.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "fixture_mcp_server"
+path = "src/bin/fixture_mcp_server.rs"
+test = false
+bench = false
+
+[[test]]
+name = "contracts"
+path = "tests/contracts.rs"
+
+[[test]]
+name = "persistence"
+path = "tests/persistence.rs"
+
+[[test]]
+name = "execution"
+path = "tests/execution.rs"
+
+[[test]]
+name = "extensions"
+path = "tests/extensions.rs"
+
+[[test]]
+name = "runtime"
+path = "tests/runtime.rs"

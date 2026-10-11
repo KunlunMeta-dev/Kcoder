@@ -1,0 +1,5 @@
+# Gateway packaging uses portable SSH dependencies; optional native accelerators are not built.
+allowBuilds:
+  cpu-features: false
+  electron-winstaller: false
+  ssh2: false

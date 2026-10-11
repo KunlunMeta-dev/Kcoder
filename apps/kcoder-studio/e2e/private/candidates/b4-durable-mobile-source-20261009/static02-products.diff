@@ -1,0 +1,869 @@
+--- a/apps/kcoder-studio/mobile/src/gateway/rpc.ts
++++ b/apps/kcoder-studio/mobile/src/gateway/rpc.ts
+@@ -1,3 +1,4 @@
++import { parseRetentionAdmission, RETENTION_CAPABILITY, type RetentionUploadAdmissionV1 } from "@/protocol/attachment-retention";
+ import { ensureGatewayAuthorization } from "./http";
+ import { isGatewayUnknownOutcome } from "../../../shared/gatewayRequestDeadline.js";
+ import { gatewayConnectionBudget } from '../../../shared/gatewayConnectionBudget';
+@@ -29,6 +30,7 @@
+ }
+ 
+ interface InitializeResult {
++  attachmentUploadAdmission?: unknown;
+   protocolVersion?: string;
+   capabilities?: {
+     threadResume?: boolean;
+@@ -72,6 +74,14 @@
+   }
+ }
+ 
++function retainedConnectionOwner(profile: GatewayProfile, server: KCoderServer, workspacePath: string | undefined, channel: "runtime" | "browser"): string {
++  return JSON.stringify([profile.id, profile.baseUrl, profile.authorizationGeneration ?? `legacy:${profile.id}`, profile.deviceId,
++    server.id, server.runtime, server.transport, [server.workspacePath === undefined ? "absent" : "value", server.workspacePath ?? ""],
++    server.host, server.user, server.port, server.command, server.profile, server.settingsFile, server.accountIdentity?.principalId, server.accountIdentity?.username, server.accountIdentity?.role,
++    server.chromiumBin, server.chromiumNoSandbox, server.acceptNewHostKey,
++    [workspacePath === undefined ? "absent" : "value", workspacePath ?? ""], channel]);
++}
++
+ export class GatewayRpcClient {
+   private socket: WebSocket | null = null;
+   private nextId = 1;
+@@ -80,13 +90,21 @@
+   private closed = false;
+   private experimentalCapabilities: Record<string, boolean> = {};
+   private threadResumeCapability = false;
++  private attachmentAdmission: RetentionUploadAdmissionV1 | undefined;
++  private readonly retainedOwner: string;
+ 
+   private constructor(
+     private readonly profile: GatewayProfile,
+     private readonly server: KCoderServer,
+     private readonly workspacePath?: string,
+     private readonly channel: "runtime" | "browser" = "runtime",
+-  ) {}
++  ) { this.retainedOwner = retainedConnectionOwner(profile, server, workspacePath, channel); }
++
++  /** Exact local connection owner; no credential or private server scope is exposed. */
++  matchesRetainedAttachmentOwner(profile: GatewayProfile, server: KCoderServer, workspacePath?: string): boolean {
++    return !this.closed && this.socket?.readyState === 1 && this.channel === "runtime" &&
++      this.retainedOwner === retainedConnectionOwner(profile, server, workspacePath, "runtime");
++  }
+ 
+   static connect(profile: GatewayProfile, server: KCoderServer, workspacePath?: string,
+     channel: 'runtime' | 'browser' = 'runtime', options: GatewayConnectOptions = {}): Promise<GatewayRpcClient> {
+@@ -109,13 +127,17 @@
+       const initialized = await client.request<InitializeResult>("initialize", {
+         protocolVersion: KCODER_APP_SERVER_PROTOCOL_VERSION,
+         clientInfo: { name: "kcoder-studio-mobile", version: "0.1.0" },
+-        capabilities: { experimental: { threadRunSummaryV1: true, workspaceBinaryRevisionV1: true, workspaceOperationReceiptsV1: true, workspaceOperationReceiptsV2: true } },
++        capabilities: { experimental: { threadRunSummaryV1: true, workspaceBinaryRevisionV1: true, workspaceOperationReceiptsV1: true, workspaceOperationReceiptsV2: true, [RETENTION_CAPABILITY]: true } },
+       });
+       if (initialized.protocolVersion !== KCODER_APP_SERVER_PROTOCOL_VERSION) {
+         throw new Error(`KCoder app-server 协议不兼容：${initialized.protocolVersion ?? "unknown"}`);
+       }
+       client.experimentalCapabilities = initialized.capabilities?.experimental ?? {};
+       client.threadResumeCapability = initialized.capabilities?.threadResume === true;
++      if (client.supportsExperimental(RETENTION_CAPABILITY)) {
++        try { client.attachmentAdmission = parseRetentionAdmission(initialized.attachmentUploadAdmission); }
++        catch { /* Malformed optional admission never permits a retained upload. */ }
++      }
+       client.send({ jsonrpc: "2.0", method: "initialized" });
+       return client;
+     } catch (error) {
+@@ -132,6 +154,11 @@
+ 
+   supportsExperimental(capability: string): boolean {
+     return this.experimentalCapabilities[capability] === true;
++  }
++
++  getAttachmentUploadAdmission(): RetentionUploadAdmissionV1 | undefined {
++    if (this.closed || this.socket?.readyState !== 1 || !this.supportsExperimental(RETENTION_CAPABILITY)) return undefined;
++    return this.attachmentAdmission ? { ...this.attachmentAdmission } : undefined;
+   }
+ 
+   subscribe(listener: MessageListener): () => void {
+@@ -172,6 +199,7 @@
+   close(): void {
+     if (this.closed && !this.socket) return;
+     this.closed = true;
++    this.attachmentAdmission = undefined;
+     let closeError: unknown;
+     let closeFailed = false;
+     try { this.socket?.close(); this.socket = null; }
+--- a/apps/kcoder-studio/mobile/src/components/attachment-upload.ts
++++ b/apps/kcoder-studio/mobile/src/components/attachment-upload.ts
+@@ -48,3 +48,8 @@
+     throw error;
+   }
+ }
++
++// Retained uploads are an explicit typed path. The legacy path above remains
++// compatible; callers never fall back to it after a retained operation starts.
++export { RetainedAttachmentUploader, RetainedUploadUnknown } from "@/storage/retained-attachment-upload";
++export type { RetainedAttachmentHandle } from "@/storage/retained-attachment-upload";
+--- a/apps/kcoder-studio/mobile/src/protocol/attachment-retention.ts
++++ b/apps/kcoder-studio/mobile/src/protocol/attachment-retention.ts
+@@ -0,0 +1,103 @@
++/** Public retained-upload contract. The Gateway injects private authority. */
++export const RETENTION_CAPABILITY = "stagedAttachmentRetentionReceiptsV1";
++export const RETENTION_CHUNK_BYTES = 512 * 1024;
++export const RETENTION_SAVE_BYTES = 256 * 1024;
++export const RETENTION_LOCAL_FILE_BYTES = 50 * 1024 * 1024;
++export type RetentionUploadMethod = `attachment/retention/upload/${"save" | "start" | "read" | "chunk" | "finish" | "cancel"}`;
++export interface RetentionUploadAdmissionV1 { version: 1; rootNamespace: string; admissionEpoch: number }
++export interface RetentionOwnerRequestV1 { clientOwnerRequestId: string; immutableParameters: Record<string, string> }
++export interface RetentionStageRefV1 { rootNamespace: string; epoch: number; ownerId: string; entryId: string; revision: number; path?: string }
++export type RetentionUploadState = "allocating" | "uploading" | "sealed" | "cancelled" | "unknown";
++export interface RetentionUploadRecoveryV1 { rootNamespace: string; epoch: number; state: RetentionUploadState; confirmedBytes: number; stageRef?: RetentionStageRefV1 }
++export interface RetentionEpochRetiredV1 { rootNamespace: string; epoch: number; retiredThrough: number }
++export type RetentionUploadLookupV1 = { outcome: "absent" } | { outcome: "present"; filename: string; size: number; contentSha256: string; recovery: RetentionUploadRecoveryV1 } | { outcome: "epochRetired"; proof: RetentionEpochRetiredV1 };
++export interface RetentionUploadResultV1 { clientOwnerRequestId: string; clientUploadId: string; scopeId: string; lookup: RetentionUploadLookupV1 }
++export interface RetentionUploadExpectation { ownerRequest: RetentionOwnerRequestV1; clientUploadId: string; admission: RetentionUploadAdmissionV1; filename: string; size: number; contentSha256: string; scopeId?: string; stageRef?: RetentionStageRefV1 }
++export interface RetentionUploadParamsV1 {
++  ownerRequest: RetentionOwnerRequestV1; clientUploadId: string;
++  filename?: string; size?: number; contentSha256?: string;
++  offset?: number; length?: number; chunkSha256?: string; contentBase64?: string;
++}
++const invalid = () => new Error("附件回执无效；保留原上传 ID 和本地文件");
++function object(value: unknown): Record<string, unknown> {
++  if (!value || typeof value !== "object" || Array.isArray(value)) throw invalid();
++  return value as Record<string, unknown>;
++}
++function fields(value: Record<string, unknown>, allowed: readonly string[]): void {
++  if (Object.keys(value).some(key => !allowed.includes(key))) throw invalid();
++}
++function atom(value: unknown, max = 256): value is string { return typeof value === "string" && value.length > 0 && value.length <= max && !/[\u0000-\u001f\u007f]/.test(value); }
++function integer(value: unknown, minimum = 0): value is number { return typeof value === "number" && Number.isSafeInteger(value) && value >= minimum; }
++export function isRetentionSha256(value: unknown): value is string { return typeof value === "string" && /^[0-9a-f]{64}$/.test(value); }
++export function parseRetentionAdmission(value: unknown): RetentionUploadAdmissionV1 {
++  const v = object(value); fields(v, ["version", "rootNamespace", "admissionEpoch"]);
++  if (v.version !== 1 || !atom(v.rootNamespace) || !/^[a-zA-Z0-9_-]+$/.test(v.rootNamespace) || !integer(v.admissionEpoch, 1)) throw invalid();
++  return { version: 1, rootNamespace: v.rootNamespace, admissionEpoch: v.admissionEpoch };
++}
++export function retentionGenerationId(prefix: "o1" | "u1" | "r1", admission: RetentionUploadAdmissionV1, nonce: string): string {
++  parseRetentionAdmission(admission);
++  if (!/^[0-9a-f]{32}$/.test(nonce)) throw invalid();
++  const result = `${prefix}.${admission.rootNamespace}.${admission.admissionEpoch}.${nonce}`;
++  if (result.length > 256) throw invalid();
++  return result;
++}
++export function verifyRetentionGenerationId(value: unknown, prefix: "o1" | "u1", admission: RetentionUploadAdmissionV1): asserts value is string {
++  if (typeof value !== "string") throw invalid();
++  const parts = value.split(".");
++  if (parts.length !== 4 || parts[0] !== prefix || parts[1] !== admission.rootNamespace || parts[2] !== String(admission.admissionEpoch) || !/^[0-9a-f]{32}$/.test(parts[3]!) || value.length > 256) throw invalid();
++}
++export function parseRetentionStageRef(value: unknown): RetentionStageRefV1 {
++  const v = object(value); fields(v, ["rootNamespace", "epoch", "ownerId", "entryId", "revision", "path"]);
++  if (!atom(v.rootNamespace) || !integer(v.epoch, 1) || !atom(v.ownerId) || !atom(v.entryId) || !integer(v.revision, 1) || (v.path !== undefined && (!atom(v.path, 4096) || !v.path.startsWith("/")))) throw invalid();
++  return { rootNamespace: v.rootNamespace, epoch: v.epoch, ownerId: v.ownerId, entryId: v.entryId, revision: v.revision, ...(v.path !== undefined ? { path: v.path } : {}) };
++}
++export function parseRetentionUploadResult(value: unknown, expected: RetentionUploadExpectation): RetentionUploadResultV1 {
++  const v = object(value); fields(v, ["clientOwnerRequestId", "clientUploadId", "scopeId", "lookup"]);
++  verifyRetentionGenerationId(v.clientOwnerRequestId, "o1", expected.admission);
++  verifyRetentionGenerationId(v.clientUploadId, "u1", expected.admission);
++  if (v.clientOwnerRequestId !== expected.ownerRequest.clientOwnerRequestId || v.clientUploadId !== expected.clientUploadId || !isRetentionSha256(v.scopeId) || (expected.scopeId !== undefined && v.scopeId !== expected.scopeId)) throw invalid();
++  const l = object(v.lookup); let lookup: RetentionUploadLookupV1;
++  if (l.outcome === "absent") { fields(l, ["outcome"]); lookup = { outcome: "absent" }; }
++  else if (l.outcome === "epochRetired") {
++    fields(l, ["outcome", "proof"]); const proof = object(l.proof); fields(proof, ["rootNamespace", "epoch", "retiredThrough"]);
++    if (proof.rootNamespace !== expected.admission.rootNamespace || proof.epoch !== expected.admission.admissionEpoch || !integer(proof.retiredThrough) || proof.retiredThrough < expected.admission.admissionEpoch) throw invalid();
++    lookup = { outcome: "epochRetired", proof: { rootNamespace: proof.rootNamespace, epoch: proof.epoch, retiredThrough: proof.retiredThrough } };
++  } else if (l.outcome === "present") {
++    fields(l, ["outcome", "filename", "size", "contentSha256", "recovery"]);
++    if (l.filename !== expected.filename || l.size !== expected.size || !integer(l.size) || l.size > RETENTION_LOCAL_FILE_BYTES || !isRetentionSha256(l.contentSha256) || l.contentSha256 !== expected.contentSha256) throw invalid();
++    const rec = object(l.recovery); fields(rec, ["rootNamespace", "epoch", "state", "confirmedBytes", "stageRef"]);
++    if (rec.rootNamespace !== expected.admission.rootNamespace || rec.epoch !== expected.admission.admissionEpoch || !integer(rec.confirmedBytes) || rec.confirmedBytes > expected.size || !["allocating", "uploading", "sealed", "cancelled", "unknown"].includes(String(rec.state))) throw invalid();
++    const stageRef = rec.stageRef === undefined ? undefined : parseRetentionStageRef(rec.stageRef);
++    if (expected.stageRef && JSON.stringify(stageRef) !== JSON.stringify(expected.stageRef)) throw invalid();
++    if (stageRef && (stageRef.rootNamespace !== rec.rootNamespace || stageRef.epoch !== rec.epoch)) throw invalid();
++    if (rec.state === "sealed" && (!stageRef || rec.confirmedBytes !== expected.size)) throw invalid();
++    if (rec.state === "allocating" && (rec.confirmedBytes !== 0 || stageRef)) throw invalid();
++    if (rec.state === "uploading" && stageRef) throw invalid();
++    lookup = { outcome: "present", filename: expected.filename, size: expected.size, contentSha256: expected.contentSha256,
++      recovery: { rootNamespace: expected.admission.rootNamespace, epoch: expected.admission.admissionEpoch, state: rec.state as RetentionUploadState, confirmedBytes: rec.confirmedBytes, ...(stageRef ? { stageRef } : {}) } };
++  } else throw invalid();
++  return { clientOwnerRequestId: v.clientOwnerRequestId, clientUploadId: v.clientUploadId, scopeId: v.scopeId, lookup };
++}
++
++/** Exact public fields mirror Rust validate_for; trustedContext is never a public parameter. */
++export function validateRetentionUploadParams(method: RetentionUploadMethod, value: RetentionUploadParamsV1, expected: RetentionUploadExpectation): void {
++  const v = object(value);
++  const mode = method.slice("attachment/retention/upload/".length);
++  if (!["save", "start", "read", "chunk", "finish", "cancel"].includes(mode)) throw invalid();
++  const start = mode === "save" || mode === "start"; const chunk = mode === "chunk"; const bytes = mode === "save" || chunk;
++  fields(v, ["ownerRequest", "clientUploadId", ...(start ? ["filename", "size", "contentSha256"] : []), ...(chunk ? ["offset", "length", "chunkSha256"] : []), ...(bytes ? ["contentBase64"] : [])]);
++  const owner = object(v.ownerRequest); fields(owner, ["clientOwnerRequestId", "immutableParameters"]);
++  const immutable = object(owner.immutableParameters);
++  if (Object.keys(immutable).length > 32 || Object.entries(immutable).some(([key, entry]) => !atom(key) || !atom(entry)) || JSON.stringify(owner).length > 16384 || JSON.stringify(owner) !== JSON.stringify(expected.ownerRequest)) throw invalid();
++  verifyRetentionGenerationId(owner.clientOwnerRequestId, "o1", expected.admission);
++  verifyRetentionGenerationId(v.clientUploadId, "u1", expected.admission);
++  if (v.clientUploadId !== expected.clientUploadId) throw invalid();
++  if (start && (v.filename !== expected.filename || v.size !== expected.size || v.contentSha256 !== expected.contentSha256 || !atom(v.filename) || !integer(v.size) || v.size > RETENTION_LOCAL_FILE_BYTES || !isRetentionSha256(v.contentSha256))) throw invalid();
++  if (chunk && (!integer(v.offset) || !integer(v.length, 1) || v.length > RETENTION_CHUNK_BYTES || v.offset + v.length > expected.size || !isRetentionSha256(v.chunkSha256))) throw invalid();
++  if (mode === "save" && expected.size > RETENTION_SAVE_BYTES) throw invalid();
++  if (bytes) {
++    if (typeof v.contentBase64 !== "string" || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(v.contentBase64)) throw invalid();
++    const length = v.contentBase64.length / 4 * 3 - (v.contentBase64.endsWith("==") ? 2 : v.contentBase64.endsWith("=") ? 1 : 0);
++    if (length !== (chunk ? v.length : expected.size) || length > RETENTION_CHUNK_BYTES) throw invalid();
++  }
++}
+--- a/apps/kcoder-studio/mobile/src/protocol/sha256-stream.ts
++++ b/apps/kcoder-studio/mobile/src/protocol/sha256-stream.ts
+@@ -0,0 +1,97 @@
++/** Incremental SHA-256. Memory stays constant regardless of source length. */
++const K = new Uint32Array([0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2]);
++const rotate = (value: number, bits: number) => value >>> bits | value << (32 - bits);
++export class Sha256Stream {
++  private readonly state = new Uint32Array([0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19]);
++  private readonly block = new Uint8Array(64);
++  private readonly words = new Uint32Array(64);
++  private buffered = 0;
++  private length = 0;
++  private finished = false;
++  update(bytes: Uint8Array): this {
++    if (this.finished) throw new Error("SHA-256 is already finalized");
++    if (!Number.isSafeInteger(this.length + bytes.byteLength) || this.length + bytes.byteLength > Number.MAX_SAFE_INTEGER / 8) throw new Error("SHA-256 input is too large");
++    this.length += bytes.byteLength;
++    let offset = 0;
++    while (offset < bytes.byteLength) {
++      const take = Math.min(64 - this.buffered, bytes.byteLength - offset);
++      this.block.set(bytes.subarray(offset, offset + take), this.buffered);
++      this.buffered += take; offset += take;
++      if (this.buffered === 64) { this.compress(); this.buffered = 0; }
++    }
++    return this;
++  }
++  digestHex(): string {
++    if (this.finished) throw new Error("SHA-256 is already finalized");
++    this.finished = true;
++    this.block[this.buffered++] = 0x80;
++    if (this.buffered > 56) { this.block.fill(0, this.buffered); this.compress(); this.buffered = 0; }
++    this.block.fill(0, this.buffered, 56);
++    const bits = this.length * 8;
++    const view = new DataView(this.block.buffer);
++    view.setUint32(56, Math.floor(bits / 0x100000000)); view.setUint32(60, bits >>> 0);
++    this.compress();
++    return [...this.state].map(value => value.toString(16).padStart(8, "0")).join("");
++  }
++  private compress(): void {
++    const w = this.words; const view = new DataView(this.block.buffer);
++    for (let i = 0; i < 16; i++) w[i] = view.getUint32(i * 4);
++    for (let i = 16; i < 64; i++) w[i] = w[i - 16]! + (rotate(w[i - 15]!, 7) ^ rotate(w[i - 15]!, 18) ^ w[i - 15]! >>> 3) + w[i - 7]! + (rotate(w[i - 2]!, 17) ^ rotate(w[i - 2]!, 19) ^ w[i - 2]! >>> 10);
++    let a = this.state[0]!, b = this.state[1]!, c = this.state[2]!, d = this.state[3]!;
++    let e = this.state[4]!, f = this.state[5]!, g = this.state[6]!, h = this.state[7]!;
++    for (let i = 0; i < 64; i++) {
++      const t = (h + (rotate(e, 6) ^ rotate(e, 11) ^ rotate(e, 25)) + ((e & f) ^ (~e & g)) + K[i]! + w[i]!) | 0;
++      const u = ((rotate(a, 2) ^ rotate(a, 13) ^ rotate(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) | 0;
++      h = g; g = f; f = e; e = (d + t) | 0; d = c; c = b; b = a; a = (t + u) | 0;
++    }
++    this.state[0] = this.state[0]! + a; this.state[1] = this.state[1]! + b;
++    this.state[2] = this.state[2]! + c; this.state[3] = this.state[3]! + d;
++    this.state[4] = this.state[4]! + e; this.state[5] = this.state[5]! + f;
++    this.state[6] = this.state[6]! + g; this.state[7] = this.state[7]! + h;
++  }
++}
++
++export interface BoundedByteReader {
++  readonly size: number;
++  read(offset: number, length: number): Promise<Uint8Array>;
++}
++/** Local-operation macrotask channel. No global worker, queue or connection pool. */
++export function createAttachmentMacrotaskYield(): { yield(): Promise<void>; close(): void } {
++  if (typeof MessageChannel === "function") {
++    const channel = new MessageChannel();
++    let pending: (() => void) | undefined;
++    channel.port1.onmessage = () => { const resolve = pending; pending = undefined; resolve?.(); };
++    return {
++      yield: () => new Promise<void>(resolve => { if (pending) throw new Error("Concurrent hash yield"); pending = resolve; channel.port2.postMessage(0); }),
++      close: () => { channel.port1.close(); channel.port2.close(); },
++    };
++  }
++  return { yield: () => new Promise<void>(resolve => setTimeout(resolve, 0)), close() {} };
++}
++/** Check cancellation/owner around every read/yield; return only an exact source hash. */
++export async function hashBoundedSource(source: BoundedByteReader, isCurrent: () => boolean, signal?: AbortSignal): Promise<string> {
++  if (!Number.isSafeInteger(source.size) || source.size < 0 || source.size > 50 * 1024 * 1024) throw new Error("Invalid staged source size");
++  const size = source.size;
++  const assertCurrent = () => { if (signal?.aborted || !isCurrent()) throw new Error("附件读取已取消或归属已变化"); };
++  const clock = () => typeof performance === "object" ? performance.now() : Date.now();
++  const scheduler = createAttachmentMacrotaskYield(); const hash = new Sha256Stream();
++  let sliceStarted = clock(); let blocks = 0;
++  try {
++    assertCurrent();
++    for (let offset = 0; offset < size; offset += 64 * 1024) {
++      assertCurrent();
++      const length = Math.min(64 * 1024, size - offset);
++      const bytes = await source.read(offset, length);
++      assertCurrent();
++      if (!(bytes instanceof Uint8Array) || bytes.byteLength !== length) throw new Error("附件原始文件缺失或长度已变化");
++      // Bound each synchronous hashing step; fast devices still yield after at most 512 KiB.
++      for (let start = 0; start < bytes.byteLength; start += 16 * 1024) {
++        hash.update(bytes.subarray(start, Math.min(start + 16 * 1024, bytes.byteLength)));
++        if (++blocks >= 32 || clock() - sliceStarted >= 8) {
++          await scheduler.yield(); assertCurrent(); blocks = 0; sliceStarted = clock();
++        }
++      }
++    }
++    assertCurrent(); return hash.digestHex();
++  } finally { scheduler.close(); }
++}
+--- a/apps/kcoder-studio/mobile/src/storage/staged-attachment-store.ts
++++ b/apps/kcoder-studio/mobile/src/storage/staged-attachment-store.ts
+@@ -0,0 +1,210 @@
++import type { GatewayProfile, KCoderServer } from "@/gateway/types";
++import { parseRetentionAdmission, parseRetentionStageRef, retentionGenerationId, verifyRetentionGenerationId, isRetentionSha256, RETENTION_LOCAL_FILE_BYTES, type RetentionUploadAdmissionV1, type RetentionOwnerRequestV1, type RetentionStageRefV1, type RetentionUploadMethod, type RetentionUploadParamsV1 } from "@/protocol/attachment-retention";
++import { hashBoundedSource } from "@/protocol/sha256-stream";
++import { createAttachmentBytesBackend, type AttachmentBytesBackend, type AttachmentStoreChange, type DurableByteSource } from "./staged-attachment-bytes";
++import { captureWorkspaceProfileIdentity, withWorkspaceProfileWrite, type WorkspaceProfileIdentity } from "./workspace-profile-fence";
++
++export const STAGED_ATTACHMENT_LIMIT = 128;
++export const STAGED_ATTACHMENT_TOTAL_BYTES = 100 * 1024 * 1024;
++const ROW_BYTES = 32 * 1024;
++const TOTAL_METADATA_BYTES = 4 * 1024 * 1024;
++export interface AttachmentStoreContext { profile: GatewayProfile; server: KCoderServer; workspacePath?: string; isCurrent(): boolean }
++export interface StagedAttachmentScope { profile: WorkspaceProfileIdentity; target: string }
++export interface StagedAttachmentRecord {
++  version: 1; id: string; revision: number; scope: StagedAttachmentScope;
++  admission: RetentionUploadAdmissionV1; ownerRequest: RetentionOwnerRequestV1; clientUploadId: string;
++  filename: string; size: number; contentSha256?: string;
++  phase: "copying" | "prepared" | "uploading" | "sealed" | "cancelled" | "epochRetired" | "sourceRemovalPending" | "sourceRemoved";
++  confirmedBytes: number; scopeId?: string; stageRef?: RetentionStageRefV1;
++  wire?: { method: RetentionUploadMethod; params: Omit<RetentionUploadParamsV1, "contentBase64">; revision: number };
++  consumers: { clientMessageId: string; reserveId: string; confirmed: boolean }[];
++  // Prepaid fixed journal slot: cleanup never needs a new record to make progress.
++  cleanup: "none" | "requested" | "finished";
++}
++export class AttachmentStoreConflict extends Error {
++  constructor() { super("附件状态尚未核对，请继续原上传，不要重新选择 ID"); this.name = "AttachmentStoreConflict"; }
++}
++/** Native copy failed after durable reservation. Reload can discover this same ID. */
++export class AttachmentPreparationUnknown extends AttachmentStoreConflict {
++  constructor(readonly localAttachmentId: string) {
++    super(); this.name = "AttachmentPreparationUnknown";
++  }
++}
++function nonce(): string {
++  if (!globalThis.crypto?.getRandomValues) throw new Error("无法安全建立附件持久身份");
++  return [...crypto.getRandomValues(new Uint8Array(16))].map(x => x.toString(16).padStart(2, "0")).join("");
++}
++function targetKey(server: KCoderServer): string {
++  return JSON.stringify([server.id, server.runtime, server.transport, [server.workspacePath === undefined ? "absent" : "value", server.workspacePath ?? ""], server.host, server.user, server.port, server.command, server.profile, server.settingsFile, server.accountIdentity?.principalId, server.accountIdentity?.username, server.accountIdentity?.role, server.chromiumBin, server.chromiumNoSandbox, server.acceptNewHostKey]);
++}
++function scopeOf(context: AttachmentStoreContext): StagedAttachmentScope {
++  return { profile: captureWorkspaceProfileIdentity(context.profile), target: JSON.stringify([targetKey(context.server), [context.workspacePath === undefined ? "absent" : "value", context.workspacePath ?? ""], "runtime"]) };
++}
++function sameScope(a: StagedAttachmentScope, b: StagedAttachmentScope): boolean { return JSON.stringify(a) === JSON.stringify(b); }
++function checkContext(context: AttachmentStoreContext, scope: StagedAttachmentScope): void {
++  if (!context.isCurrent() || !sameScope(scopeOf(context), scope)) throw new AttachmentStoreConflict();
++}
++function clone<T>(value: T): T { return JSON.parse(JSON.stringify(value)) as T; }
++function record(value: unknown): StagedAttachmentRecord {
++  if (!value || typeof value !== "object" || Array.isArray(value)) throw new AttachmentStoreConflict();
++  const row = value as StagedAttachmentRecord;
++  if (row.version !== 1 || !/^[0-9a-f]{32}$/.test(row.id) || !Number.isSafeInteger(row.revision) || row.revision < 1 || !row.scope || typeof row.scope.target !== "string" || !row.scope.profile || typeof row.scope.profile.id !== "string" || typeof row.scope.profile.baseUrl !== "string" || typeof row.scope.profile.authorizationGeneration !== "string" || (row.scope.profile.deviceId !== undefined && typeof row.scope.profile.deviceId !== "string")) throw new AttachmentStoreConflict();
++  // Persistence contains only the explicit non-secret owner tuple, never a GatewayProfile.
++  if (Object.keys(row.scope.profile).some(key => !["id", "baseUrl", "authorizationGeneration", "deviceId"].includes(key))) throw new AttachmentStoreConflict();
++  parseRetentionAdmission(row.admission);
++  verifyRetentionGenerationId(row.ownerRequest?.clientOwnerRequestId, "o1", row.admission);
++  verifyRetentionGenerationId(row.clientUploadId, "u1", row.admission);
++  if (JSON.stringify(row.ownerRequest.immutableParameters) !== JSON.stringify({ purpose: "mobile-attachment", localAttachmentId: row.id })) throw new AttachmentStoreConflict();
++  if (typeof row.filename !== "string" || row.filename.length < 1 || row.filename.length > 255 || /[\u0000-\u001f\u007f/\\]/.test(row.filename) || !Number.isSafeInteger(row.size) || row.size < 0 || row.size > RETENTION_LOCAL_FILE_BYTES || !Number.isSafeInteger(row.confirmedBytes) || row.confirmedBytes < 0 || row.confirmedBytes > row.size) throw new AttachmentStoreConflict();
++  if (!["copying", "prepared", "uploading", "sealed", "cancelled", "epochRetired", "sourceRemovalPending", "sourceRemoved"].includes(row.phase) || !["none", "requested", "finished"].includes(row.cleanup)) throw new AttachmentStoreConflict();
++  if ((row.phase !== "copying" || row.contentSha256 !== undefined) && !isRetentionSha256(row.contentSha256)) throw new AttachmentStoreConflict();
++  if (row.scopeId !== undefined && !isRetentionSha256(row.scopeId)) throw new AttachmentStoreConflict();
++  if (row.stageRef) parseRetentionStageRef(row.stageRef);
++  if (["sealed", "sourceRemovalPending", "sourceRemoved"].includes(row.phase) && (!row.stageRef || row.confirmedBytes !== row.size || !row.scopeId)) throw new AttachmentStoreConflict();
++  if (row.stageRef && (row.stageRef.rootNamespace !== row.admission.rootNamespace || row.stageRef.epoch !== row.admission.admissionEpoch)) throw new AttachmentStoreConflict();
++  if (!Array.isArray(row.consumers) || row.consumers.length > 32 || new Set(row.consumers.map(x => x.clientMessageId)).size !== row.consumers.length || row.consumers.some(x => typeof x.clientMessageId !== "string" || !x.clientMessageId || x.clientMessageId.length > 256 || typeof x.reserveId !== "string" || typeof x.confirmed !== "boolean")) throw new AttachmentStoreConflict();
++  if (row.wire && (!/^attachment\/retention\/upload\/(save|start|read|chunk|finish|cancel)$/.test(row.wire.method) || row.wire.revision !== row.revision || JSON.stringify(row.wire.params.ownerRequest) !== JSON.stringify(row.ownerRequest) || row.wire.params.clientUploadId !== row.clientUploadId)) throw new AttachmentStoreConflict();
++  if (JSON.stringify(row).length * 2 > ROW_BYTES) throw new AttachmentStoreConflict();
++  return clone(row);
++}
++function records(values: readonly unknown[]): StagedAttachmentRecord[] {
++  if (values.length > STAGED_ATTACHMENT_LIMIT) throw new AttachmentStoreConflict();
++  const rows = values.map(record);
++  if (new Set(rows.map(x => x.id)).size !== rows.length || rows.reduce((sum, x) => sum + (x.cleanup === "finished" ? 0 : x.size), 0) > STAGED_ATTACHMENT_TOTAL_BYTES || rows.reduce((sum, x) => sum + JSON.stringify(x).length * 2, 0) > TOTAL_METADATA_BYTES) throw new AttachmentStoreConflict();
++  return rows;
++}
++function immutable(row: StagedAttachmentRecord): string {
++  return JSON.stringify([row.id, row.scope, row.admission, row.ownerRequest, row.clientUploadId, row.filename, row.size, row.contentSha256]);
++}
++export class StagedAttachmentStore {
++  constructor(private readonly backend: AttachmentBytesBackend = createAttachmentBytesBackend()) {}
++  private async transaction<T>(context: AttachmentStoreContext, operation: (rows: StagedAttachmentRecord[]) => AttachmentStoreChange<T>): Promise<T> {
++    const scope = scopeOf(context); checkContext(context, scope);
++    return withWorkspaceProfileWrite(scope.profile, async () => this.backend.transaction(values => {
++      checkContext(context, scope); return operation(records(values));
++    }));
++  }
++  async load(context: AttachmentStoreContext, id: string): Promise<StagedAttachmentRecord | undefined> {
++    return this.transaction(context, rows => { const row = rows.find(x => x.id === id); if (row && !sameScope(row.scope, scopeOf(context))) throw new AttachmentStoreConflict(); return { value: row }; });
++  }
++  /** Bounded local recovery index, filtered by the complete captured non-secret scope. */
++  async listUnresolved(context: AttachmentStoreContext): Promise<StagedAttachmentRecord[]> {
++    const scope = scopeOf(context);
++    return this.transaction(context, rows => ({ value: rows.filter(row => sameScope(row.scope, scope) && row.cleanup !== "finished") }));
++  }
++  async prepare(context: AttachmentStoreContext, admission: RetentionUploadAdmissionV1, filename: string, source: DurableByteSource, signal?: AbortSignal): Promise<StagedAttachmentRecord> {
++    const scope = scopeOf(context); checkContext(context, scope); parseRetentionAdmission(admission);
++    const id = nonce();
++    let row: StagedAttachmentRecord = { version: 1, id, revision: 1, scope, admission: clone(admission), ownerRequest: { clientOwnerRequestId: retentionGenerationId("o1", admission, nonce()), immutableParameters: { purpose: "mobile-attachment", localAttachmentId: id } }, clientUploadId: retentionGenerationId("u1", admission, nonce()), filename, size: source.size, phase: "copying", confirmedBytes: 0, consumers: [], cleanup: "none" };
++    record(row);
++    const current = () => !signal?.aborted && context.isCurrent() && sameScope(scopeOf(context), scope);
++    const reserve = async (prepared: StagedAttachmentRecord, blob?: Blob) => this.transaction(context, rows => {
++      if (!current() || rows.length >= STAGED_ATTACHMENT_LIMIT || rows.some(x => x.id === id) || rows.reduce((n,x) => n + (x.cleanup === "finished" ? 0 : x.size), 0) + row.size > STAGED_ATTACHMENT_TOTAL_BYTES || rows.reduce((n,x) => n + JSON.stringify(x).length * 2, 0) + ROW_BYTES > TOTAL_METADATA_BYTES) throw new AttachmentStoreConflict();
++      return { value: prepared, putRow: { id, value: prepared }, ...(blob ? { putBytes: { id, blob } } : {}) };
++    });
++    if (this.backend.kind === "web") {
++      if (!source.blob || source.blob.size !== source.size) throw new Error("浏览器附件必须具有原始 Blob");
++      const blob = source.blob;
++      const hash = await hashBoundedSource({ size: blob.size, async read(offset, length) { return new Uint8Array(await blob.slice(offset, offset + length).arrayBuffer()); } }, current, signal);
++      row = { ...row, contentSha256: hash, phase: "prepared" }; record(row);
++      return reserve(row, source.blob);
++    }
++    // Capture the intended bytes before the copy-intent checkpoint. A same-size
++    // foreign/partial copy on restart must not become a new accepted source.
++    const expectedHash = await hashBoundedSource(source, current, signal);
++    row = { ...row, contentSha256: expectedHash };
++    await reserve(row); // Quota + exact file locator + hash precede native file creation.
++    try {
++      const hash = await this.backend.copySource!(id, source, current, signal, async write => {
++        // A copy and explicit discard cannot race file creation or writes after
++        // the reservation is released. Only bounded local IO occurs in this gate.
++        await this.transaction(context, rows => {
++          const captured = rows.find(x => x.id === row.id);
++          if (!current() || !captured || captured.revision !== row.revision || captured.phase !== "copying" || immutable(captured) !== immutable(row)) throw new AttachmentStoreConflict();
++          write(); return { value: undefined };
++        });
++      });
++      if (hash !== expectedHash) throw new AttachmentStoreConflict();
++      return await this.update(context, row, old => ({ ...old, phase: "prepared" }));
++    } catch {
++      // Do not mint a replacement ID or discard bytes after an uncertain copy.
++      throw new AttachmentPreparationUnknown(id);
++    }
++  }
++  async recoverCopy(context: AttachmentStoreContext, id: string, signal?: AbortSignal): Promise<StagedAttachmentRecord> {
++    const row = await this.load(context, id); if (!row || row.phase !== "copying" || row.wire || row.confirmedBytes !== 0 || !row.contentSha256) throw new AttachmentStoreConflict();
++    const current = () => {
++      checkContext(context, row.scope);
++      return !signal?.aborted;
++    };
++    current(); const source = await this.backend.source(id, row.size); current();
++    const hash = await hashBoundedSource(source, current, signal);
++    if (hash !== row.contentSha256) throw new AttachmentStoreConflict();
++    return this.update(context, row, old => ({ ...old, phase: "prepared" }));
++  }
++  async source(context: AttachmentStoreContext, row: StagedAttachmentRecord) {
++    const latest = await this.load(context, row.id);
++    if (!latest || latest.revision !== row.revision || immutable(latest) !== immutable(row) || !latest.contentSha256) throw new AttachmentStoreConflict();
++    return this.backend.source(row.id, row.size);
++  }
++  async update(context: AttachmentStoreContext, expected: StagedAttachmentRecord, change: (row: StagedAttachmentRecord) => StagedAttachmentRecord): Promise<StagedAttachmentRecord> {
++    return this.transaction(context, rows => {
++      const current = rows.find(x => x.id === expected.id);
++      if (!current || current.revision !== expected.revision || immutable(current) !== immutable(expected) || !sameScope(current.scope, scopeOf(context))) throw new AttachmentStoreConflict();
++      const next = change(clone(current));
++      if (immutable(next) !== immutable(current)) throw new AttachmentStoreConflict();
++      next.revision = current.revision + 1; delete next.wire; record(next);
++      return { value: next, putRow: { id: next.id, value: next } };
++    });
++  }
++  /** Persist a wire intent, then synchronously send while the profile gate is held. Await remotely outside it. */
++  async dispatch<T>(context: AttachmentStoreContext, expected: StagedAttachmentRecord, method: RetentionUploadMethod, params: RetentionUploadParamsV1, send: () => Promise<T>): Promise<{ row: StagedAttachmentRecord; response: Promise<T> }> {
++    const scope = scopeOf(context); checkContext(context, scope);
++    return withWorkspaceProfileWrite(scope.profile, async () => {
++      const row = await this.backend.transaction(values => {
++        const current = records(values).find(x => x.id === expected.id);
++        if (!current || !sameScope(current.scope, scope) || current.revision !== expected.revision || immutable(current) !== immutable(expected)) throw new AttachmentStoreConflict();
++        const durableParams = clone(params); delete durableParams.contentBase64;
++        const next = { ...current, revision: current.revision + 1, wire: { method, params: durableParams, revision: current.revision + 1 } }; record(next);
++        checkContext(context, scope); return { value: next, putRow: { id: next.id, value: next } };
++      });
++      checkContext(context, scope); return { row, response: send() };
++    });
++  }
++  /** A consumer reference and its reserve ID exist durably before any reserve/send RPC. */
++  async bindConsumer(context: AttachmentStoreContext, row: StagedAttachmentRecord, clientMessageId: string): Promise<StagedAttachmentRecord> {
++    if (row.phase !== "sealed" || row.wire) throw new AttachmentStoreConflict();
++    const old = row.consumers.find(x => x.clientMessageId === clientMessageId); if (old) return row;
++    return this.update(context, row, current => ({ ...current, consumers: [...current.consumers, { clientMessageId, reserveId: retentionGenerationId("r1", row.admission, nonce()), confirmed: false }] }));
++  }
++  async confirmConsumer(context: AttachmentStoreContext, row: StagedAttachmentRecord, clientMessageId: string): Promise<StagedAttachmentRecord> {
++    if (row.phase !== "sealed" || !row.consumers.some(x => x.clientMessageId === clientMessageId)) throw new AttachmentStoreConflict();
++    return this.update(context, row, current => ({ ...current, consumers: current.consumers.map(x => x.clientMessageId === clientMessageId ? { ...x, confirmed: true } : x) }));
++  }
++  /** Explicit local discard only when no server send occurred, or cancel was authoritatively confirmed. */
++  async discardSource(context: AttachmentStoreContext, expected: StagedAttachmentRecord): Promise<StagedAttachmentRecord> {
++    const unsent = !expected.wire && !expected.scopeId && expected.confirmedBytes === 0 && ["copying", "prepared"].includes(expected.phase);
++    if (!unsent && (expected.phase !== "cancelled" || expected.wire)) throw new AttachmentStoreConflict();
++    if (this.backend.kind === "web") return this.transaction(context, rows => {
++      const current = rows.find(x => x.id === expected.id);
++      if (!current || current.revision !== expected.revision || immutable(current) !== immutable(expected)) throw new AttachmentStoreConflict();
++      const next: StagedAttachmentRecord = { ...current, revision: current.revision + 1, phase: "cancelled", cleanup: "finished" }; record(next);
++      return { value: next, putRow: { id: next.id, value: next }, deleteBytes: next.id };
++    });
++    const pending = await this.update(context, expected, row => ({ ...row, phase: "cancelled", cleanup: "requested" }));
++    checkContext(context, pending.scope); await this.backend.removeSource!(pending.id);
++    return this.update(context, pending, row => ({ ...row, cleanup: "finished" }));
++  }
++  async removeConfirmedSource(context: AttachmentStoreContext, row: StagedAttachmentRecord): Promise<StagedAttachmentRecord> {
++    if (!row.stageRef || !row.scopeId || row.consumers.length === 0 || row.consumers.some(x => !x.confirmed) || !["sealed", "sourceRemovalPending"].includes(row.phase)) throw new AttachmentStoreConflict();
++    if (this.backend.kind === "web") return this.transaction(context, rows => {
++      const current = rows.find(x => x.id === row.id);
++      if (!current || current.revision !== row.revision || immutable(current) !== immutable(row)) throw new AttachmentStoreConflict();
++      const next: StagedAttachmentRecord = { ...current, revision: current.revision + 1, phase: "sourceRemoved", cleanup: "finished" }; record(next);
++      return { value: next, putRow: { id: next.id, value: next }, deleteBytes: next.id };
++    });
++    const pending = row.phase === "sourceRemovalPending" ? row : await this.update(context, row, old => ({ ...old, phase: "sourceRemovalPending", cleanup: "requested" }));
++    checkContext(context, pending.scope); await this.backend.removeSource!(pending.id);
++    return this.update(context, pending, old => ({ ...old, phase: "sourceRemoved", cleanup: "finished" }));
++  }
++}
+--- a/apps/kcoder-studio/mobile/src/storage/staged-attachment-bytes.ts
++++ b/apps/kcoder-studio/mobile/src/storage/staged-attachment-bytes.ts
+@@ -0,0 +1,22 @@
++import type { BoundedByteReader } from "@/protocol/sha256-stream";
++import { createAttachmentBytesBackend as createWebBackend } from "./staged-attachment-bytes.web";
++
++export interface DurableByteSource extends BoundedByteReader { readonly blob?: Blob }
++/** Callback is synchronous: the backend commits manifest, quota view and bytes atomically. */
++export interface AttachmentStoreChange<T> {
++  value: T;
++  putRow?: { id: string; value: unknown };
++  deleteRow?: string;
++  putBytes?: { id: string; blob: Blob };
++  deleteBytes?: string;
++}
++export interface AttachmentBytesBackend {
++  readonly kind: "web" | "native";
++  transaction<T>(change: (rows: readonly unknown[]) => AttachmentStoreChange<T>): Promise<T>;
++  source(id: string, expectedSize: number): Promise<BoundedByteReader>;
++  /** Native only, after the durable quota/copy-intent reservation. */
++  copySource?(id: string, source: DurableByteSource, isCurrent: () => boolean, signal: AbortSignal | undefined, withOwnership: (write: () => void) => Promise<void>): Promise<string>;
++  /** Native only, exact manifest-owned locator; never scans arbitrary files. */
++  removeSource?(id: string): Promise<void>;
++}
++export const createAttachmentBytesBackend = createWebBackend;
+--- a/apps/kcoder-studio/mobile/src/storage/staged-attachment-bytes.web.ts
++++ b/apps/kcoder-studio/mobile/src/storage/staged-attachment-bytes.web.ts
+@@ -0,0 +1,70 @@
++import type { AttachmentBytesBackend, AttachmentStoreChange } from "./staged-attachment-bytes";
++
++const DATABASE = "kcoder-staged-attachments-v1";
++function openDatabase(): Promise<IDBDatabase> {
++  return new Promise((resolve, reject) => {
++    if (typeof indexedDB === "undefined") { reject(new Error("此浏览器无法持久保存附件")); return; }
++    let settled = false;
++    const fail = (error: Error) => { if (!settled) { settled = true; reject(error); } };
++    const request = indexedDB.open(DATABASE, 1);
++    request.onupgradeneeded = () => {
++      const db = request.result;
++      db.createObjectStore("rows", { keyPath: "id" });
++      db.createObjectStore("bytes");
++    };
++    request.onerror = () => fail(request.error ?? new Error("附件存储无法打开"));
++    request.onblocked = () => fail(new Error("附件存储升级被其他页面阻止"));
++    request.onsuccess = () => { if (settled) request.result.close(); else { settled = true; resolve(request.result); } };
++  });
++}
++export function createAttachmentBytesBackend(): AttachmentBytesBackend {
++  return {
++    kind: "web",
++    async transaction<T>(change: (rows: readonly unknown[]) => AttachmentStoreChange<T>): Promise<T> {
++      const db = await openDatabase();
++      return new Promise<T>((resolve, reject) => {
++        let transaction: IDBTransaction;
++        try { transaction = db.transaction(["rows", "bytes"], "readwrite"); } catch (error) { db.close(); reject(error); return; }
++        const rows = transaction.objectStore("rows"); const bytes = transaction.objectStore("bytes");
++        let value: T; let failure: unknown;
++        const request = rows.getAll(undefined, 129);
++        request.onsuccess = () => {
++          try {
++            // No await inside this callback: final Blob + row + quota/revision CAS
++            // are written under this same readwrite transaction across tabs.
++            if (request.result.length > 128) throw new Error("附件本地索引超出容量，保留原记录");
++            const update = change(request.result.map((row: { id?: unknown; value?: unknown }) => {
++              if (typeof row.id !== "string" || !row.value || typeof row.value !== "object" || (row.value as { id?: unknown }).id !== row.id) throw new Error("附件本地索引损坏");
++              return row.value;
++            }));
++            value = update.value;
++            if (update.putRow) rows.put(update.putRow);
++            if (update.deleteRow) rows.delete(update.deleteRow);
++            if (update.putBytes) bytes.put(update.putBytes.blob, update.putBytes.id);
++            if (update.deleteBytes) bytes.delete(update.deleteBytes);
++          } catch (error) { failure = error; transaction.abort(); }
++        };
++        transaction.oncomplete = () => { db.close(); resolve(value); };
++        transaction.onerror = () => { /* onabort is the single rejection path. */ };
++        transaction.onabort = () => { db.close(); reject(failure ?? transaction.error ?? new Error("附件持久化失败")); };
++      });
++    },
++    async source(id, expectedSize) {
++      const db = await openDatabase();
++      const blob = await new Promise<Blob>((resolve, reject) => {
++        let transaction: IDBTransaction;
++        try { transaction = db.transaction("bytes", "readonly"); } catch (error) { db.close(); reject(error); return; }
++        const request = transaction.objectStore("bytes").get(id);
++        let result: unknown;
++        request.onsuccess = () => { result = request.result; };
++        transaction.oncomplete = () => { db.close(); result instanceof Blob ? resolve(result) : reject(new Error("附件本地字节缺失；保留原上传 ID")); };
++        transaction.onabort = () => { db.close(); reject(transaction.error ?? new Error("附件本地字节读取失败")); };
++      });
++      if (blob.size !== expectedSize) throw new Error("附件本地字节长度不符；不会派发");
++      return { size: blob.size, async read(offset, length) {
++        if (!Number.isSafeInteger(offset) || !Number.isSafeInteger(length) || offset < 0 || length < 0 || offset + length > blob.size) throw new Error("Invalid staged byte range");
++        return new Uint8Array(await blob.slice(offset, offset + length).arrayBuffer());
++      } };
++    },
++  };
++}
+--- a/apps/kcoder-studio/mobile/src/storage/staged-attachment-bytes.native.ts
++++ b/apps/kcoder-studio/mobile/src/storage/staged-attachment-bytes.native.ts
+@@ -0,0 +1,95 @@
++import AsyncStorage from "@react-native-async-storage/async-storage";
++import { Directory, File, Paths, type FileHandle } from "expo-file-system";
++import { hashBoundedSource } from "@/protocol/sha256-stream";
++import type { AttachmentBytesBackend, DurableByteSource } from "./staged-attachment-bytes";
++
++const MANIFEST = "kcoder-staged-attachments-v1";
++const directory = () => new Directory(Paths.document, "kcoder-staged-attachments-v1");
++function fileFor(id: string): File {
++  if (!/^[a-f0-9]{32}$/.test(id)) throw new Error("Invalid staged attachment locator");
++  return new File(directory(), `${id}.bytes`);
++}
++/** Caller holds the shared profile-index gate for every manifest transaction. */
++export function createAttachmentBytesBackend(): AttachmentBytesBackend {
++  return {
++    kind: "native",
++    async transaction(change) {
++      const raw = await AsyncStorage.getItem(MANIFEST);
++      if (raw !== null && raw.length * 2 > 4 * 1024 * 1024) throw new Error("附件本地索引超出容量，保留原记录");
++      const rows: unknown = raw === null ? [] : JSON.parse(raw);
++      if (!Array.isArray(rows) || rows.length > 128) throw new Error("附件本地索引无法确认，请保留原记录");
++      const result = change(rows);
++      if (result.putBytes || result.deleteBytes) throw new Error("Native byte changes require their durable manifest intent");
++      const next = [...rows];
++      const rowId = (row: unknown): string => {
++        if (!row || typeof row !== "object" || typeof (row as { id?: unknown }).id !== "string") throw new Error("损坏的附件本地索引");
++        return (row as { id: string }).id;
++      };
++      if (result.deleteRow) {
++        const index = next.findIndex(row => rowId(row) === result.deleteRow);
++        if (index !== -1) next.splice(index, 1);
++      }
++      if (result.putRow) {
++        const index = next.findIndex(row => rowId(row) === result.putRow!.id);
++        if (index === -1) next.push(result.putRow.value); else next[index] = result.putRow.value;
++      }
++      // A single manifest write is the process-restart checkpoint. Expo provides no fsync API.
++      if (result.putRow || result.deleteRow) await AsyncStorage.setItem(MANIFEST, JSON.stringify(next));
++      return result.value;
++    },
++    async source(id, expectedSize) {
++      const file = fileFor(id);
++      if (!file.exists || file.size !== expectedSize) throw new Error("附件原始文件缺失或长度无法确认");
++      return {
++        size: expectedSize,
++        async read(offset, length) {
++          if (!Number.isSafeInteger(offset) || !Number.isSafeInteger(length) || offset < 0 || length < 0 || length > 64 * 1024 || offset + length > expectedSize) throw new Error("Invalid staged byte range");
++          const handle = file.open();
++          try {
++            if (handle.size !== expectedSize) throw new Error("附件原始文件长度已变化");
++            handle.offset = offset;
++            const bytes = handle.readBytes(length);
++            if (bytes.length !== length) throw new Error("附件原始文件读取不完整");
++            return bytes;
++          } finally { handle.close(); }
++        },
++      };
++    },
++    async copySource(id, source: DurableByteSource, isCurrent, signal, withOwnership) {
++      if (!isCurrent() || signal?.aborted) throw new Error("附件保存已取消");
++      const root = directory(); const file = fileFor(id);
++      let handle: FileHandle | undefined;
++      await withOwnership(() => {
++        root.create({ intermediates: true, idempotent: true });
++        // No overwrite/adoption: an existing copy takes the hash-checked recovery path.
++        file.create({ overwrite: false }); handle = file.open();
++      });
++      try {
++        const digest = await hashBoundedSource({
++          size: source.size,
++          async read(offset, length) {
++            if (!isCurrent() || signal?.aborted) throw new Error("附件保存已取消");
++            const bytes = await source.read(offset, length);
++            if (!isCurrent() || signal?.aborted) throw new Error("附件保存已取消");
++            if (bytes.byteLength !== length) throw new Error("附件原始文件读取不完整");
++            await withOwnership(() => { handle!.offset = offset; handle!.writeBytes(bytes); });
++            return bytes;
++          },
++        }, isCurrent, signal);
++        if (handle!.size !== source.size) throw new Error("附件持久副本长度不一致");
++        return digest;
++      } finally { handle?.close(); }
++    },
++    async removeSource(id) {
++      // Only called with an exact durable removal-intent row. No directory scans or cache-URI deletion.
++      const file = fileFor(id);
++      const root = directory();
++      // exists=false may also mean access denied. Require a successful exact-parent
++      // listing before accepting absence, including crash-after-delete recovery.
++      if (!new Directory(Paths.document).list().some(entry => entry.uri === root.uri)) return;
++      const before = root.list();
++      if (before.some(entry => entry.uri === file.uri)) file.delete();
++      if (root.list().some(entry => entry.uri === file.uri)) throw new Error("附件原始副本尚未删除");
++    },
++  };
++}
+--- a/apps/kcoder-studio/mobile/src/storage/retained-attachment-upload.ts
++++ b/apps/kcoder-studio/mobile/src/storage/retained-attachment-upload.ts
+@@ -0,0 +1,148 @@
++import { GatewayRpcClient } from "@/gateway/rpc";
++import { parseRetentionUploadResult, validateRetentionUploadParams, RETENTION_CHUNK_BYTES, type RetentionUploadExpectation, type RetentionUploadMethod, type RetentionUploadParamsV1, type RetentionUploadResultV1, type RetentionStageRefV1 } from "@/protocol/attachment-retention";
++import { hashBoundedSource, createAttachmentMacrotaskYield, type BoundedByteReader } from "@/protocol/sha256-stream";
++import { StagedAttachmentStore, type AttachmentStoreContext, type StagedAttachmentRecord } from "./staged-attachment-store";
++import type { DurableByteSource } from "./staged-attachment-bytes";
++
++export interface RetainedAttachmentHandle { kind: "retained"; localAttachmentId: string; filename: string; size: number; stageRef: RetentionStageRefV1 }
++export class RetainedUploadUnknown extends Error {
++  constructor() { super("附件上传状态尚未确认，原文件和上传 ID 已保留。请核对原连接后继续。"); this.name = "RetainedUploadUnknown"; }
++}
++function expectation(row: StagedAttachmentRecord): RetentionUploadExpectation {
++  if (!row.contentSha256) throw new RetainedUploadUnknown();
++  return { ownerRequest: row.ownerRequest, clientUploadId: row.clientUploadId, admission: row.admission, filename: row.filename, size: row.size, contentSha256: row.contentSha256, scopeId: row.scopeId, stageRef: row.stageRef };
++}
++function selector(row: StagedAttachmentRecord): RetentionUploadParamsV1 { return { ownerRequest: row.ownerRequest, clientUploadId: row.clientUploadId }; }
++async function base64(bytes: Uint8Array, current: () => void): Promise<string> {
++  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
++  const chunks: string[] = []; const scheduler = createAttachmentMacrotaskYield();
++  const clock = () => typeof performance === "object" ? performance.now() : Date.now();
++  let started = clock(); let blocks = 0;
++  try {
++    for (let start = 0; start < bytes.length; start += 3 * 4096) {
++      current(); let chunk = "";
++      for (let i = start; i < Math.min(start + 3 * 4096, bytes.length); i += 3) {
++        const a = bytes[i]!, b = bytes[i + 1], c = bytes[i + 2];
++        chunk += alphabet[a >>> 2]! + alphabet[(a & 3) << 4 | (b ?? 0) >>> 4]! + (b === undefined ? "=" : alphabet[(b & 15) << 2 | (c ?? 0) >>> 6]!) + (c === undefined ? "=" : alphabet[c & 63]!);
++      }
++      chunks.push(chunk);
++      if (++blocks >= 16 || clock() - started >= 8) { await scheduler.yield(); current(); blocks = 0; started = clock(); }
++    }
++    current(); return chunks.join("");
++  } finally { scheduler.close(); }
++}
++async function readRange(source: BoundedByteReader, offset: number, length: number, current: () => void): Promise<Uint8Array> {
++  const bytes = new Uint8Array(length);
++  for (let at = 0; at < length; at += 64 * 1024) {
++    current(); const size = Math.min(64 * 1024, length - at); const part = await source.read(offset + at, size); current();
++    if (part.length !== size) throw new RetainedUploadUnknown(); bytes.set(part, at);
++  }
++  return bytes;
++}
++/** One caller-owned initialized connection. No automatic reconnect, retry queue or legacy fallback. */
++export class RetainedAttachmentUploader {
++  constructor(private readonly context: AttachmentStoreContext, private readonly client: GatewayRpcClient, private readonly store = new StagedAttachmentStore(), private readonly signal?: AbortSignal) {}
++  private current(): void {
++    if (this.signal?.aborted || !this.context.isCurrent() || !this.client.matchesRetainedAttachmentOwner(this.context.profile, this.context.server, this.context.workspacePath) || !this.client.getAttachmentUploadAdmission()) throw new RetainedUploadUnknown();
++  }
++  async prepare(filename: string, source: DurableByteSource): Promise<StagedAttachmentRecord> {
++    this.current(); const admission = this.client.getAttachmentUploadAdmission()!;
++    // This durable local checkpoint is complete before the first retained RPC.
++    return this.store.prepare(this.context, admission, filename, source, this.signal);
++  }
++  async listUnresolved(): Promise<StagedAttachmentRecord[]> {
++    this.current(); return this.store.listUnresolved(this.context);
++  }
++  /** Only a complete, hash-matching copy can become prepared; partial/missing stays recoverable by ID. */
++  async recoverCopy(localAttachmentId: string): Promise<StagedAttachmentRecord> {
++    this.current();
++    return this.store.recoverCopy({ ...this.context, isCurrent: () => { this.current(); return true; } }, localAttachmentId, this.signal);
++  }
++  private async wire(row: StagedAttachmentRecord, method: RetentionUploadMethod, params: RetentionUploadParamsV1): Promise<{ row: StagedAttachmentRecord; result: RetentionUploadResultV1 }> {
++    this.current(); const expected = expectation(row); validateRetentionUploadParams(method, params, expected);
++    // Before-first-send local client/root admission must match the captured IDs.
++    const admission = this.client.getAttachmentUploadAdmission()!;
++    if (admission.rootNamespace !== row.admission.rootNamespace || ((method.endsWith("/start") || method.endsWith("/save")) && admission.admissionEpoch !== row.admission.admissionEpoch)) throw new RetainedUploadUnknown();
++    const held = await this.store.dispatch(this.context, row, method, params, () => {
++      this.current(); return this.client.request<unknown>(method, { ...params }, 30_000);
++    });
++    // A rejected/invalid/late response leaves the original durable wire intent.
++    const raw = await held.response; this.current();
++    const result = parseRetentionUploadResult(raw, expected);
++    return { row: held.row, result };
++  }
++  private async apply(row: StagedAttachmentRecord, result: RetentionUploadResultV1): Promise<StagedAttachmentRecord> {
++    this.current(); const lookup = result.lookup;
++    if (lookup.outcome === "absent") {
++      // Absence cannot turn a sent Unknown under an unconfirmed scope into a new allocation.
++      if (!row.scopeId) throw new RetainedUploadUnknown();
++      return this.store.update(this.context, row, old => ({ ...old, scopeId: result.scopeId }));
++    }
++    if (lookup.outcome === "epochRetired") {
++      await this.store.update(this.context, row, old => ({ ...old, scopeId: result.scopeId, phase: "epochRetired" }));
++      throw new RetainedUploadUnknown(); // No new ID or implicit local source deletion.
++    }
++    const recovery = lookup.recovery;
++    if (recovery.state === "unknown") throw new RetainedUploadUnknown();
++    if (recovery.confirmedBytes < row.confirmedBytes) throw new RetainedUploadUnknown();
++    return this.store.update(this.context, row, old => ({ ...old, scopeId: result.scopeId, confirmedBytes: recovery.confirmedBytes,
++      phase: recovery.state === "sealed" ? "sealed" : recovery.state === "cancelled" ? "cancelled" : "uploading", ...(recovery.stageRef ? { stageRef: recovery.stageRef } : {}) }));
++  }
++  private handle(row: StagedAttachmentRecord): RetainedAttachmentHandle {
++    if (row.phase !== "sealed" || !row.stageRef || row.wire) throw new RetainedUploadUnknown();
++    return { kind: "retained", localAttachmentId: row.id, filename: row.filename, size: row.size, stageRef: { ...row.stageRef } };
++  }
++  async resume(localAttachmentId: string): Promise<RetainedAttachmentHandle> {
++    this.current(); let row = await this.store.load(this.context, localAttachmentId);
++    if (!row || row.phase === "copying" || ["cancelled", "epochRetired", "sourceRemovalPending", "sourceRemoved"].includes(row.phase)) throw new RetainedUploadUnknown();
++    // Validate the entire exact local source before any read/mutation RPC. Native source changes
++    // and lost cache URIs cannot silently upload different bytes using the original ID.
++    const source = await this.store.source(this.context, row);
++    const digest = await hashBoundedSource(source, () => { try { this.current(); return true; } catch { return false; } }, this.signal);
++    if (digest !== row.contentSha256) throw new RetainedUploadUnknown();
++    if (row.wire || row.phase === "uploading" || row.phase === "sealed") {
++      const read = await this.wire(row, "attachment/retention/upload/read", selector(row));
++      row = await this.apply(read.row, read.result);
++      if (read.result.lookup.outcome === "absent") throw new RetainedUploadUnknown();
++      if (row.phase === "sealed") return this.handle(row);
++      if (row.phase === "cancelled") throw new RetainedUploadUnknown();
++    } else {
++      const params: RetentionUploadParamsV1 = { ...selector(row), filename: row.filename, size: row.size, contentSha256: row.contentSha256 };
++      // Small save still uses the same durable IDs and typed retained service.
++      const method: RetentionUploadMethod = row.size <= 256 * 1024 ? "attachment/retention/upload/save" : "attachment/retention/upload/start";
++      if (method.endsWith("/save")) params.contentBase64 = await base64(await readRange(source, 0, row.size, () => this.current()), () => this.current());
++      const started = await this.wire(row, method, params); row = await this.apply(started.row, started.result);
++      if (row.phase === "sealed") return this.handle(row);
++      if (started.result.lookup.outcome !== "present" || row.phase !== "uploading") throw new RetainedUploadUnknown();
++    }
++    while (row.confirmedBytes < row.size) {
++      this.current(); const offset = row.confirmedBytes; const length = Math.min(RETENTION_CHUNK_BYTES, row.size - offset);
++      const bytes = await readRange(source, offset, length, () => this.current());
++      const chunkSha256 = await hashBoundedSource({ size: bytes.length, async read(start, count) { return bytes.subarray(start, start + count); } }, () => { this.current(); return true; }, this.signal);
++      const contentBase64 = await base64(bytes, () => this.current());
++      const uploaded = await this.wire(row, "attachment/retention/upload/chunk", { ...selector(row), offset, length, chunkSha256, contentBase64 });
++      const next = await this.apply(uploaded.row, uploaded.result);
++      if (next.confirmedBytes !== offset + length || next.phase !== "uploading") throw new RetainedUploadUnknown(); row = next;
++    }
++    const finished = await this.wire(row, "attachment/retention/upload/finish", selector(row));
++    row = await this.apply(finished.row, finished.result); return this.handle(row);
++  }
++  async cancel(localAttachmentId: string): Promise<void> {
++    this.current(); const row = await this.store.load(this.context, localAttachmentId);
++    if (!row) throw new RetainedUploadUnknown();
++    if (!row.wire && !row.scopeId && row.confirmedBytes === 0 && ["copying", "prepared"].includes(row.phase)) {
++      await this.store.discardSource(this.context, row); return;
++    }
++    if (row.phase === "cancelled" && !row.wire && row.cleanup === "requested") {
++      await this.store.discardSource(this.context, row); return;
++    }
++    if (row.phase === "copying") throw new RetainedUploadUnknown();
++    const source = await this.store.source(this.context, row);
++    if (await hashBoundedSource(source, () => { this.current(); return true; }, this.signal) !== row.contentSha256) throw new RetainedUploadUnknown();
++    // Explicit cancellation only. Transport errors never call cancel or discard local bytes.
++    const cancelled = await this.wire(row, "attachment/retention/upload/cancel", selector(row));
++    const next = await this.apply(cancelled.row, cancelled.result);
++    if (next.phase !== "cancelled") throw new RetainedUploadUnknown();
++    await this.store.discardSource(this.context, next);
++  }
++}

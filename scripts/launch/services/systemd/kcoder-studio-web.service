@@ -1,0 +1,21 @@
+[Unit]
+Description=KCoder Studio Web Gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@KCODER_STUDIO_SERVICE_USER@
+Group=@KCODER_STUDIO_SERVICE_GROUP@
+WorkingDirectory=@KCODER_STUDIO_REPO_DIR@/apps/kcoder-studio
+Environment=HOME=@KCODER_STUDIO_SERVICE_HOME@
+Environment=PATH=@KCODER_STUDIO_SERVICE_PATH@
+EnvironmentFile=@KCODER_STUDIO_SERVICE_HOME@/.config/kcoder-studio/web-gateway.env
+ExecStart=@KCODER_STUDIO_NODE_BIN@ @KCODER_STUDIO_REPO_DIR@/apps/kcoder-studio/dev-server.mjs
+Restart=on-failure
+RestartSec=2s
+TimeoutStopSec=20s
+KillMode=control-group
+
+[Install]
+WantedBy=multi-user.target

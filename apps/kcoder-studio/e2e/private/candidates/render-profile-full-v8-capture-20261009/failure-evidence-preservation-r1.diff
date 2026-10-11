@@ -1,0 +1,405 @@
+--- apps/kcoder-studio/e2e/private/candidates/render-profile-full-v8-capture-20261009/mobile-render-profile.baseline-candidate-r2.mjs
++++ apps/kcoder-studio/e2e/private/candidates/render-profile-full-v8-capture-20261009/mobile-render-profile.full-capture.candidate.mjs
+@@ -5,11 +5,12 @@
+ import { lstat, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+ import { basename, dirname, relative, resolve, sep } from "node:path";
+ import { performance } from "node:perf_hooks";
+-import { startChromium } from "../../harness/chromium.mjs";
+-import { assertPathWithinApprovedRoots, readVerifiedMobileExportFile, verifyMobileExportManifestEnvelope } from "../../harness/mobile-web-export-input.mjs";
+-import { makeCoreAttributionRecord, mapGeneratedProfilePosition, recordScriptUrlIdentity, resolveScriptMapBinding, validateCoreAttributionMode, verifySourceMapBundleEvidence } from "../../harness/render-profile-attribution-contract.mjs";
+-import { repoRoot, runE2E, waitFor } from "../../harness/run-context.mjs";
+-import { measuredTranscriptLatestDistance } from "../../harness/transcript-logical-distance.mjs";
++import { startChromium } from "../../../harness/chromium.mjs";
++import { assertPathWithinApprovedRoots, readVerifiedMobileExportFile, verifyMobileExportManifestEnvelope } from "../../../harness/mobile-web-export-input.mjs";
++import { makeCoreAttributionRecord, mapGeneratedProfilePosition, resolveScriptMapBinding, validateCoreAttributionMode, verifySourceMapBundleEvidence } from "../../../harness/render-profile-attribution-contract.mjs";
++import { repoRoot, runE2E, waitFor } from "../../../harness/run-context.mjs";
++import { measuredTranscriptLatestDistance } from "../../../harness/transcript-logical-distance.mjs";
++import { makeCompleteCpuProfileArtifact, makeFullProfileCaptureFailureEvidence, validateProfileWindowBoundaries } from "./profile-capture-contract.mjs";
+ 
+ const MATRIX_EPSILON = 1e-9;
+ 
+@@ -37,6 +38,10 @@
+ const coreAttributionOnlyValue = optionValue("--core-attribution-only", "false");
+ assert.ok(coreAttributionOnlyValue === "true" || coreAttributionOnlyValue === "false", "--core-attribution-only must be true or false");
+ const coreAttributionOnly = coreAttributionOnlyValue === "true";
++const captureFullCpuProfileValue = optionValue("--capture-full-cpu-profile", "false");
++assert.ok(captureFullCpuProfileValue === "true" || captureFullCpuProfileValue === "false", "--capture-full-cpu-profile must be true or false");
++const captureFullCpuProfile = captureFullCpuProfileValue === "true";
++assert.ok(!captureFullCpuProfile || coreAttributionOnly, "full CDP nodes/samples/timeDeltas capture is restricted to the one-burst core-attribution diagnostic");
+ assert.ok(!(tailWindowProductRegression && tailWindowPaginationRegression), "core follow and older-page pagination diagnostics are separate selectors");
+ const tailWindowDiagnostic = tailWindowProductRegression || tailWindowPaginationRegression;
+ const sourceNames = optionValue("--sources", "before,after").split(",").map((value) => value.trim());
+@@ -605,8 +610,21 @@
+             diagnosticOnly: coreAttributionOnly,
+             profileKind: coreAttributionOnly ? "actual core active-Markdown burst; DIAGNOSTIC_ONLY, not a performance sample" : undefined,
+             initialTailMarker: coreAttributionOnly ? `seed-${source.name}-${count}-${panelState}` : undefined,
++            captureFullCpuProfile: captureFullCpuProfile,
++            bundleSha256: captureFullCpuProfile ? source.builderManifest.bundleSha256 : undefined,
++            approvedBundlePaths: captureFullCpuProfile ? source.builderManifest.bundleFiles.map((entry) => entry.path) : undefined,
+           });
+         } catch (error) {
++          let rawCpuProfileArtifact = null;
++          let rawCpuProfileArtifactWriteError = null;
++          if (captureFullCpuProfile && error?.rawCpuProfileArtifact) {
++            rawCpuProfileArtifact = `phone-render-core-v8-full-${source.name}-${count}-${panelState}.json`;
++            try {
++              await context.writeArtifactJson(rawCpuProfileArtifact, error.rawCpuProfileArtifact);
++            } catch (writeError) {
++              rawCpuProfileArtifactWriteError = String(writeError?.message || writeError).slice(0, 500);
++            }
++          }
+           await context.writeArtifactJson(`phone-render-profile-failure-${source.name}-${count}-${panelState}.json`, {
+             schemaVersion: 1,
+             ...(coreAttributionOnly ? {
+@@ -622,6 +640,8 @@
+             expectedHiddenUpdateCount: sampleCount,
+             successfulHiddenUpdateCount: pageState.hiddenUpdateTurnsCompleted,
+             hiddenUpdateResults: hiddenUpdates,
++            rawCpuProfileArtifact,
++            rawCpuProfileArtifactWriteError,
+             helperViewport: error?.transcriptViewport ?? error?.cause?.transcriptViewport ?? null,
+             activeStreamFailureEvidence: error?.activeStreamFailureEvidence ?? error?.cause?.activeStreamFailureEvidence ?? null,
+             error: {
+@@ -638,6 +658,21 @@
+ 
+         if (coreAttributionOnly) {
+           const burst = activeStream.evidence?.bursts?.[0] ?? null;
++          let rawCpuProfileArtifact = null;
++          if (captureFullCpuProfile) {
++            if (!activeStream.rawCpuProfileArtifact) {
++              const captureFailureEvidence = makeFullProfileCaptureFailureEvidence({
++                source: source.name,
++                requestedMessages: count,
++                panelState,
++                activeStream,
++              });
++              await context.writeArtifactJson(`phone-render-core-v8-capture-failure-${source.name}-${count}-${panelState}.json`, captureFailureEvidence);
++            }
++            assert.ok(activeStream.rawCpuProfileArtifact, "full CDP profile capture must preserve sanitized nodes, samples, and timeDeltas");
++            rawCpuProfileArtifact = `phone-render-core-v8-full-${source.name}-${count}-${panelState}.json`;
++            await context.writeArtifactJson(rawCpuProfileArtifact, activeStream.rawCpuProfileArtifact);
++          }
+           let sourceMapAttribution = null;
+           let sourceMapAttributionError = null;
+           if (activeStream.cpuProfile) {
+@@ -666,6 +701,13 @@
+           record.sourceMapAttribution = sourceMapAttribution;
+           record.sourceMapAttributionError = sourceMapAttributionError;
+           record.sourceAttributionStatus = sourceMapAttribution?.mappedFrameCount > 0 ? "MAPPED" : "UNRESOLVED";
++          if (activeStream.cpuProfile?.profileWindowScope) record.profileScope = activeStream.cpuProfile.profileWindowScope;
++          record.fullCpuProfileCapture = captureFullCpuProfile ? {
++            status: "CAPTURED",
++            artifact: rawCpuProfileArtifact,
++            profileWindowScope: activeStream.cpuProfile?.profileWindowScope ?? null,
++            dataContract: "all CDP nodes/samples/timeDeltas retained; callFrame fields are allow-listed and raw URLs are replaced by approved bundle identity or status; profile includes app-facing mock dispatch and bounded MutationObserver/two-RAF instrumentation, not isolated React render or compositor time",
++          } : { status: "NOT_REQUESTED" };
+           record.fixture = {
+             historyRowsDelivered: pageState.historyRowsDelivered,
+             historyResponseBytes: pageState.historyResponseBytes,
+@@ -1503,6 +1545,7 @@
+ function installPerformanceInstrumentation() {
+   const interactions = new Map();
+   const completed = new Map();
++  const mutationWaiters = new Map();
+   const longTasks = [];
+   const longAnimationFrames = [];
+   const longAnimationFrameSupport = typeof PerformanceObserver === "function"
+@@ -1811,7 +1854,7 @@
+   const finish = (state, finishedAt, detail = {}) => {
+     if (state.finishedAt !== null) return;
+     state.finishedAt = finishedAt;
+-    completed.set(state.id, {
++    const result = {
+       id: state.id,
+       startedAt: state.startedAt,
+       finishedAt: state.finishedAt,
+@@ -1825,7 +1868,14 @@
+       scrollEventTaskMs: state.scrollEventTaskMs,
+       mutationObserverCallbackMs: state.mutationObserverCallbackMs ?? null,
+       ...detail,
+-    });
++    };
++    completed.set(state.id, result);
++    const waiter = mutationWaiters.get(state.id);
++    if (waiter) {
++      clearTimeout(waiter.timer);
++      mutationWaiters.delete(state.id);
++      waiter.resolve(result);
++    }
+     state.cleanup?.();
+     interactions.delete(state.id);
+   };
+@@ -1915,6 +1965,23 @@
+     return { observedRoot: Boolean(root), primaryBoundary: "changed assistant-row text under Mobile message-list followed by two requestAnimationFrame callbacks", supplementalChangesObserver: Boolean(changesRoot) };
+   };
+   window.__phoneRenderMutationResult = (id) => completed.get(id) ?? null;
++  window.__phoneRenderAwaitMutationResult = (id, timeoutMs = 5_000) => {
++    const existing = completed.get(id);
++    if (existing) return Promise.resolve(existing);
++    const state = interactions.get(id);
++    if (!state || state.kind !== "mutation") return Promise.reject(new Error("mutation observer is not armed"));
++    if (mutationWaiters.has(id)) return Promise.reject(new Error("mutation observer already has an active completion waiter"));
++    if (!Number.isFinite(timeoutMs) || timeoutMs < 1 || timeoutMs > 5_000) {
++      return Promise.reject(new Error("mutation completion timeout must be between 1 and 5000 ms"));
++    }
++    return new Promise((resolve, reject) => {
++      const timer = setTimeout(() => {
++        mutationWaiters.delete(id);
++        reject(new Error(`assistant-row mutation plus two animation frames did not complete within ${timeoutMs} ms`));
++      }, timeoutMs);
++      mutationWaiters.set(id, { resolve, reject, timer });
++    });
++  };
+   window.__phoneRenderLongTasks = () => longTasks.slice();
+   window.__phoneRenderLongTasksBetween = (startedAt, finishedAt) => longTasks.filter((task) => task.startTimeMs < finishedAt && task.startTimeMs + task.durationMs >= startedAt);
+   window.__phoneRenderLongAnimationFrameSupport = () => longAnimationFrameSupport;
+@@ -3219,25 +3286,66 @@
+   }
+   let profileSession = null;
+   let cpuProfile = null;
++  let rawCpuProfile = null;
++  let rawCpuProfileArtifact = null;
+   let cpuProfileError = null;
++  const captureCompleteProfile = captureProfile && options.captureFullCpuProfile === true;
++  if (captureCompleteProfile) {
++    assert.equal(samples, 1, "complete CDP profile capture is restricted to one independent burst");
++    assert.equal(diagnosticOnly, true, "complete CDP profile capture must remain diagnostic-only");
++    assert.ok(Array.isArray(options.approvedBundlePaths) && options.approvedBundlePaths.length > 0, "complete CDP profile capture requires the pinned served bundle inventory");
++  }
++  const approvedBundlePaths = new Set(options.approvedBundlePaths ?? []);
+   const approvedScriptBaseUrl = captureProfile ? page.url() : null;
+-  const profileStartedAt = captureProfile ? performance.now() : null;
++  let profileStartedAt = null;
++  let profileStartRequestedAtNodeMs = null;
++  let profileStartAcknowledgedAtNodeMs = null;
++  let profileStopRequestedAtNodeMs = null;
++  let profileStopAcknowledgedAtNodeMs = null;
++  let profileStarted = false;
++  let profileStopAttempted = false;
+   let profileStartClock = null;
+   let profileEndClock = null;
++  const profilePageBoundaries = {
++    firstDeltaDispatchAtPageTimeMs: null,
++    completionDispatchAtPageTimeMs: null,
++    agentRowMutationObservedAtPageTimeMs: null,
++    twoAnimationFrameOpportunityAtPageTimeMs: null,
++    rowGeometryValidationAtPageTimeMs: null,
++    tailValidationStartAtPageTimeMs: null,
++    tailValidationEndAtPageTimeMs: null,
++    tailValidationAction: null,
++  };
++  const stopProfileCapture = async () => {
++    if (!profileSession || !profileStarted || profileStopAttempted) return;
++    profileStopAttempted = true;
++    profileStopRequestedAtNodeMs = performance.now();
++    const { profile } = await profileSession.send("Profiler.stop");
++    profileStopAcknowledgedAtNodeMs = performance.now();
++    profileStarted = false;
++    rawCpuProfile = profile;
++    profileEndClock = await captureCdpClockAnchor(profileSession, page);
++  };
+   if (captureProfile) {
+     try {
+       profileSession = await page.context().newCDPSession(page);
+       await profileSession.send("Performance.enable");
+       await profileSession.send("Profiler.enable");
+       await profileSession.send("Profiler.setSamplingInterval", { interval: 500 });
+-      await profileSession.send("Profiler.start");
+-      profileStartClock = await captureCdpClockAnchor(profileSession, page);
++      if (!captureCompleteProfile) {
++        await profileSession.send("Profiler.start");
++        profileStarted = true;
++        profileStartedAt = performance.now();
++        profileStartClock = await captureCdpClockAnchor(profileSession, page);
++      }
+     } catch (error) {
+       cpuProfileError = String(error.message || error).slice(0, 300);
++      profileStarted = false;
+       await profileSession?.detach().catch(() => {});
+       profileSession = null;
+     }
+   }
++  let activeStreamError = null;
+   try {
+     for (let streamIndex = 0; streamIndex < samples; streamIndex += 1) {
+       const streamSample = sampleOffset + streamIndex + 1;
+@@ -3316,15 +3424,51 @@
+         params: { ...common, sequence: state.nextSequence++, turn: { id: turnId, attemptId, threadId, status: "completed" } },
+       };
+       currentStreamPhase = "dispatching-stream-deltas-and-completion";
++      if (captureCompleteProfile && profileSession && !profileStarted && !cpuProfileError) {
++        try {
++          // Clock bracketing and CDP setup are deliberately outside this profile window.
++          profileStartClock = await captureCdpClockAnchor(profileSession, page);
++          profileStartRequestedAtNodeMs = performance.now();
++          await profileSession.send("Profiler.start");
++          profileStartAcknowledgedAtNodeMs = performance.now();
++          profileStartedAt = profileStartAcknowledgedAtNodeMs;
++          profileStarted = true;
++        } catch (error) {
++          cpuProfileError = String(error.message || error).slice(0, 300);
++          profileStarted = false;
++        }
++      }
+       const delivery = await dispatchActiveStreamFrames(page, state, [...deltaFrames, completionFrame], finalMarker);
+       assert.equal(delivery.delivered, activeDeltaChunksPerStream + 1, `all active Markdown chunks and their completion must reach the unique Mobile runtime socket: ${JSON.stringify(delivery)}`);
++      profilePageBoundaries.firstDeltaDispatchAtPageTimeMs = delivery.firstDeltaDispatchAt;
++      profilePageBoundaries.completionDispatchAtPageTimeMs = delivery.completionDispatchAt;
+       let error = null;
+       currentStreamPhase = "waiting-for-agent-row-and-two-raf";
++      let result = null;
+       try {
+-        await page.waitForFunction((id) => Boolean(window.__phoneRenderMutationResult(id)), observerId, { timeout: 5_000 });
++        if (captureCompleteProfile) {
++          result = await page.evaluate(({ id, timeoutMs }) => window.__phoneRenderAwaitMutationResult(id, timeoutMs), {
++            id: observerId,
++            timeoutMs: 5_000,
++          });
++        } else {
++          await page.waitForFunction((id) => Boolean(window.__phoneRenderMutationResult(id)), observerId, { timeout: 5_000 });
++          result = await page.evaluate((id) => window.__phoneRenderMutationResult(id), observerId).catch(() => null);
++        }
+       } catch (caught) { error = caught; }
++      if (captureCompleteProfile && profileStarted) {
++        try {
++          await stopProfileCapture();
++        } catch (caught) {
++          cpuProfileError = String(caught.message || caught).slice(0, 300);
++        }
++      }
+       currentStreamPhase = "capturing-terminal-row";
+-      const result = await page.evaluate((id) => window.__phoneRenderMutationResult(id), observerId).catch(() => null);
++      if (!captureCompleteProfile && !result) {
++        result = await page.evaluate((id) => window.__phoneRenderMutationResult(id), observerId).catch(() => null);
++      }
++      profilePageBoundaries.agentRowMutationObservedAtPageTimeMs = result?.agentRevisionAt ?? null;
++      profilePageBoundaries.twoAnimationFrameOpportunityAtPageTimeMs = result?.finishedAt ?? null;
+       delivery.twoFrameOpportunityAt = result?.finishedAt ?? null;
+       delivery.streamToTwoFrameOpportunityMs = result?.notificationDispatchToTwoFrameOpportunityMs ?? null;
+       delivery.completionToTwoFrameOpportunityMs = Number.isFinite(result?.finishedAt)
+@@ -3335,6 +3479,7 @@
+         const row = rows.find((element) => (element.textContent ?? "").includes(marker));
+         const list = document.querySelector('[data-testid="message-list"]');
+         return row ? {
++          sampledAtPageTimeMs: Number(performance.now().toFixed(3)),
+           present: true,
+           textLength: (row.textContent ?? "").length,
+           finalMarkerPresent: (row.textContent ?? "").includes(marker),
+@@ -3354,8 +3499,12 @@
+             && !Boolean(document.querySelector('[data-testid="queue-message"]')),
+         } : { present: false, textLength: null, finalMarkerPresent: false };
+       }, finalMarker).catch(() => ({ present: false, textLength: null, finalMarkerPresent: false }));
++      profilePageBoundaries.rowGeometryValidationAtPageTimeMs = delivery.finalAssistantRow.sampledAtPageTimeMs ?? null;
+       currentStreamPhase = "tail-following-final-marker";
+       const finalMarkerVisibility = await scrollTranscriptToLatest(page, finalMarker, { requireMarkerVisible: true });
++      profilePageBoundaries.tailValidationStartAtPageTimeMs = finalMarkerVisibility.before.sampledAtPageTimeMs ?? null;
++      profilePageBoundaries.tailValidationEndAtPageTimeMs = finalMarkerVisibility.afterPageTimeMs ?? null;
++      profilePageBoundaries.tailValidationAction = finalMarkerVisibility.action ?? null;
+       delivery.finalMarkerVisibilityEvidence = {
+         classification: "exact last-character DOM Range visibility after observed app-side layout/scroll movement or one real jump-to-latest touch, stable viewport samples, and two requestAnimationFrame opportunities",
+         markerAlreadyVisibleBeforeTailFollow: finalMarkerVisibility.before.targetMarkerVisibleWithinMessageList,
+@@ -3581,31 +3730,90 @@
+       streamSampleCount: bursts.length,
+     };
+   } catch (error) {
+-    throw attachActiveStreamFailureEvidence(error, currentStreamPhase);
++    activeStreamError = attachActiveStreamFailureEvidence(error, currentStreamPhase);
+   } finally {
+     if (profileSession) {
+-      try {
+-      const { profile } = await profileSession.send("Profiler.stop");
+-      profileEndClock = await captureCdpClockAnchor(profileSession, page);
+-      cpuProfile = summarizeCpuProfile(profile, {
++      if (profileStarted && !profileStopAttempted) {
++        try {
++          await stopProfileCapture();
++        } catch (error) {
++          cpuProfileError = String(error.message || error).slice(0, 300);
++        }
++      }
++      await profileSession.send("Profiler.disable").catch(() => {});
++      await profileSession.detach().catch(() => {});
++    }
++  }
++  if (rawCpuProfile) {
++    try {
++      const profileWindowScope = captureCompleteProfile
++        ? "V8 Profiler starts after stream setup and immediately before the 30-delta/terminal-frame dispatch; it stops after the changed assistant-row text is observed and two animation-frame opportunities complete, before row geometry and tail-follow polling. The profile includes the app-facing mock dispatcher and bounded MutationObserver/two-RAF instrumentation; these timestamps mark observable task/mutation boundaries, not isolated React render cost, an internal React commit timestamp, or compositor presentation."
++        : "V8 Profiler collection spans the broader diagnostic helper, including setup and visible-tail validation; it is not a render-duration measurement.";
++      if (captureCompleteProfile) {
++        rawCpuProfileArtifact = makeCompleteCpuProfileArtifact(rawCpuProfile, {
++          source,
++          requestedMessages: count,
++          panelState,
++          bundleSha256: options.bundleSha256,
++          profileWindowScope,
++          clockAlignment: null,
++          profilePageBoundaries,
++          profileControlNodeClock: {
++            startRequestedAtPerformanceNowMs: profileStartRequestedAtNodeMs,
++            startAcknowledgedAtPerformanceNowMs: profileStartAcknowledgedAtNodeMs,
++            stopRequestedAtPerformanceNowMs: profileStopRequestedAtNodeMs,
++            stopAcknowledgedAtPerformanceNowMs: profileStopAcknowledgedAtNodeMs,
++            clockDomain: "Node process performance.now; not directly comparable with browser page timestamps",
++          },
++          externalValidation: bursts.at(-1)?.finalMarkerVisibilityEvidence ?? null,
++          rowGeometryValidationAtPageTimeMs: profilePageBoundaries.rowGeometryValidationAtPageTimeMs,
++        }, approvedScriptBaseUrl, approvedBundlePaths);
++      }
++      cpuProfile = summarizeCpuProfile(rawCpuProfile, {
+         source,
+         requestedMessages: count,
+         panelState,
+         profileKind: options.profileKind ?? "separate diagnostic burst, excluded from core latency samples",
++        profileWindowScope,
+         diagnosticActiveMarkdownBursts: samples,
+-          deltaChunksPerStream: activeDeltaChunksPerStream,
+-          profilerSamplingIntervalUs: 500,
+-          profileWallTimeMs: Number((performance.now() - profileStartedAt).toFixed(3)),
+-        }, { start: profileStartClock, end: profileEndClock }, bursts.flatMap((burst) => burst.longTasks ?? []), approvedScriptBaseUrl);
+-      } catch (error) {
+-        cpuProfileError = String(error.message || error).slice(0, 300);
++        deltaChunksPerStream: activeDeltaChunksPerStream,
++        profilerSamplingIntervalUs: 500,
++        profileWallTimeMs: Number(((captureCompleteProfile && Number.isFinite(profileStopAcknowledgedAtNodeMs)
++          ? profileStopAcknowledgedAtNodeMs
++          : performance.now()) - profileStartedAt).toFixed(3)),
++        profileWallTimeInterpretation: captureCompleteProfile
++          ? "Node CDP start-to-stop control interval; V8 profile startTime/endTime are the browser profiler interval; neither is a pure render duration"
++          : "Node time from Profiler start until broad diagnostic summary; includes helper and external validation time",
++        profileControlNodeClock: {
++          startRequestedAtPerformanceNowMs: profileStartRequestedAtNodeMs,
++          startAcknowledgedAtPerformanceNowMs: profileStartAcknowledgedAtNodeMs,
++          stopRequestedAtPerformanceNowMs: profileStopRequestedAtNodeMs,
++          stopAcknowledgedAtPerformanceNowMs: profileStopAcknowledgedAtNodeMs,
++          clockDomain: "Node process performance.now; not directly comparable with browser page timestamps",
++        },
++      }, { start: profileStartClock, end: profileEndClock }, bursts.flatMap((burst) => burst.longTasks ?? []), approvedScriptBaseUrl);
++      if (captureCompleteProfile) {
++        rawCpuProfileArtifact.timestamps.pageClockAlignment = cpuProfile.clockAlignment;
++        rawCpuProfileArtifact.timestamps.profileWindowBoundaryValidation = validateProfileWindowBoundaries({
++          browserBurstEvents: rawCpuProfileArtifact.timestamps.browserBurstEvents,
++          profileWindowPageTimeMs: cpuProfile.clockAlignment.profileWindowPageTimeMs,
++          clockAlignmentStatus: cpuProfile.clockAlignment.status,
++        });
++        delete rawCpuProfileArtifact.serializedUtf8Bytes;
++        const serializedBytes = Buffer.byteLength(JSON.stringify(rawCpuProfileArtifact));
++        assert.ok(serializedBytes <= 64 * 1024 * 1024, "complete sanitized V8 profile exceeds the 64 MiB diagnostic artifact limit");
++        rawCpuProfileArtifact.serializedUtf8Bytes = serializedBytes;
+       }
+-      await profileSession.send("Profiler.disable").catch(() => {});
+-      await profileSession.detach().catch(() => {});
++    } catch (error) {
++      cpuProfileError = String(error.message || error).slice(0, 300);
+     }
+   }
+   if (cpuProfileError) state.activeStreamEvidence = { ...state.activeStreamEvidence, cpuProfileError };
+-  return { observations, cpuProfile, evidence: state.activeStreamEvidence };
++  if (activeStreamError) {
++    if (rawCpuProfileArtifact) activeStreamError.rawCpuProfileArtifact = rawCpuProfileArtifact;
++    throw activeStreamError;
++  }
++  return { observations, cpuProfile, rawCpuProfileArtifact, evidence: state.activeStreamEvidence };
+ }
+ 
+ async function dispatchActiveFrame(page, state, frame, options = {}) {

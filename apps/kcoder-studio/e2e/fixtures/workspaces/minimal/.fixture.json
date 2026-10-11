@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "id": "minimal",
+  "version": 2,
+  "description": "最小通用工作区，用于会话、路由和浏览器等不依赖具体语言的测试。",
+  "tags": ["minimal", "model-independent"],
+  "materializer": "copy"
+}

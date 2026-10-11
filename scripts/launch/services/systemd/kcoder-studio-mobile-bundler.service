@@ -1,0 +1,25 @@
+[Unit]
+Description=KCoder Studio Mobile Expo Bundler
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@KCODER_STUDIO_SERVICE_USER@
+Group=@KCODER_STUDIO_SERVICE_GROUP@
+WorkingDirectory=@KCODER_STUDIO_REPO_DIR@/apps/kcoder-studio/mobile
+Environment=HOME=@KCODER_STUDIO_SERVICE_HOME@
+Environment=PATH=@KCODER_STUDIO_SERVICE_PATH@
+@KCODER_STUDIO_MOBILE_CI_ENV@
+Environment=EXPO_OFFLINE=1
+IPAddressDeny=any
+IPAddressAllow=localhost
+ExecStartPre=@KCODER_STUDIO_NPM_BIN@ run build:terminal-webview
+ExecStart=@KCODER_STUDIO_NODE_BIN@ @KCODER_STUDIO_REPO_DIR@/apps/kcoder-studio/mobile/node_modules/expo/bin/cli start --web --port 14175 --host localhost
+Restart=on-failure
+RestartSec=2s
+TimeoutStopSec=30s
+KillMode=control-group
+
+[Install]
+WantedBy=multi-user.target

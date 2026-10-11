@@ -1,0 +1,7 @@
+{
+  "fastmcp-slim==4.0.5": {
+    "file": "fastmcp-slim-4.0.5.LICENSE",
+    "sha256": "43070e2d4e532684de521b885f385d0841030efa2b1a20bafb76133a5e1379c1",
+    "source": "https://raw.githubusercontent.com/PrefectHQ/fastmcp/v4.0.5/LICENSE"
+  }
+}

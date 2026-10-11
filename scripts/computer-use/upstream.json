@@ -1,0 +1,23 @@
+{
+  "repository": "https://github.com/CursorTouch/Windows-MCP",
+  "commit": "a74df211d8dcb4cdc49f58a5a18d816d79bd6c3b",
+  "version": "0.8.6",
+  "sourceArchiveSha256": "61451b65706e0d9258877b9c4e06bbcbd2c3341bc0aa77b287d4c25120411ef5",
+  "pythonSeries": "3.14",
+  "patches": [
+    "replace fuzzywuzzy.process with thefuzz.process",
+    "remove fuzzywuzzy and python-levenshtein dependencies",
+    "scope horizontal-scroll Shift ownership and release on ordinary exceptions",
+    "tag injected keyboard and mouse input for native owned-input cleanup",
+    "use per-thread MTA UIA clients and consistent virtual-desktop COM initialization",
+    "bound unresponsive UIA providers using CUIAutomation8 connection and transaction timeouts",
+    "apply capture bounds before UIA enumeration and avoid retrying failed windows",
+    "preserve copyable clipboard formats on paste and ordinary exceptions without overwriting external copies",
+    "encode non-BMP keyboard characters as UTF-16 surrogate input pairs",
+    "derive shortcut extended-key flags from real Windows scan-code prefixes",
+    "check Windows SendInput acceptance for all injected keyboard and mouse events without automatic replay",
+    "delegate temporary clipboard ownership to the native recovery process; worker only validates and pastes or types",
+    "clear focused editable non-password values through UIA ValuePattern and confirm empty before typing; uncertain writes never retry or fall back"
+  ],
+  "status": "prototype; production runtime and dependency hashes not yet pinned"
+}

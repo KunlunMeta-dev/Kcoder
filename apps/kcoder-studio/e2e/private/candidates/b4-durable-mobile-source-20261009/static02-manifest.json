@@ -1,0 +1,68 @@
+{
+  "status": "PRIVATE_STATIC_ONLY_NOT_RUN",
+  "files": [
+    {
+      "path": "apps/kcoder-studio/mobile/src/gateway/rpc.ts",
+      "before": "ce94113908097ae580b107bb27dc774ca1198e5fc4d7cc30c5bd56b8456636f6",
+      "after": "f86ef19018dbde0fe092b603c2898e4442fbb3af1523b782c0bce2faa2f7fbc7",
+      "size": 11699
+    },
+    {
+      "path": "apps/kcoder-studio/mobile/src/components/attachment-upload.ts",
+      "before": "627f40267dfb9f9f16782dfcfbd088dcd5d873c146338ad3844eeea5af8eacbd",
+      "after": "c35f62aaaff4ad90f58936c53481fc143f8752de91c72a0bc017f3b8cfe3d6c5",
+      "size": 2267
+    },
+    {
+      "path": "apps/kcoder-studio/mobile/src/protocol/attachment-retention.ts",
+      "before": null,
+      "after": "5559ea1445019f72072f00e167d5a2cef3937b19ec7491760e53666cbf2d6fa5",
+      "size": 10331
+    },
+    {
+      "path": "apps/kcoder-studio/mobile/src/protocol/sha256-stream.ts",
+      "before": null,
+      "after": "d234eed049099d91f3fc7a3e7c66a5eacad833dc11b0ed8ee1113a59f50a2453",
+      "size": 6230
+    },
+    {
+      "path": "apps/kcoder-studio/mobile/src/storage/staged-attachment-store.ts",
+      "before": null,
+      "after": "ba529b6428d32ae221d06ce7871d359992dfb1e734c3b499ce6f4390d6ed7112",
+      "size": 19218
+    },
+    {
+      "path": "apps/kcoder-studio/mobile/src/storage/staged-attachment-bytes.ts",
+      "before": null,
+      "after": "5e691b30ec3533f64279ed20558c5febd47b7d1ad0f42db94bdc8ea312922942",
+      "size": 1221
+    },
+    {
+      "path": "apps/kcoder-studio/mobile/src/storage/staged-attachment-bytes.web.ts",
+      "before": null,
+      "after": "de6d5bf708adfe61916813394d750436ee7d8cf2659dfc1abb84808ddec1d08f",
+      "size": 4240
+    },
+    {
+      "path": "apps/kcoder-studio/mobile/src/storage/staged-attachment-bytes.native.ts",
+      "before": null,
+      "after": "6bd1233fa44b641acbbba1ed2f39f5f3fcc1188ae2956688eb04d75e205ca1b6",
+      "size": 5186
+    },
+    {
+      "path": "apps/kcoder-studio/mobile/src/storage/retained-attachment-upload.ts",
+      "before": null,
+      "after": "bb9a969d586b4ff19f09ddaa1af9f4c5e3abd2327b2640fb323b0bb23ab7390c",
+      "size": 11501
+    }
+  ],
+  "sourceDigest": "9780dd897ff6c3f5028bcbe058ee9d4c376b8408761b2829999ce005ee649a91",
+  "productCount": 9,
+  "liveUnchanged": true,
+  "capabilityEnabled": false,
+  "consumerWiringIncluded": false,
+  "testsRun": false,
+  "revision": "static02",
+  "frozenAtUtc": "2026-10-09T09:17:41.778372+00:00",
+  "previousManifestSha256": "b32d0528ac1da2dedcd35f715e78137f184a12ff3482cc95c7dab4f00993914c"
+}

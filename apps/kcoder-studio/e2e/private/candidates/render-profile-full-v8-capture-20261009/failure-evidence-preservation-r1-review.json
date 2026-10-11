@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "status": "PRIVATE_REVIEW_ONLY_NOT_APPLIED",
+  "task": "Preserve CDP capture failure cause before the required full-profile artifact assertion; do not infer cause from the earlier run.",
+  "baselineSuiteSha256": "d560f82960f02a00365518f382e75f542e4ae90dae632fa4189810837496163d",
+  "candidateSuiteSha256": "1c582444f7ae62ef94783700a3b7a367d6aff5d187132f3a4532aeb9876fc1db",
+  "helperSha256": "1b45dd050eae4f251480b129a408dd91b28f7d18d3ea6461c33eb46bb9464897",
+  "testSha256": "2e2d40bdec9f8ade4c42ef92d88ab73487026f9e2e858015dfc1a71b0705bc3b",
+  "diffPath": "apps/kcoder-studio/e2e/private/candidates/render-profile-full-v8-capture-20261009/failure-evidence-preservation-r1.diff",
+  "diffSha256": "f31cda463921a879b613ee3655e94553910b0d7c17407ef94b209703f33adcf1",
+  "staticLogPath": "apps/kcoder-studio/e2e/private/candidates/render-profile-full-v8-capture-20261009/failure-evidence-preservation-r1-static-check.log",
+  "staticLogSha256": "fd33810c0cc9e6874121943db2edebfe99fd5fd0ec8bd5bef827fa39f9c1e7d6",
+  "staticChecks": [
+    {
+      "argv": [
+        "/home/hyf/.local/opt/node-v22.17.0-linux-x64/bin/node",
+        "--check",
+        "/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/phone-ux-upstream-integration-20261008/apps/kcoder-studio/e2e/private/candidates/render-profile-full-v8-capture-20261009/mobile-render-profile.full-capture.candidate.mjs"
+      ],
+      "exitCode": 0
+    },
+    {
+      "argv": [
+        "/home/hyf/.local/opt/node-v22.17.0-linux-x64/bin/node",
+        "--check",
+        "/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/phone-ux-upstream-integration-20261008/apps/kcoder-studio/e2e/private/candidates/render-profile-full-v8-capture-20261009/profile-capture-contract.mjs"
+      ],
+      "exitCode": 0
+    },
+    {
+      "argv": [
+        "/home/hyf/.local/opt/node-v22.17.0-linux-x64/bin/node",
+        "--check",
+        "/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/phone-ux-upstream-integration-20261008/apps/kcoder-studio/e2e/private/candidates/render-profile-full-v8-capture-20261009/profile-capture-contract.test.mjs"
+      ],
+      "exitCode": 0
+    },
+    {
+      "argv": [
+        "/home/hyf/.local/opt/node-v22.17.0-linux-x64/bin/node",
+        "--test",
+        "/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/phone-ux-upstream-integration-20261008/apps/kcoder-studio/e2e/private/candidates/render-profile-full-v8-capture-20261009/profile-capture-contract.test.mjs"
+      ],
+      "exitCode": 0
+    }
+  ],
+  "manifestFieldCheck": {
+    "path": "target/private-phone-ux-implementation/mobile-web-export-current336-source-maps-20261009/export-manifest.json",
+    "manifestSha256": "7641ceac87eb5a611388d0366a2331f2b1a54a06e4674be69f1247329aa6e03f",
+    "status": "complete",
+    "bundleSha256Present": true,
+    "bundleSha256": "f33e10d2b686af7fb03228208ce06e177b54da4eecc700639d6abb18fe248458",
+    "bundleFileCount": 38,
+    "evidence": "readSourceSpec parses this export manifest as `manifest` and returns that same object as builderManifest; bundleSha256 is a real top-level export envelope field."
+  },
+  "cdpContractCheck": {
+    "path": "/data1/hyf/20260822_agent/Kunlun-Code-CYX/apps/kcoder-studio/renderer/node_modules/.pnpm/playwright-core@1.62.0/node_modules/playwright-core/types/protocol.d.ts",
+    "sha256": "b836eed98b79fabb54f1df73252a0ce178b8df4a89794251ade2fa0c5e52b678",
+    "playwrightCoreVersion": "1.62.0",
+    "field": "Profiler.Profile.timeDeltas?: number[]",
+    "description": "Time intervals between adjacent samples in microseconds; first delta is relative to profile startTime.",
+    "signedness": "The installed declaration types number[] and its interval description does not state an explicit sign constraint. No raw array survived this failed run, so the candidate non-negative validator is neither confirmed nor implicated by actual sample values."
+  },
+  "failedRun": {
+    "runRoot": "target/test/apps/kcoder-studio/e2e/private/candidates/render-profile-full-v8-capture-20261009/mobile-render-profile.full-capture.candidate.mjs/20261009-102411.526Z",
+    "runManifestSha256": "e7e5de576a9580fc7639b4c4ee37648922f9ccf7c8ee650f0254f9a854528fed",
+    "resultPath": "target/test/apps/kcoder-studio/e2e/private/candidates/render-profile-full-v8-capture-20261009/mobile-render-profile.full-capture.candidate.mjs/20261009-102411.526Z/artifacts/result.json",
+    "resultSha256": "6bdd8f40ca9e7607c941c40027b3228a8f7ada45467da4290c828e5d67784e6f",
+    "resultStatus": "failed",
+    "resultError": "full CDP profile capture must preserve sanitized nodes, samples, and timeDeltas",
+    "cleanupErrors": [],
+    "profileFailureEvidenceArtifact": null,
+    "rawCpuProfileArtifact": null,
+    "cpuProfileErrorPersisted": false,
+    "seedTraceSha256": "51157f50571f004e33aafa2e3ca0e5bc128d8427f37089d6ebc2c739ba10dabe",
+    "interpretation": "The previous candidate threw at the required-artifact assertion before its artifact writer could save the helper cpuProfileError. The run does not reveal whether Profiler start/stop, bundle binding, profile validation, or serialization failed."
+  },
+  "liveSuite": {
+    "path": "apps/kcoder-studio/e2e/suites/mobile/mobile-render-profile.e2e.mjs",
+    "expectedUnchangedSha256": "d560f82960f02a00365518f382e75f542e4ae90dae632fa4189810837496163d",
+    "candidateApplied": false
+  },
+  "productChanges": "NONE",
+  "browserRerun": "NOT_RUN"
+}

@@ -1,0 +1,56 @@
+import assert from 'node:assert/strict';
+import { resolve } from 'node:path';
+import { startOwnedAiVerify } from '../../harness/ai-verify-client.mjs';
+import { assertRendererBuildFresh } from '../../harness/renderer-build.mjs';
+import { appRoot,repoRoot,runE2E } from '../../harness/run-context.mjs';
+await assertRendererBuildFresh();
+if(!process.env.KCODER_E2E_TAURI_BIN)throw Error('Explicit owned Tauri binary required');
+const quickPhrasesOnly = process.env.KCODER_E2E_QUICK_PHRASES_ONLY === '1';
+await runE2E(import.meta.url,{testId:quickPhrasesOnly?'native-quick-phrase-controls-and-menu-recovery':'native-shortcut-conflict-focus-and-narrow-font-controls',tier:'manual-live',modelPolicy:'model-independent actual Tauri settings and private preferences',retainSuccessEvidence:quickPhrasesOnly,evidenceReason:quickPhrasesOnly?'New compact rows, keyboard menus and narrow/dark controls require visual evidence':undefined},async context=>{
+ const client=await startOwnedAiVerify(context,{tauriBin:process.env.KCODER_E2E_TAURI_BIN,kcoderBin:process.env.KCODER_E2E_KCODER_BIN||resolve(repoRoot,'target/debug/kcoder'),rendererRoot:resolve(appRoot,'renderer/dist')});
+ const cmd=(action,id,args={})=>client.command(action,{selector:`[data-testid="${id}"]`,...args});
+ try{
+  await cmd('waitFor','desktop-sidebar');
+  await client.command('navigate',{value:'/settings'});await cmd('waitFor','general-language-en-button');await cmd('click','general-language-en-button');
+  await cmd('click','settings-nav-quick-phrases');await cmd('waitFor','add-quick-phrase-button',{enabled:true});
+  await cmd('click','add-quick-phrase-button');await cmd('fill','quick-phrase-title-input',{value:'Owned concise phrase'});
+  await cmd('fill','quick-phrase-content-input',{value:'Reusable owned text.\nSecond line stays readable.'});await cmd('click','quick-phrase-mode-plan');await cmd('click','quick-phrase-save-button');
+  await client.command('waitFor',{selector:'[data-testid^="quick-phrase-row-"]:last-child',text:'Owned concise phrase'});
+  const row = await client.command('getAttribute',{selector:'[data-testid^="quick-phrase-row-"]:last-child',value:'data-testid'});
+  const phraseId = row.slice('quick-phrase-row-'.length);const actions = `quick-phrase-actions-${phraseId}`;
+  await cmd('click',actions);await cmd('click',`quick-phrase-move-up-${phraseId}`);await cmd('waitFor',actions,{enabled:true});
+  await cmd('press',actions,{key:'ArrowUp'});await client.command('waitFor',{selector:`[data-testid="quick-phrase-delete-${phraseId}"]:focus`});
+  await cmd('press',`quick-phrase-delete-${phraseId}`,{key:'Escape'});await client.command('waitFor',{selector:`[data-testid="${actions}"]:focus`});
+  await cmd('click',actions);await cmd('click',`quick-phrase-delete-${phraseId}`);await cmd('waitFor','quick-phrase-delete-dialog');
+  await cmd('press','quick-phrase-delete-dialog',{key:'Escape'});await client.command('waitFor',{selector:`[data-testid="${actions}"]:focus`});
+  await client.capture('native-quick-phrases-light.png');
+  await cmd('click','settings-nav-appearance');await cmd('click','appearance-mode-dark');await cmd('click','settings-nav-quick-phrases');await cmd('waitFor',actions,{enabled:true});
+  await client.command('resizeWindow',{value:'400x600'});await cmd('waitFor','settings-compact-navigation');await cmd('click',actions);
+  await cmd('waitFor',`${actions}-menu`);await client.capture('native-quick-phrase-menu-dark-narrow.png');
+  await cmd('press',`quick-phrase-delete-${phraseId}`,{key:'Escape'});await cmd('click',`quick-phrase-edit-${phraseId}`);await cmd('waitFor','quick-phrase-title-input');
+  assert.equal(await cmd('getValue','quick-phrase-title-input'),'Owned concise phrase');
+  await cmd('scrollIntoView','quick-phrase-save-button');await client.capture('native-quick-phrase-editor-narrow.png');await cmd('click','quick-phrase-cancel-button');
+  await client.command('resizeWindow',{value:'1280x720'});await cmd('click','settings-nav-appearance');await cmd('click','appearance-mode-light');
+  if(quickPhrasesOnly)return {createdAndPersisted:true,menuReorder:true,keyboardFocusReturn:true,cancelledDeletePreserves:true,narrowControls:true,darkMenu:true,modelRequests:0};
+  await cmd('click','settings-nav-keyboard-shortcuts');await cmd('waitFor','keyboard-shortcut-record-openTerminal',{enabled:true});
+  await cmd('click','keyboard-shortcut-record-openTerminal');await cmd('press','keyboard-shortcut-record-openTerminal',{key:'Control+b'});
+  await cmd('waitFor','keyboard-shortcuts-error',{text:'already assigned'});
+  await cmd('press','keyboard-shortcut-record-openTerminal',{key:'Escape'});
+  await client.command('waitFor',{selector:'[data-testid="keyboard-shortcut-record-openTerminal"]:focus'});
+  await cmd('click','keyboard-shortcut-record-openTerminal');await cmd('press','keyboard-shortcut-record-openTerminal',{key:'Control+Alt+k'});
+  await cmd('waitFor','keyboard-shortcut-record-openTerminal',{text:'Ctrl Alt K'});
+  await cmd('click','keyboard-shortcut-reset-openTerminal');await cmd('waitFor','keyboard-shortcut-record-openTerminal',{text:'Ctrl J'});
+  await client.command('resizeWindow',{value:'400x500'});await cmd('waitFor','settings-compact-navigation');
+  await cmd('scrollIntoView','keyboard-shortcut-record-openTerminal');await cmd('click','keyboard-shortcut-record-openTerminal');await cmd('press','keyboard-shortcut-record-openTerminal',{key:'Escape'});
+  await client.capture('native-narrow-shortcuts.png');
+  await client.command('resizeWindow',{value:'1280x720'});await cmd('click','settings-nav-appearance');
+  await cmd('waitFor','appearance-ui-font-size-input');await cmd('fill','appearance-ui-font-size-input',{value:'16'});await cmd('press','appearance-ui-font-size-input',{key:'Enter'});
+  assert.equal(await cmd('getValue','appearance-code-font-size-input'),'12');
+  await cmd('fill','appearance-code-font-size-input',{value:'22'});await cmd('press','appearance-code-font-size-input',{key:'Enter'});
+  assert.equal(await cmd('getValue','appearance-ui-font-size-input'),'16');
+  await cmd('click','appearance-mode-dark');await cmd('click','appearance-reset-button');
+  assert.equal(await cmd('getValue','appearance-ui-font-size-input'),'14');assert.equal(await cmd('getValue','appearance-code-font-size-input'),'12');
+  await client.capture('native-font-reset.png');return {conflict:true,focusReturn:true,savedAndReset:true,narrowReachable:true,independentFontSizes:true};
+ }catch(error){client.markFailed();await client.capture('failure.png').catch(()=>{});throw error;}
+ finally{await client.stop();}
+});

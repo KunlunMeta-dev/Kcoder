@@ -1,0 +1,1782 @@
+{
+  "KnowledgeFileCapabilitiesResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "KnowledgeFileCapability": {
+        "additionalProperties": false,
+        "description": "Target-owned file rules; these do not certify the active model's vision support.",
+        "properties": {
+          "available": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "extensions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "format": {
+            "type": "string"
+          },
+          "maxExtractedBytes": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxFileBytes": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "mimeTypes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "requiresVision": {
+            "type": "boolean"
+          },
+          "unavailableReason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "extensions",
+          "format",
+          "maxExtractedBytes",
+          "maxFileBytes",
+          "mimeTypes",
+          "requiresVision",
+          "warnings"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "batchMaxBytes": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "batchMaxFiles": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "items": {
+        "items": {
+          "$ref": "#/definitions/KnowledgeFileCapability"
+        },
+        "type": "array"
+      },
+      "supported": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "batchMaxBytes",
+      "batchMaxFiles",
+      "items",
+      "supported"
+    ],
+    "title": "KnowledgeFileCapabilitiesResult",
+    "type": "object"
+  },
+  "KnowledgeFileCapability": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "description": "Target-owned file rules; these do not certify the active model's vision support.",
+    "properties": {
+      "available": {
+        "type": [
+          "boolean",
+          "null"
+        ]
+      },
+      "extensions": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "format": {
+        "type": "string"
+      },
+      "maxExtractedBytes": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "maxFileBytes": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "mimeTypes": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "requiresVision": {
+        "type": "boolean"
+      },
+      "unavailableReason": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "warnings": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "extensions",
+      "format",
+      "maxExtractedBytes",
+      "maxFileBytes",
+      "mimeTypes",
+      "requiresVision",
+      "warnings"
+    ],
+    "title": "KnowledgeFileCapability",
+    "type": "object"
+  },
+  "KnowledgeImageImportListResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "WikiImageImport": {
+        "additionalProperties": false,
+        "description": "Public durable image extraction progress. Private response/original bytes never cross RPC.",
+        "properties": {
+          "callLimit": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "errorCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "inputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "outputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "phase": {
+            "type": "string"
+          },
+          "reasoningBytes": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "reservedCalls": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "revisionId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sourceId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "textBytes": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "unknownUsageCalls": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "updatedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "usageReportedCalls": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "callLimit",
+          "id",
+          "idempotencyKey",
+          "phase",
+          "reasoningBytes",
+          "reservedCalls",
+          "status",
+          "textBytes",
+          "title",
+          "unknownUsageCalls",
+          "updatedAtMs",
+          "usageReportedCalls"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "items": {
+        "items": {
+          "$ref": "#/definitions/WikiImageImport"
+        },
+        "type": "array"
+      },
+      "nextAfterId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "supported": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "items",
+      "supported"
+    ],
+    "title": "KnowledgeImageImportListResult",
+    "type": "object"
+  },
+  "McpConnectionAttempt": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "McpConnectionAttemptStatus": {
+        "description": "Latest runtime connection observation, including failure after initialization.",
+        "enum": [
+          "ready",
+          "unavailable",
+          "timedOut"
+        ],
+        "type": "string"
+      },
+      "McpFailureReason": {
+        "enum": [
+          "connectionFailed",
+          "protocolFailed",
+          "authorizationRequired",
+          "timedOut",
+          "unavailable"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "Safe connection observation details; legacy peers may omit the failure category.",
+    "properties": {
+      "failureReason": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/McpFailureReason"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "status": {
+        "$ref": "#/definitions/McpConnectionAttemptStatus"
+      }
+    },
+    "required": [
+      "status"
+    ],
+    "title": "McpConnectionAttempt",
+    "type": "object"
+  },
+  "McpFailureReason": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "connectionFailed",
+      "protocolFailed",
+      "authorizationRequired",
+      "timedOut",
+      "unavailable"
+    ],
+    "title": "McpFailureReason",
+    "type": "string",
+    "x-error-codes": {
+      "authorizationRequired": "mcp_authorization_required",
+      "connectionFailed": "mcp_connection_failed",
+      "protocolFailed": "mcp_protocol_failed",
+      "timedOut": "mcp_timeout",
+      "unavailable": "mcp_unavailable"
+    }
+  },
+  "McpServerSummary": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "McpAuthorizationStatus": {
+        "enum": [
+          "notApplicable",
+          "configuredHeader",
+          "notAuthorized",
+          "authorized",
+          "expired",
+          "reauthorizationRequired",
+          "unavailable"
+        ],
+        "type": "string"
+      },
+      "McpConnectionAttemptStatus": {
+        "description": "Latest runtime connection observation, including failure after initialization.",
+        "enum": [
+          "ready",
+          "unavailable",
+          "timedOut"
+        ],
+        "type": "string"
+      },
+      "McpFailureReason": {
+        "enum": [
+          "connectionFailed",
+          "protocolFailed",
+          "authorizationRequired",
+          "timedOut",
+          "unavailable"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "authorization": {
+        "$ref": "#/definitions/McpAuthorizationStatus"
+      },
+      "lastConnectionAttempt": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/McpConnectionAttemptStatus"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "lastConnectionFailure": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/McpFailureReason"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "name": {
+        "type": "string"
+      },
+      "pluginId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "transport": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "authorization",
+      "name",
+      "transport"
+    ],
+    "title": "McpServerSummary",
+    "type": "object"
+  },
+  "ModelConfigurationBoundary": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "next_turn",
+      "session_snapshot"
+    ],
+    "title": "ModelConfigurationBoundary",
+    "type": "string"
+  },
+  "ModelConfigurationSummary": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ModelConfigurationBoundary": {
+        "enum": [
+          "next_turn",
+          "session_snapshot"
+        ],
+        "type": "string"
+      },
+      "ModelReasoningPolicy": {
+        "additionalProperties": false,
+        "description": "User-declared controls, not a claim that an upstream model was verified.",
+        "properties": {
+          "efforts": {
+            "default": [],
+            "items": {
+              "pattern": "[^\\u{9}\\u{a}\\u{b}\\u{c}\\u{d}\\u{20}\\u{85}\\u{a0}\\u{1680}\\u{2000}\\u{2001}\\u{2002}\\u{2003}\\u{2004}\\u{2005}\\u{2006}\\u{2007}\\u{2008}\\u{2009}\\u{200a}\\u{2028}\\u{2029}\\u{202f}\\u{205f}\\u{3000}]",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "mode": {
+            "$ref": "#/definitions/ReasoningControlMode"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "type": "object"
+      },
+      "ModelToolRegistryScope": {
+        "enum": [
+          "profile_configuration",
+          "session_registry",
+          "session_role",
+          "wiki_worker"
+        ],
+        "type": "string"
+      },
+      "ModelToolSetSummary": {
+        "additionalProperties": false,
+        "description": "The count describes registered tools at this scope, before request permissions.",
+        "properties": {
+          "exposedToolCount": {
+            "description": "Only populated when the actual provider request definitions are captured.",
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "profile": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "registeredToolCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "registryScope": {
+            "$ref": "#/definitions/ModelToolRegistryScope"
+          }
+        },
+        "required": [
+          "registryScope"
+        ],
+        "type": "object"
+      },
+      "ReasoningControlMode": {
+        "enum": [
+          "hidden",
+          "optional",
+          "always_on",
+          "always_off"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "Public effective model metadata. Deliberately excludes URLs, credentials, arbitrary extra-body keys/values and filesystem paths.",
+    "properties": {
+      "apiFormat": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "boundary": {
+        "allOf": [
+          {
+            "$ref": "#/definitions/ModelConfigurationBoundary"
+          }
+        ],
+        "description": "Whether this describes newly resolved settings or a pinned running snapshot."
+      },
+      "chatProtocol": {
+        "type": "string"
+      },
+      "contextWindowTokens": {
+        "format": "uint",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "extraBodyConfigured": {
+        "type": "boolean"
+      },
+      "maxOutputTokens": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "modelId": {
+        "type": "string"
+      },
+      "outputHeadroomTokens": {
+        "format": "uint",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "providerId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "reasoning": {
+        "type": "boolean"
+      },
+      "reasoningEffort": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "reasoningPolicy": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ModelReasoningPolicy"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "requestOutputLimits": {
+        "additionalProperties": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "type": "object"
+      },
+      "requestOverrideFields": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "revision": {
+        "description": "Opaque revision of the private semantics; never an encoding of their value.",
+        "type": "string"
+      },
+      "sources": {
+        "additionalProperties": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "description": "Predefined field names and authority labels only.",
+        "type": "object"
+      },
+      "structuredOutput": {
+        "type": "boolean"
+      },
+      "text": {
+        "type": "boolean"
+      },
+      "toolSet": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ModelToolSetSummary"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Actual host composition; missing in older records, never inferred from capability."
+      },
+      "tools": {
+        "type": "boolean"
+      },
+      "vision": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "boundary",
+      "chatProtocol",
+      "extraBodyConfigured",
+      "modelId",
+      "reasoning",
+      "requestOutputLimits",
+      "requestOverrideFields",
+      "revision",
+      "sources",
+      "structuredOutput",
+      "text",
+      "tools",
+      "vision"
+    ],
+    "title": "ModelConfigurationSummary",
+    "type": "object"
+  },
+  "ModelReasoningPolicy": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ReasoningControlMode": {
+        "enum": [
+          "hidden",
+          "optional",
+          "always_on",
+          "always_off"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "User-declared controls, not a claim that an upstream model was verified.",
+    "properties": {
+      "efforts": {
+        "default": [],
+        "items": {
+          "pattern": "[^\\u{9}\\u{a}\\u{b}\\u{c}\\u{d}\\u{20}\\u{85}\\u{a0}\\u{1680}\\u{2000}\\u{2001}\\u{2002}\\u{2003}\\u{2004}\\u{2005}\\u{2006}\\u{2007}\\u{2008}\\u{2009}\\u{200a}\\u{2028}\\u{2029}\\u{202f}\\u{205f}\\u{3000}]",
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "mode": {
+        "$ref": "#/definitions/ReasoningControlMode"
+      }
+    },
+    "required": [
+      "mode"
+    ],
+    "title": "ModelReasoningPolicy",
+    "type": "object"
+  },
+  "TaskStatus": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "TaskStatus",
+    "type": "string",
+    "x-known-values": [
+      "pending",
+      "running",
+      "paused",
+      "halted",
+      "completed",
+      "failed",
+      "cancelled"
+    ],
+    "x-max-utf8-bytes": 256
+  },
+  "TurnAttemptStatus": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "TurnAttemptStatus",
+    "type": "string",
+    "x-known-values": [
+      "accepted",
+      "completed",
+      "failed",
+      "interrupted"
+    ],
+    "x-max-utf8-bytes": 256
+  },
+  "WikiImageImport": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "description": "Public durable image extraction progress. Private response/original bytes never cross RPC.",
+    "properties": {
+      "callLimit": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "errorCode": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "id": {
+        "type": "string"
+      },
+      "idempotencyKey": {
+        "type": "string"
+      },
+      "inputTokens": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "model": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "outputTokens": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "phase": {
+        "type": "string"
+      },
+      "reasoningBytes": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "reservedCalls": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "revisionId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "sourceId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "status": {
+        "type": "string"
+      },
+      "textBytes": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "title": {
+        "type": "string"
+      },
+      "unknownUsageCalls": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "updatedAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "usageReportedCalls": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "callLimit",
+      "id",
+      "idempotencyKey",
+      "phase",
+      "reasoningBytes",
+      "reservedCalls",
+      "status",
+      "textBytes",
+      "title",
+      "unknownUsageCalls",
+      "updatedAtMs",
+      "usageReportedCalls"
+    ],
+    "title": "WikiImageImport",
+    "type": "object"
+  },
+  "WikiJobPhase": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "WikiJobPhase",
+    "type": "string",
+    "x-known-values": [
+      "analysis",
+      "generation",
+      "citation_repair",
+      "format_repair",
+      "source_support",
+      "organization_repair",
+      "truncation_retry",
+      "commit"
+    ],
+    "x-max-utf8-bytes": 256
+  },
+  "WikiJobProgress": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ModelConfigurationBoundary": {
+        "enum": [
+          "next_turn",
+          "session_snapshot"
+        ],
+        "type": "string"
+      },
+      "ModelConfigurationSummary": {
+        "additionalProperties": false,
+        "description": "Public effective model metadata. Deliberately excludes URLs, credentials, arbitrary extra-body keys/values and filesystem paths.",
+        "properties": {
+          "apiFormat": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "boundary": {
+            "allOf": [
+              {
+                "$ref": "#/definitions/ModelConfigurationBoundary"
+              }
+            ],
+            "description": "Whether this describes newly resolved settings or a pinned running snapshot."
+          },
+          "chatProtocol": {
+            "type": "string"
+          },
+          "contextWindowTokens": {
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "extraBodyConfigured": {
+            "type": "boolean"
+          },
+          "maxOutputTokens": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "modelId": {
+            "type": "string"
+          },
+          "outputHeadroomTokens": {
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "providerId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reasoning": {
+            "type": "boolean"
+          },
+          "reasoningEffort": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reasoningPolicy": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ModelReasoningPolicy"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "requestOutputLimits": {
+            "additionalProperties": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "type": "object"
+          },
+          "requestOverrideFields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "revision": {
+            "description": "Opaque revision of the private semantics; never an encoding of their value.",
+            "type": "string"
+          },
+          "sources": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "description": "Predefined field names and authority labels only.",
+            "type": "object"
+          },
+          "structuredOutput": {
+            "type": "boolean"
+          },
+          "text": {
+            "type": "boolean"
+          },
+          "toolSet": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ModelToolSetSummary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Actual host composition; missing in older records, never inferred from capability."
+          },
+          "tools": {
+            "type": "boolean"
+          },
+          "vision": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "boundary",
+          "chatProtocol",
+          "extraBodyConfigured",
+          "modelId",
+          "reasoning",
+          "requestOutputLimits",
+          "requestOverrideFields",
+          "revision",
+          "sources",
+          "structuredOutput",
+          "text",
+          "tools",
+          "vision"
+        ],
+        "type": "object"
+      },
+      "ModelReasoningPolicy": {
+        "additionalProperties": false,
+        "description": "User-declared controls, not a claim that an upstream model was verified.",
+        "properties": {
+          "efforts": {
+            "default": [],
+            "items": {
+              "pattern": "[^\\u{9}\\u{a}\\u{b}\\u{c}\\u{d}\\u{20}\\u{85}\\u{a0}\\u{1680}\\u{2000}\\u{2001}\\u{2002}\\u{2003}\\u{2004}\\u{2005}\\u{2006}\\u{2007}\\u{2008}\\u{2009}\\u{200a}\\u{2028}\\u{2029}\\u{202f}\\u{205f}\\u{3000}]",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "mode": {
+            "$ref": "#/definitions/ReasoningControlMode"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "type": "object"
+      },
+      "ModelToolRegistryScope": {
+        "enum": [
+          "profile_configuration",
+          "session_registry",
+          "session_role",
+          "wiki_worker"
+        ],
+        "type": "string"
+      },
+      "ModelToolSetSummary": {
+        "additionalProperties": false,
+        "description": "The count describes registered tools at this scope, before request permissions.",
+        "properties": {
+          "exposedToolCount": {
+            "description": "Only populated when the actual provider request definitions are captured.",
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "profile": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "registeredToolCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "registryScope": {
+            "$ref": "#/definitions/ModelToolRegistryScope"
+          }
+        },
+        "required": [
+          "registryScope"
+        ],
+        "type": "object"
+      },
+      "ReasoningControlMode": {
+        "enum": [
+          "hidden",
+          "optional",
+          "always_on",
+          "always_off"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "Safe facts authored by the host. No source text, model response or credentials.",
+    "properties": {
+      "callLimit": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "estimatedInputTokens": {
+        "format": "uint",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "firstPage": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "heartbeatAtMs": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "inputTokens": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "lastPage": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "model": {
+        "type": "string"
+      },
+      "modelConfiguration": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ModelConfigurationSummary"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "modelProgressAtMs": {
+        "format": "int64",
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "outputTokens": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "phase": {
+        "type": "string"
+      },
+      "phaseStartedAtMs": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "reasoningBytes": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "reasoningEffort": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "repairCalls": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "requestedOutputTokens": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "reservedCalls": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "startedAtMs": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "textBytes": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "throughChunk": {
+        "format": "uint",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "totalChunks": {
+        "format": "uint",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "usageReportedCalls": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "heartbeatAtMs",
+      "model",
+      "phase",
+      "phaseStartedAtMs",
+      "reasoningBytes",
+      "repairCalls",
+      "reservedCalls",
+      "startedAtMs",
+      "textBytes",
+      "usageReportedCalls"
+    ],
+    "title": "WikiJobProgress",
+    "type": "object"
+  },
+  "WikiJobStatus": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "WikiJobStatus",
+    "type": "string",
+    "x-known-values": [
+      "queued",
+      "running",
+      "paused",
+      "awaiting_review",
+      "failed",
+      "completed",
+      "cancelled"
+    ],
+    "x-max-utf8-bytes": 256
+  },
+  "WikiPipelineProgress": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "WikiPipelineStageAddress": {
+        "properties": {
+          "batch": {
+            "description": "Source-chunk cursor at the start of this batch, not a display ordinal.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sourceRevision": {
+            "type": "string"
+          },
+          "stage": {
+            "$ref": "#/definitions/WikiPipelineStageKind"
+          },
+          "stageKey": {
+            "type": "string"
+          },
+          "unitKey": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "batch",
+          "sourceRevision",
+          "stage",
+          "stageKey",
+          "unitKey"
+        ],
+        "type": "object"
+      },
+      "WikiPipelineStageKind": {
+        "enum": [
+          "extract",
+          "analyze",
+          "retrieve",
+          "generate",
+          "verify",
+          "coverage",
+          "commit"
+        ],
+        "type": "string"
+      },
+      "WikiPipelineStageRecord": {
+        "properties": {
+          "artifactHash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "attempt": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "batch": {
+            "description": "Source-chunk cursor at the start of this batch, not a display ordinal.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "completedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "completedUnits": {
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "errorCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "errorDetail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reused": {
+            "type": "boolean"
+          },
+          "sourceRevision": {
+            "type": "string"
+          },
+          "stage": {
+            "$ref": "#/definitions/WikiPipelineStageKind"
+          },
+          "stageKey": {
+            "type": "string"
+          },
+          "startedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/definitions/WikiPipelineStageStatus"
+          },
+          "totalUnits": {
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "unitIndex": {
+            "description": "Zero-based ordinal, present only for genuinely planned units.",
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "unitKey": {
+            "type": "string"
+          },
+          "unitLabel": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "updatedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "attempt",
+          "batch",
+          "reused",
+          "sourceRevision",
+          "stage",
+          "stageKey",
+          "status",
+          "unitKey",
+          "updatedAtMs"
+        ],
+        "type": "object"
+      },
+      "WikiPipelineStageStatus": {
+        "enum": [
+          "waiting",
+          "running",
+          "received",
+          "validated",
+          "completed",
+          "failed",
+          "paused",
+          "needs_review"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "batch": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "currentStage": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/WikiPipelineStageKind"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "records": {
+        "items": {
+          "$ref": "#/definitions/WikiPipelineStageRecord"
+        },
+        "type": "array"
+      },
+      "resumeStage": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/WikiPipelineStageAddress"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "sourceRevision": {
+        "type": "string"
+      },
+      "version": {
+        "format": "uint8",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "batch",
+      "records",
+      "sourceRevision",
+      "version"
+    ],
+    "title": "WikiPipelineProgress",
+    "type": "object"
+  },
+  "WorkflowAgentConfigurationSummary": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AgentModelSelectionSource": {
+        "enum": [
+          "inherited_session",
+          "explicit_runtime"
+        ],
+        "type": "string"
+      },
+      "ModelConfigurationBoundary": {
+        "enum": [
+          "next_turn",
+          "session_snapshot"
+        ],
+        "type": "string"
+      },
+      "ModelConfigurationSummary": {
+        "additionalProperties": false,
+        "description": "Public effective model metadata. Deliberately excludes URLs, credentials, arbitrary extra-body keys/values and filesystem paths.",
+        "properties": {
+          "apiFormat": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "boundary": {
+            "allOf": [
+              {
+                "$ref": "#/definitions/ModelConfigurationBoundary"
+              }
+            ],
+            "description": "Whether this describes newly resolved settings or a pinned running snapshot."
+          },
+          "chatProtocol": {
+            "type": "string"
+          },
+          "contextWindowTokens": {
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "extraBodyConfigured": {
+            "type": "boolean"
+          },
+          "maxOutputTokens": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "modelId": {
+            "type": "string"
+          },
+          "outputHeadroomTokens": {
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "providerId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reasoning": {
+            "type": "boolean"
+          },
+          "reasoningEffort": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reasoningPolicy": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ModelReasoningPolicy"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "requestOutputLimits": {
+            "additionalProperties": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "type": "object"
+          },
+          "requestOverrideFields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "revision": {
+            "description": "Opaque revision of the private semantics; never an encoding of their value.",
+            "type": "string"
+          },
+          "sources": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "description": "Predefined field names and authority labels only.",
+            "type": "object"
+          },
+          "structuredOutput": {
+            "type": "boolean"
+          },
+          "text": {
+            "type": "boolean"
+          },
+          "toolSet": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ModelToolSetSummary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Actual host composition; missing in older records, never inferred from capability."
+          },
+          "tools": {
+            "type": "boolean"
+          },
+          "vision": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "boundary",
+          "chatProtocol",
+          "extraBodyConfigured",
+          "modelId",
+          "reasoning",
+          "requestOutputLimits",
+          "requestOverrideFields",
+          "revision",
+          "sources",
+          "structuredOutput",
+          "text",
+          "tools",
+          "vision"
+        ],
+        "type": "object"
+      },
+      "ModelReasoningPolicy": {
+        "additionalProperties": false,
+        "description": "User-declared controls, not a claim that an upstream model was verified.",
+        "properties": {
+          "efforts": {
+            "default": [],
+            "items": {
+              "pattern": "[^\\u{9}\\u{a}\\u{b}\\u{c}\\u{d}\\u{20}\\u{85}\\u{a0}\\u{1680}\\u{2000}\\u{2001}\\u{2002}\\u{2003}\\u{2004}\\u{2005}\\u{2006}\\u{2007}\\u{2008}\\u{2009}\\u{200a}\\u{2028}\\u{2029}\\u{202f}\\u{205f}\\u{3000}]",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "mode": {
+            "$ref": "#/definitions/ReasoningControlMode"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "type": "object"
+      },
+      "ModelToolRegistryScope": {
+        "enum": [
+          "profile_configuration",
+          "session_registry",
+          "session_role",
+          "wiki_worker"
+        ],
+        "type": "string"
+      },
+      "ModelToolSetSummary": {
+        "additionalProperties": false,
+        "description": "The count describes registered tools at this scope, before request permissions.",
+        "properties": {
+          "exposedToolCount": {
+            "description": "Only populated when the actual provider request definitions are captured.",
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "profile": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "registeredToolCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "registryScope": {
+            "$ref": "#/definitions/ModelToolRegistryScope"
+          }
+        },
+        "required": [
+          "registryScope"
+        ],
+        "type": "object"
+      },
+      "ReasoningControlMode": {
+        "enum": [
+          "hidden",
+          "optional",
+          "always_on",
+          "always_off"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "Runtime facts owned by one workflow verification attempt.",
+    "properties": {
+      "agentId": {
+        "type": "string"
+      },
+      "artifactAttempt": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "configuration": {
+        "$ref": "#/definitions/ModelConfigurationSummary"
+      },
+      "runId": {
+        "type": "string"
+      },
+      "selectionSource": {
+        "$ref": "#/definitions/AgentModelSelectionSource"
+      }
+    },
+    "required": [
+      "agentId",
+      "artifactAttempt",
+      "configuration",
+      "runId",
+      "selectionSource"
+    ],
+    "title": "WorkflowAgentConfigurationSummary",
+    "type": "object"
+  }
+}

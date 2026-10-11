@@ -1,0 +1,16 @@
+{
+  "name": "codex-demo",
+  "version": "2.0.0",
+  "description": "Codex legacy manifest fixture",
+  "keywords": ["fixture", "codex"],
+  "skills": ["./skills"],
+  "mcpServers": "./mcp.json",
+  "hooks": ["./hooks/hooks.json"],
+  "commands": ["./commands"],
+  "apps": "./apps.json",
+  "interface": {
+    "displayName": "Codex Demo",
+    "shortDescription": "Codex fixture",
+    "composerIcon": "./assets/icon.svg"
+  }
+}

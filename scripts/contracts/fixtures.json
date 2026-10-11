@@ -1,0 +1,2063 @@
+{
+  "ModelConfigurationSummary": {
+    "valid": [
+      {
+        "name": "legacy_no_policy",
+        "value": {
+          "providerId": "provider",
+          "modelId": "model",
+          "apiFormat": null,
+          "chatProtocol": "auto",
+          "contextWindowTokens": 64000,
+          "maxOutputTokens": 2048,
+          "requestOutputLimits": {
+            "max_tokens": 2048
+          },
+          "outputHeadroomTokens": 2048,
+          "text": true,
+          "tools": true,
+          "vision": false,
+          "reasoning": true,
+          "structuredOutput": false,
+          "reasoningEffort": "high",
+          "extraBodyConfigured": false,
+          "requestOverrideFields": [],
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "boundary": "next_turn",
+          "sources": {
+            "max_output_tokens": [
+              "user"
+            ]
+          }
+        }
+      },
+      {
+        "name": "current_snapshot",
+        "value": {
+          "providerId": "provider",
+          "modelId": "model",
+          "apiFormat": null,
+          "chatProtocol": "auto",
+          "contextWindowTokens": 64000,
+          "maxOutputTokens": 2048,
+          "requestOutputLimits": {
+            "max_tokens": 2048
+          },
+          "outputHeadroomTokens": 2048,
+          "text": true,
+          "tools": true,
+          "vision": false,
+          "reasoning": true,
+          "structuredOutput": false,
+          "reasoningEffort": "high",
+          "extraBodyConfigured": false,
+          "requestOverrideFields": [],
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "boundary": "session_snapshot",
+          "sources": {
+            "max_output_tokens": [
+              "user"
+            ]
+          },
+          "reasoningPolicy": {
+            "mode": "optional",
+            "efforts": [
+              "none",
+              "vendor_effort"
+            ]
+          }
+        }
+      },
+      {
+        "name": "omitted_nullable_fields",
+        "value": {
+          "modelId": "model",
+          "chatProtocol": "auto",
+          "requestOutputLimits": {
+            "max_tokens": 2048
+          },
+          "text": true,
+          "tools": true,
+          "vision": false,
+          "reasoning": true,
+          "structuredOutput": false,
+          "extraBodyConfigured": false,
+          "requestOverrideFields": [],
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "boundary": "next_turn",
+          "sources": {
+            "max_output_tokens": [
+              "user"
+            ]
+          }
+        }
+      },
+      {
+        "name": "duplicate_source_labels",
+        "value": {
+          "providerId": "provider",
+          "modelId": "model",
+          "apiFormat": null,
+          "chatProtocol": "auto",
+          "contextWindowTokens": 64000,
+          "maxOutputTokens": 2048,
+          "requestOutputLimits": {
+            "max_tokens": 2048
+          },
+          "outputHeadroomTokens": 2048,
+          "text": true,
+          "tools": true,
+          "vision": false,
+          "reasoning": true,
+          "structuredOutput": false,
+          "reasoningEffort": "high",
+          "extraBodyConfigured": false,
+          "requestOverrideFields": [],
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "boundary": "next_turn",
+          "sources": {
+            "max_output_tokens": [
+              "user",
+              "user"
+            ]
+          }
+        }
+      },
+      {
+        "name": "actual-registered-tools-exposure-unknown",
+        "value": {
+          "providerId": "provider",
+          "modelId": "model",
+          "apiFormat": null,
+          "chatProtocol": "auto",
+          "contextWindowTokens": 64000,
+          "maxOutputTokens": 2048,
+          "requestOutputLimits": {
+            "max_tokens": 2048
+          },
+          "outputHeadroomTokens": 2048,
+          "text": true,
+          "tools": true,
+          "vision": false,
+          "reasoning": true,
+          "structuredOutput": false,
+          "reasoningEffort": "high",
+          "extraBodyConfigured": false,
+          "requestOverrideFields": [],
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "boundary": "next_turn",
+          "sources": {
+            "tools.profile": [
+              "cli_environment"
+            ]
+          },
+          "toolSet": {
+            "profile": "nano",
+            "registryScope": "session_role",
+            "registeredToolCount": 2
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "sensitive_unknown",
+        "value": {
+          "providerId": "provider",
+          "modelId": "model",
+          "apiFormat": null,
+          "chatProtocol": "auto",
+          "contextWindowTokens": 64000,
+          "maxOutputTokens": 2048,
+          "requestOutputLimits": {
+            "max_tokens": 2048
+          },
+          "outputHeadroomTokens": 2048,
+          "text": true,
+          "tools": true,
+          "vision": false,
+          "reasoning": true,
+          "structuredOutput": false,
+          "reasoningEffort": "high",
+          "extraBodyConfigured": false,
+          "requestOverrideFields": [],
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "boundary": "next_turn",
+          "sources": {
+            "max_output_tokens": [
+              "user"
+            ]
+          },
+          "apiKey": "fixture-secret"
+        }
+      },
+      {
+        "name": "nested_sensitive_unknown",
+        "value": {
+          "providerId": "provider",
+          "modelId": "model",
+          "apiFormat": null,
+          "chatProtocol": "auto",
+          "contextWindowTokens": 64000,
+          "maxOutputTokens": 2048,
+          "requestOutputLimits": {
+            "max_tokens": 2048
+          },
+          "outputHeadroomTokens": 2048,
+          "text": true,
+          "tools": true,
+          "vision": false,
+          "reasoning": true,
+          "structuredOutput": false,
+          "reasoningEffort": "high",
+          "extraBodyConfigured": false,
+          "requestOverrideFields": [],
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "boundary": "next_turn",
+          "sources": {
+            "max_output_tokens": [
+              "user"
+            ]
+          },
+          "reasoningPolicy": {
+            "mode": "hidden",
+            "apiKey": "fixture-secret"
+          }
+        }
+      },
+      {
+        "name": "invalid_boundary",
+        "value": {
+          "providerId": "provider",
+          "modelId": "model",
+          "apiFormat": null,
+          "chatProtocol": "auto",
+          "contextWindowTokens": 64000,
+          "maxOutputTokens": 2048,
+          "requestOutputLimits": {
+            "max_tokens": 2048
+          },
+          "outputHeadroomTokens": 2048,
+          "text": true,
+          "tools": true,
+          "vision": false,
+          "reasoning": true,
+          "structuredOutput": false,
+          "reasoningEffort": "high",
+          "extraBodyConfigured": false,
+          "requestOverrideFields": [],
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "boundary": "future",
+          "sources": {
+            "max_output_tokens": [
+              "user"
+            ]
+          }
+        }
+      },
+      {
+        "name": "negative_tokens",
+        "value": {
+          "providerId": "provider",
+          "modelId": "model",
+          "apiFormat": null,
+          "chatProtocol": "auto",
+          "contextWindowTokens": 64000,
+          "maxOutputTokens": -1,
+          "requestOutputLimits": {
+            "max_tokens": 2048
+          },
+          "outputHeadroomTokens": 2048,
+          "text": true,
+          "tools": true,
+          "vision": false,
+          "reasoning": true,
+          "structuredOutput": false,
+          "reasoningEffort": "high",
+          "extraBodyConfigured": false,
+          "requestOverrideFields": [],
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "boundary": "next_turn",
+          "sources": {
+            "max_output_tokens": [
+              "user"
+            ]
+          }
+        }
+      },
+      {
+        "name": "u32_overflow",
+        "value": {
+          "providerId": "provider",
+          "modelId": "model",
+          "apiFormat": null,
+          "chatProtocol": "auto",
+          "contextWindowTokens": 64000,
+          "maxOutputTokens": 4294967296,
+          "requestOutputLimits": {
+            "max_tokens": 2048
+          },
+          "outputHeadroomTokens": 2048,
+          "text": true,
+          "tools": true,
+          "vision": false,
+          "reasoning": true,
+          "structuredOutput": false,
+          "reasoningEffort": "high",
+          "extraBodyConfigured": false,
+          "requestOverrideFields": [],
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "boundary": "next_turn",
+          "sources": {
+            "max_output_tokens": [
+              "user"
+            ]
+          }
+        }
+      },
+      {
+        "name": "unsafe-nested-tool-set",
+        "value": {
+          "providerId": "provider",
+          "modelId": "model",
+          "apiFormat": null,
+          "chatProtocol": "auto",
+          "contextWindowTokens": 64000,
+          "maxOutputTokens": 2048,
+          "requestOutputLimits": {
+            "max_tokens": 2048
+          },
+          "outputHeadroomTokens": 2048,
+          "text": true,
+          "tools": true,
+          "vision": false,
+          "reasoning": true,
+          "structuredOutput": false,
+          "reasoningEffort": "high",
+          "extraBodyConfigured": false,
+          "requestOverrideFields": [],
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "boundary": "next_turn",
+          "sources": {
+            "max_output_tokens": [
+              "user"
+            ]
+          },
+          "toolSet": {
+            "profile": "nano",
+            "registryScope": "session_role",
+            "registeredToolCount": 2,
+            "schema": "private"
+          }
+        }
+      }
+    ]
+  },
+  "ModelConfigurationBoundary": {
+    "valid": [
+      {
+        "name": "next_turn",
+        "value": "next_turn"
+      },
+      {
+        "name": "session_snapshot",
+        "value": "session_snapshot"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown",
+        "value": "future"
+      }
+    ]
+  },
+  "ModelReasoningPolicy": {
+    "valid": [
+      {
+        "name": "legacy_default_efforts",
+        "value": {
+          "mode": "hidden"
+        }
+      },
+      {
+        "name": "custom_efforts",
+        "value": {
+          "mode": "optional",
+          "efforts": [
+            "none",
+            "vendor_effort",
+            " max ",
+            "﻿"
+          ]
+        }
+      },
+      {
+        "name": "fixed_empty",
+        "value": {
+          "mode": "always_off",
+          "efforts": []
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "sensitive_unknown",
+        "value": {
+          "mode": "hidden",
+          "apiKey": "fixture-secret"
+        }
+      },
+      {
+        "name": "whitespace_effort",
+        "value": {
+          "mode": "optional",
+          "efforts": [
+            " \t\n"
+          ]
+        }
+      },
+      {
+        "name": "invalid_mode",
+        "value": {
+          "mode": "future"
+        }
+      }
+    ]
+  },
+  "WikiJobProgress": {
+    "valid": [
+      {
+        "name": "omitted_nullable_fields",
+        "value": {
+          "phase": "analysis",
+          "startedAtMs": 1,
+          "phaseStartedAtMs": 1,
+          "heartbeatAtMs": 2,
+          "model": "model",
+          "textBytes": 0,
+          "reasoningBytes": 0,
+          "reservedCalls": 1,
+          "repairCalls": 0,
+          "usageReportedCalls": 0
+        }
+      },
+      {
+        "name": "current",
+        "value": {
+          "phase": "generation",
+          "startedAtMs": 1,
+          "phaseStartedAtMs": 1,
+          "heartbeatAtMs": 2,
+          "model": "model",
+          "textBytes": 0,
+          "reasoningBytes": 0,
+          "reservedCalls": 1,
+          "repairCalls": 0,
+          "usageReportedCalls": 0,
+          "modelProgressAtMs": 3,
+          "reasoningEffort": "high",
+          "throughChunk": 2,
+          "totalChunks": 4,
+          "firstPage": 1,
+          "lastPage": 2,
+          "callLimit": 20,
+          "requestedOutputTokens": 2048,
+          "estimatedInputTokens": 100,
+          "inputTokens": 98,
+          "outputTokens": 202
+        }
+      },
+      {
+        "name": "future_phase",
+        "value": {
+          "phase": "future_host_phase",
+          "startedAtMs": 1,
+          "phaseStartedAtMs": 1,
+          "heartbeatAtMs": 2,
+          "model": "model",
+          "textBytes": 0,
+          "reasoningBytes": 0,
+          "reservedCalls": 1,
+          "repairCalls": 0,
+          "usageReportedCalls": 0
+        }
+      },
+      {
+        "name": "frozen-worker-model-configuration",
+        "value": {
+          "phase": "analysis",
+          "startedAtMs": 1,
+          "phaseStartedAtMs": 1,
+          "heartbeatAtMs": 2,
+          "model": "model",
+          "textBytes": 0,
+          "reasoningBytes": 0,
+          "reservedCalls": 1,
+          "repairCalls": 0,
+          "usageReportedCalls": 0,
+          "modelConfiguration": {
+            "providerId": "provider",
+            "modelId": "model",
+            "apiFormat": null,
+            "chatProtocol": "auto",
+            "contextWindowTokens": 64000,
+            "maxOutputTokens": 2048,
+            "requestOutputLimits": {
+              "max_tokens": 2048
+            },
+            "outputHeadroomTokens": 2048,
+            "text": true,
+            "tools": true,
+            "vision": false,
+            "reasoning": true,
+            "structuredOutput": false,
+            "reasoningEffort": "high",
+            "extraBodyConfigured": false,
+            "requestOverrideFields": [],
+            "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "boundary": "next_turn",
+            "sources": {
+              "max_output_tokens": [
+                "user"
+              ]
+            },
+            "toolSet": {
+              "profile": null,
+              "registryScope": "wiki_worker",
+              "registeredToolCount": 0,
+              "exposedToolCount": 0
+            }
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "sensitive_unknown",
+        "value": {
+          "phase": "analysis",
+          "startedAtMs": 1,
+          "phaseStartedAtMs": 1,
+          "heartbeatAtMs": 2,
+          "model": "model",
+          "textBytes": 0,
+          "reasoningBytes": 0,
+          "reservedCalls": 1,
+          "repairCalls": 0,
+          "usageReportedCalls": 0,
+          "response": "fixture-secret"
+        }
+      },
+      {
+        "name": "wrong_timestamp",
+        "value": {
+          "phase": "analysis",
+          "startedAtMs": 1,
+          "phaseStartedAtMs": 1,
+          "heartbeatAtMs": "2",
+          "model": "model",
+          "textBytes": 0,
+          "reasoningBytes": 0,
+          "reservedCalls": 1,
+          "repairCalls": 0,
+          "usageReportedCalls": 0
+        }
+      },
+      {
+        "name": "negative_bytes",
+        "value": {
+          "phase": "analysis",
+          "startedAtMs": 1,
+          "phaseStartedAtMs": 1,
+          "heartbeatAtMs": 2,
+          "model": "model",
+          "textBytes": -1,
+          "reasoningBytes": 0,
+          "reservedCalls": 1,
+          "repairCalls": 0,
+          "usageReportedCalls": 0
+        }
+      }
+    ]
+  },
+  "KnowledgeFileCapability": {
+    "valid": [
+      {
+        "name": "legacy_no_availability",
+        "value": {
+          "format": "pdf",
+          "extensions": [
+            "pdf"
+          ],
+          "mimeTypes": [
+            "application/pdf"
+          ],
+          "maxFileBytes": 33554432,
+          "maxExtractedBytes": 8388608,
+          "requiresVision": false,
+          "warnings": [
+            "pdf_text_only"
+          ]
+        }
+      },
+      {
+        "name": "current_unavailable",
+        "value": {
+          "format": "pdf",
+          "extensions": [
+            "pdf"
+          ],
+          "mimeTypes": [
+            "application/pdf"
+          ],
+          "maxFileBytes": 33554432,
+          "maxExtractedBytes": 8388608,
+          "requiresVision": false,
+          "warnings": [
+            "pdf_text_only"
+          ],
+          "available": false,
+          "unavailableReason": "runtime_missing"
+        }
+      },
+      {
+        "name": "nullable_availability",
+        "value": {
+          "format": "pdf",
+          "extensions": [
+            "pdf"
+          ],
+          "mimeTypes": [
+            "application/pdf"
+          ],
+          "maxFileBytes": 33554432,
+          "maxExtractedBytes": 8388608,
+          "requiresVision": false,
+          "warnings": [
+            "pdf_text_only"
+          ],
+          "available": null,
+          "unavailableReason": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "sensitive_unknown",
+        "value": {
+          "format": "pdf",
+          "extensions": [
+            "pdf"
+          ],
+          "mimeTypes": [
+            "application/pdf"
+          ],
+          "maxFileBytes": 33554432,
+          "maxExtractedBytes": 8388608,
+          "requiresVision": false,
+          "warnings": [
+            "pdf_text_only"
+          ],
+          "providerUrl": "fixture-secret"
+        }
+      },
+      {
+        "name": "invalid_boolean",
+        "value": {
+          "format": "pdf",
+          "extensions": [
+            "pdf"
+          ],
+          "mimeTypes": [
+            "application/pdf"
+          ],
+          "maxFileBytes": 33554432,
+          "maxExtractedBytes": 8388608,
+          "requiresVision": "false",
+          "warnings": [
+            "pdf_text_only"
+          ]
+        }
+      }
+    ]
+  },
+  "KnowledgeFileCapabilitiesResult": {
+    "valid": [
+      {
+        "name": "current",
+        "value": {
+          "supported": true,
+          "items": [
+            {
+              "format": "pdf",
+              "extensions": [
+                "pdf"
+              ],
+              "mimeTypes": [
+                "application/pdf"
+              ],
+              "maxFileBytes": 33554432,
+              "maxExtractedBytes": 8388608,
+              "requiresVision": false,
+              "warnings": [
+                "pdf_text_only"
+              ]
+            }
+          ],
+          "batchMaxFiles": 10,
+          "batchMaxBytes": 134217728
+        }
+      },
+      {
+        "name": "empty",
+        "value": {
+          "supported": true,
+          "items": [],
+          "batchMaxFiles": 10,
+          "batchMaxBytes": 134217728
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "nested_sensitive_unknown",
+        "value": {
+          "supported": true,
+          "items": [
+            {
+              "format": "pdf",
+              "extensions": [
+                "pdf"
+              ],
+              "mimeTypes": [
+                "application/pdf"
+              ],
+              "maxFileBytes": 33554432,
+              "maxExtractedBytes": 8388608,
+              "requiresVision": false,
+              "warnings": [
+                "pdf_text_only"
+              ],
+              "apiKey": "fixture-secret"
+            }
+          ],
+          "batchMaxFiles": 10,
+          "batchMaxBytes": 134217728
+        }
+      }
+    ]
+  },
+  "McpFailureReason": {
+    "valid": [
+      {
+        "name": "connectionFailed",
+        "value": "connectionFailed"
+      },
+      {
+        "name": "protocolFailed",
+        "value": "protocolFailed"
+      },
+      {
+        "name": "authorizationRequired",
+        "value": "authorizationRequired"
+      },
+      {
+        "name": "timedOut",
+        "value": "timedOut"
+      },
+      {
+        "name": "unavailable",
+        "value": "unavailable"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_failure_label",
+        "value": "futureReason"
+      },
+      {
+        "name": "raw_sensitive_details",
+        "value": "fixture-secret"
+      },
+      {
+        "name": "numeric",
+        "value": 1
+      },
+      {
+        "name": "null",
+        "value": null
+      }
+    ]
+  },
+  "McpConnectionAttempt": {
+    "valid": [
+      {
+        "name": "legacy_missing_reason",
+        "value": {
+          "status": "unavailable"
+        }
+      },
+      {
+        "name": "explicit_null_reason",
+        "value": {
+          "status": "timedOut",
+          "failureReason": null
+        }
+      },
+      {
+        "name": "connectionFailed",
+        "value": {
+          "status": "unavailable",
+          "failureReason": "connectionFailed"
+        }
+      },
+      {
+        "name": "protocolFailed",
+        "value": {
+          "status": "unavailable",
+          "failureReason": "protocolFailed"
+        }
+      },
+      {
+        "name": "authorizationRequired",
+        "value": {
+          "status": "unavailable",
+          "failureReason": "authorizationRequired"
+        }
+      },
+      {
+        "name": "timedOut",
+        "value": {
+          "status": "unavailable",
+          "failureReason": "timedOut"
+        }
+      },
+      {
+        "name": "unavailable",
+        "value": {
+          "status": "unavailable",
+          "failureReason": "unavailable"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_reason",
+        "value": {
+          "status": "unavailable",
+          "failureReason": "futureReason"
+        }
+      },
+      {
+        "name": "unknown_status",
+        "value": {
+          "status": "future"
+        }
+      },
+      {
+        "name": "non_string_reason",
+        "value": {
+          "status": "unavailable",
+          "failureReason": 42
+        }
+      }
+    ]
+  },
+  "McpServerSummary": {
+    "valid": [
+      {
+        "name": "legacy_without_failure_fields",
+        "value": {
+          "name": "fixture",
+          "transport": "stdio",
+          "authorization": "notApplicable"
+        }
+      },
+      {
+        "name": "explicit_null_failure",
+        "value": {
+          "name": "fixture",
+          "transport": "stdio",
+          "authorization": "notApplicable",
+          "lastConnectionAttempt": null,
+          "lastConnectionFailure": null
+        }
+      },
+      {
+        "name": "protocol_failure",
+        "value": {
+          "name": "fixture",
+          "transport": "stdio",
+          "authorization": "notApplicable",
+          "lastConnectionAttempt": "unavailable",
+          "lastConnectionFailure": "protocolFailed"
+        }
+      },
+      {
+        "name": "authorization_required",
+        "value": {
+          "name": "fixture",
+          "transport": "stdio",
+          "authorization": "reauthorizationRequired",
+          "lastConnectionAttempt": "unavailable",
+          "lastConnectionFailure": "authorizationRequired"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_failure_label",
+        "value": {
+          "name": "fixture",
+          "transport": "stdio",
+          "authorization": "notApplicable",
+          "lastConnectionFailure": "futureReason"
+        }
+      },
+      {
+        "name": "raw_authorization_text",
+        "value": {
+          "name": "fixture",
+          "transport": "stdio",
+          "authorization": "fixture-secret"
+        }
+      },
+      {
+        "name": "wrong_attempt_type",
+        "value": {
+          "name": "fixture",
+          "transport": "stdio",
+          "authorization": "notApplicable",
+          "lastConnectionAttempt": 3
+        }
+      }
+    ]
+  },
+  "TaskStatus": {
+    "valid": [
+      {
+        "name": "known_pending",
+        "value": "pending"
+      },
+      {
+        "name": "known_completed",
+        "value": "completed"
+      },
+      {
+        "name": "future",
+        "value": "future_review"
+      },
+      {
+        "name": "empty_unknown",
+        "value": ""
+      },
+      {
+        "name": "utf8_256_bytes",
+        "value": "汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉a"
+      },
+      {
+        "name": "emoji_256_bytes",
+        "value": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "numeric",
+        "value": 7
+      },
+      {
+        "name": "null",
+        "value": null
+      },
+      {
+        "name": "ascii_257_bytes",
+        "value": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      {
+        "name": "utf8_257_bytes",
+        "value": "汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉ab"
+      },
+      {
+        "name": "emoji_260_bytes",
+        "value": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
+      }
+    ]
+  },
+  "WorkflowAgentConfigurationSummary": {
+    "valid": [
+      {
+        "name": "inherited-agent",
+        "value": {
+          "agentId": "workflow-agent-1",
+          "runId": "workflow-run-1",
+          "artifactAttempt": 1,
+          "selectionSource": "inherited_session",
+          "configuration": {
+            "providerId": "provider",
+            "modelId": "model",
+            "apiFormat": null,
+            "chatProtocol": "auto",
+            "contextWindowTokens": 64000,
+            "maxOutputTokens": 2048,
+            "requestOutputLimits": {
+              "max_tokens": 2048
+            },
+            "outputHeadroomTokens": 2048,
+            "text": true,
+            "tools": true,
+            "vision": false,
+            "reasoning": true,
+            "structuredOutput": false,
+            "reasoningEffort": "high",
+            "extraBodyConfigured": false,
+            "requestOverrideFields": [],
+            "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "boundary": "next_turn",
+            "sources": {
+              "max_output_tokens": [
+                "user"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "name": "explicit-existing-persona-runtime",
+        "value": {
+          "agentId": "workflow-agent-1",
+          "runId": "workflow-run-1",
+          "artifactAttempt": 1,
+          "selectionSource": "explicit_runtime",
+          "configuration": {
+            "providerId": "provider",
+            "modelId": "model",
+            "apiFormat": null,
+            "chatProtocol": "auto",
+            "contextWindowTokens": 64000,
+            "maxOutputTokens": 2048,
+            "requestOutputLimits": {
+              "max_tokens": 2048
+            },
+            "outputHeadroomTokens": 2048,
+            "text": true,
+            "tools": true,
+            "vision": false,
+            "reasoning": true,
+            "structuredOutput": false,
+            "reasoningEffort": "high",
+            "extraBodyConfigured": false,
+            "requestOverrideFields": [],
+            "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "boundary": "next_turn",
+            "sources": {
+              "max_output_tokens": [
+                "user"
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unsafe-nested-configuration",
+        "value": {
+          "agentId": "workflow-agent-1",
+          "runId": "workflow-run-1",
+          "artifactAttempt": 1,
+          "selectionSource": "inherited_session",
+          "configuration": {
+            "providerId": "provider",
+            "modelId": "model",
+            "apiFormat": null,
+            "chatProtocol": "auto",
+            "contextWindowTokens": 64000,
+            "maxOutputTokens": 2048,
+            "requestOutputLimits": {
+              "max_tokens": 2048
+            },
+            "outputHeadroomTokens": 2048,
+            "text": true,
+            "tools": true,
+            "vision": false,
+            "reasoning": true,
+            "structuredOutput": false,
+            "reasoningEffort": "high",
+            "extraBodyConfigured": false,
+            "requestOverrideFields": [],
+            "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "boundary": "next_turn",
+            "sources": {
+              "max_output_tokens": [
+                "user"
+              ]
+            },
+            "apiKey": "private-sentinel"
+          }
+        }
+      },
+      {
+        "name": "unknown-model-selection-source",
+        "value": {
+          "agentId": "workflow-agent-1",
+          "runId": "workflow-run-1",
+          "artifactAttempt": 1,
+          "selectionSource": "future",
+          "configuration": {
+            "providerId": "provider",
+            "modelId": "model",
+            "apiFormat": null,
+            "chatProtocol": "auto",
+            "contextWindowTokens": 64000,
+            "maxOutputTokens": 2048,
+            "requestOutputLimits": {
+              "max_tokens": 2048
+            },
+            "outputHeadroomTokens": 2048,
+            "text": true,
+            "tools": true,
+            "vision": false,
+            "reasoning": true,
+            "structuredOutput": false,
+            "reasoningEffort": "high",
+            "extraBodyConfigured": false,
+            "requestOverrideFields": [],
+            "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "boundary": "next_turn",
+            "sources": {
+              "max_output_tokens": [
+                "user"
+              ]
+            }
+          }
+        }
+      }
+    ]
+  },
+  "TurnAttemptStatus": {
+    "valid": [
+      {
+        "name": "known_accepted",
+        "value": "accepted"
+      },
+      {
+        "name": "known_completed",
+        "value": "completed"
+      },
+      {
+        "name": "known_failed",
+        "value": "failed"
+      },
+      {
+        "name": "known_interrupted",
+        "value": "interrupted"
+      },
+      {
+        "name": "future",
+        "value": "waiting_for_remote_cleanup"
+      },
+      {
+        "name": "case_sensitive_unknown",
+        "value": "Failed"
+      },
+      {
+        "name": "empty_unknown",
+        "value": ""
+      },
+      {
+        "name": "utf8_256_bytes",
+        "value": "汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉a"
+      },
+      {
+        "name": "emoji_256_bytes",
+        "value": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "numeric",
+        "value": 7
+      },
+      {
+        "name": "null",
+        "value": null
+      },
+      {
+        "name": "object",
+        "value": {
+          "unknown": "x"
+        }
+      },
+      {
+        "name": "ascii_257_bytes",
+        "value": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      {
+        "name": "utf8_257_bytes",
+        "value": "汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉ab"
+      },
+      {
+        "name": "emoji_260_bytes",
+        "value": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
+      }
+    ]
+  },
+  "WikiJobStatus": {
+    "valid": [
+      {
+        "name": "known_queued",
+        "value": "queued"
+      },
+      {
+        "name": "known_running",
+        "value": "running"
+      },
+      {
+        "name": "known_paused",
+        "value": "paused"
+      },
+      {
+        "name": "known_awaiting_review",
+        "value": "awaiting_review"
+      },
+      {
+        "name": "known_failed",
+        "value": "failed"
+      },
+      {
+        "name": "known_completed",
+        "value": "completed"
+      },
+      {
+        "name": "known_cancelled",
+        "value": "cancelled"
+      },
+      {
+        "name": "future",
+        "value": "waiting_for_external_review"
+      },
+      {
+        "name": "case_unknown",
+        "value": "Completed"
+      },
+      {
+        "name": "empty_unknown",
+        "value": ""
+      },
+      {
+        "name": "utf8_exact_limit",
+        "value": "汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉a"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "over_byte_limit",
+        "value": "汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉ab"
+      },
+      {
+        "name": "numeric",
+        "value": 3
+      },
+      {
+        "name": "object",
+        "value": {
+          "unknown": "x"
+        }
+      }
+    ]
+  },
+  "WikiJobPhase": {
+    "valid": [
+      {
+        "name": "known_analysis",
+        "value": "analysis"
+      },
+      {
+        "name": "known_generation",
+        "value": "generation"
+      },
+      {
+        "name": "known_citation_repair",
+        "value": "citation_repair"
+      },
+      {
+        "name": "known_source_support",
+        "value": "source_support"
+      },
+      {
+        "name": "known_format_repair",
+        "value": "format_repair"
+      },
+      {
+        "name": "known_truncation_retry",
+        "value": "truncation_retry"
+      },
+      {
+        "name": "known_commit",
+        "value": "commit"
+      },
+      {
+        "name": "future",
+        "value": "waiting_for_external_review"
+      },
+      {
+        "name": "case_unknown",
+        "value": "Completed"
+      },
+      {
+        "name": "empty_unknown",
+        "value": ""
+      },
+      {
+        "name": "utf8_exact_limit",
+        "value": "汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉a"
+      },
+      {
+        "name": "known_organization_repair",
+        "value": "organization_repair"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "over_byte_limit",
+        "value": "汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉ab"
+      },
+      {
+        "name": "numeric",
+        "value": 3
+      },
+      {
+        "name": "object",
+        "value": {
+          "unknown": "x"
+        }
+      }
+    ]
+  },
+  "WikiPipelineProgress": {
+    "valid": [
+      {
+        "name": "omitted_optional_stage_fields",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": []
+        }
+      },
+      {
+        "name": "planned_units_and_resume_address",
+        "value": {
+          "version": 1,
+          "batch": 8,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "analyze",
+              "unitKey": "topic-1",
+              "status": "completed",
+              "attempt": 1,
+              "reused": true,
+              "updatedAtMs": 1000,
+              "unitLabel": "安装步骤",
+              "unitIndex": 0,
+              "completedUnits": 1,
+              "totalUnits": 2,
+              "startedAtMs": 900,
+              "completedAtMs": 1000,
+              "artifactHash": "opaque-artifact-id"
+            },
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "page-draft",
+              "stage": "generate",
+              "unitKey": "topic-2",
+              "status": "running",
+              "attempt": 2,
+              "reused": false,
+              "updatedAtMs": 1100,
+              "unitLabel": "维护步骤",
+              "unitIndex": 1,
+              "completedUnits": 1,
+              "totalUnits": 2
+            }
+          ],
+          "currentStage": "generate",
+          "resumeStage": {
+            "batch": 8,
+            "sourceRevision": "source-v1",
+            "stageKey": "page-draft",
+            "stage": "generate",
+            "unitKey": "topic-1"
+          }
+        }
+      },
+      {
+        "name": "explicit_null_optional_fields",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "analyze",
+              "unitKey": "topic-1",
+              "status": "completed",
+              "attempt": 1,
+              "reused": true,
+              "updatedAtMs": 1000,
+              "unitLabel": null,
+              "unitIndex": null,
+              "completedUnits": null,
+              "totalUnits": null,
+              "startedAtMs": null,
+              "completedAtMs": null,
+              "artifactHash": null,
+              "errorCode": null,
+              "errorDetail": null
+            }
+          ],
+          "currentStage": null,
+          "resumeStage": null
+        }
+      },
+      {
+        "name": "paused_safe_failure",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "verify",
+              "unitKey": "topic-1",
+              "status": "paused",
+              "attempt": 1,
+              "reused": false,
+              "updatedAtMs": 1000,
+              "unitLabel": "安装步骤",
+              "unitIndex": 0,
+              "completedUnits": 1,
+              "totalUnits": 2,
+              "startedAtMs": 900,
+              "completedAtMs": 1000,
+              "artifactHash": "opaque-artifact-id",
+              "errorCode": "budget_exceeded",
+              "errorDetail": "已达到调用预算"
+            }
+          ],
+          "currentStage": "verify"
+        }
+      },
+      {
+        "name": "u8_decode_upper_boundary",
+        "value": {
+          "version": 255,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": []
+        }
+      },
+      {
+        "name": "stage_extract",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "extract",
+              "unitKey": "topic-1",
+              "status": "validated",
+              "attempt": 0,
+              "reused": false,
+              "updatedAtMs": 1
+            }
+          ],
+          "currentStage": "extract"
+        }
+      },
+      {
+        "name": "stage_analyze",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "analyze",
+              "unitKey": "topic-1",
+              "status": "validated",
+              "attempt": 0,
+              "reused": false,
+              "updatedAtMs": 1
+            }
+          ],
+          "currentStage": "analyze"
+        }
+      },
+      {
+        "name": "stage_retrieve",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "retrieve",
+              "unitKey": "topic-1",
+              "status": "validated",
+              "attempt": 0,
+              "reused": false,
+              "updatedAtMs": 1
+            }
+          ],
+          "currentStage": "retrieve"
+        }
+      },
+      {
+        "name": "stage_generate",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "generate",
+              "unitKey": "topic-1",
+              "status": "validated",
+              "attempt": 0,
+              "reused": false,
+              "updatedAtMs": 1
+            }
+          ],
+          "currentStage": "generate"
+        }
+      },
+      {
+        "name": "stage_verify",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "verify",
+              "unitKey": "topic-1",
+              "status": "validated",
+              "attempt": 0,
+              "reused": false,
+              "updatedAtMs": 1
+            }
+          ],
+          "currentStage": "verify"
+        }
+      },
+      {
+        "name": "stage_coverage",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "coverage",
+              "unitKey": "topic-1",
+              "status": "validated",
+              "attempt": 0,
+              "reused": false,
+              "updatedAtMs": 1
+            }
+          ],
+          "currentStage": "coverage"
+        }
+      },
+      {
+        "name": "stage_commit",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "commit",
+              "unitKey": "topic-1",
+              "status": "validated",
+              "attempt": 0,
+              "reused": false,
+              "updatedAtMs": 1
+            }
+          ],
+          "currentStage": "commit"
+        }
+      },
+      {
+        "name": "status_waiting",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "analyze",
+              "unitKey": "topic-1",
+              "status": "waiting",
+              "attempt": 1,
+              "reused": false,
+              "updatedAtMs": 1
+            }
+          ]
+        }
+      },
+      {
+        "name": "status_running",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "analyze",
+              "unitKey": "topic-1",
+              "status": "running",
+              "attempt": 1,
+              "reused": false,
+              "updatedAtMs": 1
+            }
+          ]
+        }
+      },
+      {
+        "name": "status_received",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "analyze",
+              "unitKey": "topic-1",
+              "status": "received",
+              "attempt": 1,
+              "reused": false,
+              "updatedAtMs": 1
+            }
+          ]
+        }
+      },
+      {
+        "name": "status_validated",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "analyze",
+              "unitKey": "topic-1",
+              "status": "validated",
+              "attempt": 1,
+              "reused": false,
+              "updatedAtMs": 1
+            }
+          ]
+        }
+      },
+      {
+        "name": "status_completed",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "analyze",
+              "unitKey": "topic-1",
+              "status": "completed",
+              "attempt": 1,
+              "reused": false,
+              "updatedAtMs": 1
+            }
+          ]
+        }
+      },
+      {
+        "name": "status_failed",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "analyze",
+              "unitKey": "topic-1",
+              "status": "failed",
+              "attempt": 1,
+              "reused": false,
+              "updatedAtMs": 1
+            }
+          ]
+        }
+      },
+      {
+        "name": "status_paused",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "analyze",
+              "unitKey": "topic-1",
+              "status": "paused",
+              "attempt": 1,
+              "reused": false,
+              "updatedAtMs": 1
+            }
+          ]
+        }
+      },
+      {
+        "name": "status_needs_review",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "analyze",
+              "unitKey": "topic-1",
+              "status": "needs_review",
+              "attempt": 1,
+              "reused": false,
+              "updatedAtMs": 1
+            }
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "u8_overflow",
+        "value": {
+          "version": 256,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": []
+        }
+      },
+      {
+        "name": "negative_batch_cursor",
+        "value": {
+          "version": 1,
+          "batch": -1,
+          "sourceRevision": "source-v1",
+          "records": []
+        }
+      },
+      {
+        "name": "missing_source_revision",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "records": []
+        }
+      },
+      {
+        "name": "wrong_records_type",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": {}
+        }
+      },
+      {
+        "name": "unknown_current_stage",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [],
+          "currentStage": "future"
+        }
+      },
+      {
+        "name": "unknown_record_status",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "analyze",
+              "unitKey": "topic-1",
+              "status": "future",
+              "attempt": 1,
+              "reused": true,
+              "updatedAtMs": 1000,
+              "unitLabel": "安装步骤",
+              "unitIndex": 0,
+              "completedUnits": 1,
+              "totalUnits": 2,
+              "startedAtMs": 900,
+              "completedAtMs": 1000,
+              "artifactHash": "opaque-artifact-id"
+            }
+          ]
+        }
+      },
+      {
+        "name": "negative_unit_count",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "analyze",
+              "unitKey": "topic-1",
+              "status": "completed",
+              "attempt": 1,
+              "reused": true,
+              "updatedAtMs": 1000,
+              "unitLabel": "安装步骤",
+              "unitIndex": 0,
+              "completedUnits": -1,
+              "totalUnits": 2,
+              "startedAtMs": 900,
+              "completedAtMs": 1000,
+              "artifactHash": "opaque-artifact-id"
+            }
+          ]
+        }
+      },
+      {
+        "name": "attempt_u32_overflow",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "analyze",
+              "unitKey": "topic-1",
+              "status": "completed",
+              "attempt": 4294967296,
+              "reused": true,
+              "updatedAtMs": 1000,
+              "unitLabel": "安装步骤",
+              "unitIndex": 0,
+              "completedUnits": 1,
+              "totalUnits": 2,
+              "startedAtMs": 900,
+              "completedAtMs": 1000,
+              "artifactHash": "opaque-artifact-id"
+            }
+          ]
+        }
+      },
+      {
+        "name": "invalid_resume_address",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [],
+          "resumeStage": {
+            "stage": "generate"
+          }
+        }
+      },
+      {
+        "name": "negative_timestamp",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "analyze",
+              "unitKey": "topic-1",
+              "status": "completed",
+              "attempt": 1,
+              "reused": true,
+              "updatedAtMs": -1,
+              "unitLabel": "安装步骤",
+              "unitIndex": 0,
+              "completedUnits": 1,
+              "totalUnits": 2,
+              "startedAtMs": 900,
+              "completedAtMs": 1000,
+              "artifactHash": "opaque-artifact-id"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "WikiImageImport": {
+    "valid": [
+      {
+        "name": "saved-response-recovery",
+        "value": {
+          "id": "import",
+          "idempotencyKey": "file:digest",
+          "title": "image.png",
+          "status": "failed",
+          "phase": "validation",
+          "model": "vision",
+          "sourceId": null,
+          "revisionId": null,
+          "errorCode": "validation_failed",
+          "reservedCalls": 1,
+          "callLimit": 1,
+          "usageReportedCalls": 1,
+          "unknownUsageCalls": 0,
+          "inputTokens": 12,
+          "outputTokens": 7,
+          "textBytes": 100,
+          "reasoningBytes": 0,
+          "updatedAtMs": 1
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "private-response-never-public",
+        "value": {
+          "id": "import",
+          "idempotencyKey": "file:digest",
+          "title": "image.png",
+          "status": "failed",
+          "phase": "validation",
+          "model": "vision",
+          "sourceId": null,
+          "revisionId": null,
+          "errorCode": "validation_failed",
+          "reservedCalls": 1,
+          "callLimit": 1,
+          "usageReportedCalls": 1,
+          "unknownUsageCalls": 0,
+          "inputTokens": 12,
+          "outputTokens": 7,
+          "textBytes": 100,
+          "reasoningBytes": 0,
+          "updatedAtMs": 1,
+          "response": "private"
+        }
+      }
+    ]
+  },
+  "KnowledgeImageImportListResult": {
+    "valid": [
+      {
+        "name": "durable-import-page",
+        "value": {
+          "supported": true,
+          "items": [
+            {
+              "id": "import",
+              "idempotencyKey": "file:digest",
+              "title": "image.png",
+              "status": "failed",
+              "phase": "validation",
+              "model": "vision",
+              "sourceId": null,
+              "revisionId": null,
+              "errorCode": "validation_failed",
+              "reservedCalls": 1,
+              "callLimit": 1,
+              "usageReportedCalls": 1,
+              "unknownUsageCalls": 0,
+              "inputTokens": 12,
+              "outputTokens": 7,
+              "textBytes": 100,
+              "reasoningBytes": 0,
+              "updatedAtMs": 1
+            }
+          ],
+          "nextAfterId": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-private-field",
+        "value": {
+          "supported": true,
+          "items": [],
+          "nextAfterId": null,
+          "original": "private"
+        }
+      }
+    ]
+  }
+}
